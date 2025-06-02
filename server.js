@@ -6,7 +6,12 @@ require("dotenv").config();
 const app = express();
 
 // Enable CORS for all routes (you can restrict origins if needed)
-app.use(cors());
+app.use(
+  cors({
+    origin: ["http://localhost:5173", "https://srichakrahms.web.app"],
+    credentials: true,
+  })
+);
 
 app.use(express.json());
 
@@ -53,7 +58,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: "Something went wrong!" });
 });
 
-const PORT = process.env.PORT || 80;
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
