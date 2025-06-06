@@ -51,6 +51,7 @@ app.use("/api/indent-store", require("./routes/indentStoreRoutes"));
 app.use("/api/pharmacy-receipts", require("./routes/pharmacyReceipts"));
 app.use("/api/diagnostics-receipts", require("./routes/diagnosticsReceipts"));
 app.use("/api/discharge-summary", require("./routes/dischargeSummary"));
+app.use("/api", require("./routes/upload"));
 
 // Error handling middleware
 app.use((err, req, res, next) => {

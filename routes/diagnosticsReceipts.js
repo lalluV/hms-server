@@ -39,8 +39,8 @@ router.post("/", async (req, res) => {
 // Update diagnostics receipt
 router.put("/:id", async (req, res) => {
   try {
-    const receipt = await DiagnosticsReceipt.findOneAndUpdate(
-      { receiptId: req.params.id },
+    const receipt = await DiagnosticsReceipt.findByIdAndUpdate(
+      req.params.id,
       req.body,
       { new: true }
     );
