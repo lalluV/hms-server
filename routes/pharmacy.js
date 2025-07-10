@@ -59,7 +59,7 @@ router.get("/", async (req, res) => {
 // Get pharmacy inventory item by ID
 router.get("/:id", async (req, res) => {
   try {
-    const item = await PharmacyInventory.findById(req.params.id);
+    const item = await PharmacyInventory.findOne({ item_code: req.params.id });
     if (!item) {
       return res.status(404).json({ error: "Item not found" });
     }
