@@ -5,9 +5,7 @@ const PharmacyReceipt = require("../models/PharmacyReceipt");
 // Get all pharmacy receipts
 router.get("/", async (req, res) => {
   try {
-    const receipts = await PharmacyReceipt.find()
-      .populate("patientId", "name")
-      .populate("items.medicineId", "name");
+    const receipts = await PharmacyReceipt.find();
     res.json(receipts);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -17,9 +15,9 @@ router.get("/", async (req, res) => {
 // Get pharmacy receipt by ID
 router.get("/:id", async (req, res) => {
   try {
-    const receipt = await PharmacyReceipt.findById(req.params.id)
-      .populate("patientId", "name")
-      .populate("items.medicineId", "name");
+    const receipt = await PharmacyReceipt.findById({
+      receiptId: req.params.id,
+    });
     if (!receipt) {
       return res.status(404).json({ message: "Pharmacy receipt not found" });
     }
@@ -44,7 +42,7 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const receipt = await PharmacyReceipt.findByIdAndUpdate(
-      req.params.id,
+      { receiptId: req.params.id },
       req.body,
       { new: true }
     );
@@ -60,7 +58,9 @@ router.put("/:id", async (req, res) => {
 // Delete pharmacy receipt
 router.delete("/:id", async (req, res) => {
   try {
-    const receipt = await PharmacyReceipt.findByIdAndDelete(req.params.id);
+    const receipt = await PharmacyReceipt.findByIdAndDelete({
+      receiptId: req.params.id,
+    });
     if (!receipt) {
       return res.status(404).json({ message: "Pharmacy receipt not found" });
     }
@@ -73,9 +73,7 @@ router.delete("/:id", async (req, res) => {
 // Get pharmacy receipts by type
 router.get("/type/:type", async (req, res) => {
   try {
-    const receipts = await PharmacyReceipt.find({ type: req.params.type })
-      .populate("patientId", "name")
-      .populate("items.medicineId", "name");
+    const receipts = await PharmacyReceipt.find({ type: req.params.type });
     res.json(receipts);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -87,9 +85,7 @@ router.get("/patient/:patientId", async (req, res) => {
   try {
     const receipts = await PharmacyReceipt.find({
       patientId: req.params.patientId,
-    })
-      .populate("patientId", "name")
-      .populate("items.medicineId", "name");
+    });
     res.json(receipts);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -105,9 +101,7 @@ router.get("/date-range", async (req, res) => {
         $gte: new Date(startDate),
         $lte: new Date(endDate),
       },
-    })
-      .populate("patientId", "name")
-      .populate("items.medicineId", "name");
+    });
     res.json(receipts);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -117,9 +111,7 @@ router.get("/date-range", async (req, res) => {
 // Get pharmacy receipts by status
 router.get("/status/:status", async (req, res) => {
   try {
-    const receipts = await PharmacyReceipt.find({ status: req.params.status })
-      .populate("patientId", "name")
-      .populate("items.medicineId", "name");
+    const receipts = await PharmacyReceipt.find({ status: req.params.status });
     res.json(receipts);
   } catch (error) {
     res.status(500).json({ message: error.message });
