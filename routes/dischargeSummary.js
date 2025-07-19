@@ -26,53 +26,18 @@ const validateRequest = (req, res, next) => {
 router.post("/", validateRequest, async (req, res) => {
   try {
     const { patientData } = req.body;
-    const { doctorInputs } = patientData;
 
     // Construct a comprehensive prompt
-    const prompt = `Generate a detailed discharge summary for a patient with the following information:
+    const prompt = `Using the patient record below, generate a complete hospital discharge summary. 
 
-Patient Information:
-- Age Range: ${patientData.ageRange}
-- Gender: ${patientData.gender}
+Instructions:
+- Use clear medical language, professional formatting.
+- Organize into headings: Patient Details, Admission Info, Chief Complaints, History, Diagnosis, Investigations, Vitals, Treatment Given, Discharge Condition, Discharge Instructions, Medications, Follow-up.
+- Include only what's relevant and available.
+- Where information is missing, skip or mark as "Not documented".
 
-Medical History:
-- Chief Complaints: ${patientData.chiefComplaints}
-- Past Medical History: ${patientData.pastMedicalHistory}
-- Provisional Diagnosis: ${patientData.provisionalDiagnosis}
-
-Treatment Course:
-${patientData.treatmentCourse
-  .map((note, index) => `Day ${index + 1}: ${note}`)
-  .join("\n")}
-
-Doctor's Final Assessment:
-- Final Diagnosis: ${doctorInputs.finalDiagnosis}
-- Treatment Response: ${doctorInputs.treatmentResponse}
-- Complications: ${doctorInputs.complications || "None"}
-- Discharge Condition: ${doctorInputs.dischargeCondition}
-
-Discharge Instructions:
-- Follow-up Instructions: ${doctorInputs.followUpInstructions}
-- Dietary Restrictions: ${doctorInputs.dietaryRestrictions}
-- Activity Restrictions: ${doctorInputs.activityRestrictions}
-- Wound Care Instructions: ${doctorInputs.woundCareInstructions}
-- Medication Instructions: ${doctorInputs.medicationInstructions}
-
-Please generate a comprehensive discharge summary that includes:
-1. A brief overview of the patient's condition and treatment
-2. Final diagnosis and treatment response
-3. Any complications encountered
-4. Current condition at discharge
-5. Detailed discharge instructions including:
-   - Follow-up care
-   - Medication schedule
-   - Activity restrictions
-   - Dietary guidelines
-   - Wound care instructions
-6. Emergency warning signs to watch for
-7. Contact information for emergencies
-
-Format the summary in a clear, professional medical style suitable for both healthcare providers and patients.`;
+Here is the patient object:
+${JSON.stringify(patientData, null, 2)}`;
 
     const response = await deepseekApi.post("/chat/completions", {
       model: "deepseek-chat",
@@ -80,14 +45,14 @@ Format the summary in a clear, professional medical style suitable for both heal
         {
           role: "system",
           content:
-            "You are a medical professional generating a discharge summary. Use clear, professional language while ensuring the information is accessible to patients.",
+            "You are a senior doctor generating a formal hospital discharge summary. Format the output professionally, using sections like Patient Info, History, Diagnosis, Treatment, Vitals, Discharge Instructions, and Follow-Up.",
         },
         {
           role: "user",
           content: prompt,
         },
       ],
-      max_tokens: 1000,
+      max_tokens: 1200,
       temperature: 0.7,
     });
 
