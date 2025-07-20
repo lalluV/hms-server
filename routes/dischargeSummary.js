@@ -52,8 +52,10 @@ ${JSON.stringify(patientData, null, 2)}`;
           content: prompt,
         },
       ],
-      max_tokens: 1200,
-      temperature: 0.7,
+      max_tokens: 4000,
+      temperature: 0.3,
+      top_p: 0.9,
+      frequency_penalty: 0.5,
     });
 
     const summary = response.data.choices[0].message.content;
