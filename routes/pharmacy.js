@@ -340,7 +340,7 @@ router.get("/search/health", async (req, res) => {
     const health = await client.health.retrieve();
     const collections = await client.collections().retrieve();
     const pharmacyCollection = collections.find(
-      (col) => col.name === "pharmacy_inventory"
+      (col) => col.name === "pharmacyinventory"
     );
 
     res.json({
