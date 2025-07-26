@@ -24,16 +24,8 @@ const pharmacyCollectionSchema = {
     { name: "item_code", type: "string" },
     { name: "generic_name", type: "string" },
     { name: "generic_name2", type: "string" },
-    { name: "pack", type: "string" },
     { name: "manufacturer", type: "string" },
-    { name: "default_mrp", type: "float" },
-    { name: "default_rate", type: "float" },
-    { name: "type", type: "string" },
     { name: "description", type: "string" },
-    { name: "active", type: "bool" },
-    { name: "orderingNumber", type: "int32" },
-    { name: "createdAt", type: "string" },
-    { name: "updatedAt", type: "string" },
     { name: "searchable_text", type: "string" }, // Combined searchable text
   ],
   default_sorting_field: "orderingNumber",
@@ -151,20 +143,13 @@ async function indexAllData() {
     const documents = allItemsFull.map((item) => {
       const doc = item.toObject();
 
-      // Get the first batch for flattening
-      const firstBatch =
-        doc.batches && doc.batches.length > 0 ? doc.batches[0] : {};
-
       // Create a combined searchable text field
       const searchableText = [
         doc.generic_name || "",
         doc.generic_name2 || "",
         doc.manufacturer || "",
         doc.description || "",
-        doc.pack || "",
-        doc.type || "",
-        firstBatch.batch_no || "",
-        firstBatch.pack_size || "",
+        doc.item_code || "",
       ]
         .filter(Boolean)
         .join(" ");
@@ -174,23 +159,8 @@ async function indexAllData() {
         item_code: doc.item_code,
         generic_name: doc.generic_name,
         generic_name2: doc.generic_name2,
-        pack: doc.pack,
         manufacturer: doc.manufacturer,
-        default_mrp: doc.default_mrp,
-        default_rate: doc.default_rate,
-        type: doc.type,
         description: doc.description,
-        active: doc.active,
-        orderingNumber: doc.orderingNumber,
-        createdAt: doc.createdAt,
-        updatedAt: doc.updatedAt,
-        // Flatten first batch data
-        batch_no: firstBatch.batch_no,
-        quantity: firstBatch.quantity,
-        expiry_date: firstBatch.expiry_date,
-        pack_size: firstBatch.pack_size,
-        purchase_price: firstBatch.purchase_price,
-        mrp: firstBatch.mrp,
         searchable_text: searchableText,
       };
     });
@@ -198,24 +168,57 @@ async function indexAllData() {
     // Index documents in batches
     const batchSize = 100;
     let indexedCount = 0;
+    let errorCount = 0;
 
     for (let i = 0; i < documents.length; i += batchSize) {
       const batch = documents.slice(i, i + batchSize);
-      const results = await client
-        .collections("pharmacyinventory")
-        .documents()
-        .import(batch);
 
-      // Count successful imports
-      const successCount = results.filter((result) => !result.error).length;
-      indexedCount += successCount;
+      try {
+        const results = await client
+          .collections("pharmacyinventory")
+          .documents()
+          .import(batch);
 
-      if (i + batchSize < documents.length) {
-        console.log(`📦 Indexed ${indexedCount}/${documents.length} items...`);
+        // Count successful imports
+        const successCount = results.filter((result) => !result.error).length;
+        const batchErrors = results.filter((result) => result.error);
+
+        indexedCount += successCount;
+        errorCount += batchErrors.length;
+
+        if (batchErrors.length > 0) {
+          console.log(
+            `⚠️  Batch ${Math.floor(i / batchSize) + 1} had ${
+              batchErrors.length
+            } errors:`,
+            batchErrors[0]
+          );
+        }
+
+        if (i + batchSize < documents.length) {
+          console.log(
+            `📦 Indexed ${indexedCount}/${documents.length} items... (${errorCount} errors)`
+          );
+        }
+      } catch (error) {
+        console.error(
+          `❌ Error indexing batch ${Math.floor(i / batchSize) + 1}:`,
+          error.message
+        );
+        errorCount += batch.length;
       }
     }
 
-    console.log(`✅ Successfully indexed ${indexedCount} documents`);
+    console.log(
+      `✅ Successfully indexed ${indexedCount} documents (${errorCount} errors)`
+    );
+
+    if (indexedCount === 0) {
+      console.log(
+        "🔍 Sample document structure:",
+        JSON.stringify(documents[0], null, 2)
+      );
+    }
   } catch (error) {
     console.error("❌ Error indexing data:", error.message);
   }
@@ -233,15 +236,14 @@ async function searchMedicines(query, limit = 10) {
     const searchParameters = {
       q: cleanQuery,
       query_by:
-        "generic_name,generic_name2,manufacturer,description,pack,type,searchable_text",
+        "generic_name,generic_name2,manufacturer,description,item_code,searchable_text",
       sort_by: "orderingNumber:desc",
       per_page: Math.min(limit, 50), // Cap at 50 results
       num_typos: 2, // Allow 2 typos for fuzzy matching
       prefix: true, // Enable prefix matching
-      filter_by: "quantity:>0", // Only show items with stock
       group_by: "generic_name",
       group_limit: 1,
-      highlight_full_fields: "generic_name,manufacturer,description",
+      highlight_full_fields: "generic_name,manufacturer,description,item_code",
     };
 
     const searchResults = await client
@@ -264,19 +266,12 @@ async function searchMedicines(query, limit = 10) {
 // Add or update a single document
 async function indexDocument(doc) {
   try {
-    // Get the first batch for flattening
-    const firstBatch =
-      doc.batches && doc.batches.length > 0 ? doc.batches[0] : {};
-
     const searchableText = [
       doc.generic_name || "",
       doc.generic_name2 || "",
       doc.manufacturer || "",
       doc.description || "",
-      doc.pack || "",
-      doc.type || "",
-      firstBatch.batch_no || "",
-      firstBatch.pack_size || "",
+      doc.item_code || "",
     ]
       .filter(Boolean)
       .join(" ");
@@ -286,23 +281,8 @@ async function indexDocument(doc) {
       item_code: doc.item_code,
       generic_name: doc.generic_name,
       generic_name2: doc.generic_name2,
-      pack: doc.pack,
       manufacturer: doc.manufacturer,
-      default_mrp: doc.default_mrp,
-      default_rate: doc.default_rate,
-      type: doc.type,
       description: doc.description,
-      active: doc.active,
-      orderingNumber: doc.orderingNumber,
-      createdAt: doc.createdAt,
-      updatedAt: doc.updatedAt,
-      // Flatten first batch data
-      batch_no: firstBatch.batch_no,
-      quantity: firstBatch.quantity,
-      expiry_date: firstBatch.expiry_date,
-      pack_size: firstBatch.pack_size,
-      purchase_price: firstBatch.purchase_price,
-      mrp: firstBatch.mrp,
       searchable_text: searchableText,
     };
 
