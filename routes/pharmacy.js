@@ -422,21 +422,35 @@ router.post("/test-index", async (req, res) => {
 
     // Try to index the sample
     const { client } = require("../utils/typesense");
-    const results = await client
-      .collections("pharmacy_inventory")
-      .documents()
-      .import(documents);
 
-    const successCount = results.filter((result) => !result.error).length;
-    const errors = results.filter((result) => result.error);
+    try {
+      const results = await client
+        .collections("pharmacy_inventory")
+        .documents()
+        .import(documents);
 
-    res.json({
-      message: "Test indexing completed",
-      sampleCount: sampleItems.length,
-      indexedCount: successCount,
-      errors: errors.length > 0 ? errors : null,
-      success: successCount > 0,
-    });
+      const successCount = results.filter((result) => !result.error).length;
+      const errors = results.filter((result) => result.error);
+
+      res.json({
+        message: "Test indexing completed",
+        sampleCount: sampleItems.length,
+        indexedCount: successCount,
+        errors: errors.length > 0 ? errors : null,
+        success: successCount > 0,
+      });
+    } catch (importError) {
+      console.error("❌ Import error details:", importError);
+
+      res.json({
+        message: "Test indexing failed",
+        sampleCount: sampleItems.length,
+        indexedCount: 0,
+        errors: importError.message,
+        importError: importError,
+        success: false,
+      });
+    }
   } catch (error) {
     console.error("❌ Test indexing error:", error);
     res.status(500).json({
