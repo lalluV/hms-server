@@ -10,7 +10,8 @@ const {
   indexDocument,
   deleteDocument,
   initializeTypesense,
-  recreateCollection,
+  indexAllData,
+  getCollectionStats,
 } = require("../utils/typesense");
 
 // Get popular medicines
@@ -25,7 +26,7 @@ router.get("/popular", async (req, res) => {
   }
 });
 
-// Search medicines with Typesense (1mg style fast search)
+// Fast search with Typesense
 router.get("/search", async (req, res) => {
   const { q, limit = 10 } = req.query;
 
@@ -37,10 +38,7 @@ router.get("/search", async (req, res) => {
 
   try {
     const startTime = Date.now();
-
-    // Use Typesense for fast, fuzzy search
     const results = await searchMedicines(q, parseInt(limit));
-
     const searchTime = Date.now() - startTime;
 
     res.json({
@@ -52,7 +50,6 @@ router.get("/search", async (req, res) => {
     });
   } catch (err) {
     console.error("❌ Search error:", err);
-    // Return empty results instead of error
     res.json({
       results: [],
       searchTime: "0ms",
@@ -93,13 +90,8 @@ router.post("/", async (req, res) => {
     const newItem = new PharmacyInventory(req.body);
     const savedItem = await newItem.save();
 
-    // Index the new item in Typesense
-    try {
-      await indexDocument(savedItem.toObject());
-    } catch (indexError) {
-      console.error("Failed to index item in Typesense:", indexError);
-      // Don't fail the request if indexing fails
-    }
+    // Index the new item
+    await indexDocument(savedItem.toObject());
 
     res.status(201).json(savedItem);
   } catch (error) {
@@ -122,12 +114,7 @@ router.put("/:id", async (req, res) => {
     }
 
     // Update the item in Typesense
-    try {
-      await indexDocument(updatedItem.toObject());
-    } catch (indexError) {
-      console.error("Failed to update item in Typesense:", indexError);
-      // Don't fail the request if indexing fails
-    }
+    await indexDocument(updatedItem.toObject());
 
     res.json(updatedItem);
   } catch (error) {
@@ -148,13 +135,8 @@ router.delete("/:id", async (req, res) => {
       return res.status(404).json({ error: "Item not found" });
     }
 
-    // Remove the item from Typesense
-    try {
-      await deleteDocument(req.params.id);
-    } catch (indexError) {
-      console.error("Failed to delete item from Typesense:", indexError);
-      // Don't fail the request if deletion from index fails
-    }
+    // Remove from Typesense
+    await deleteDocument(req.params.id);
 
     res.json({ message: "Item deleted successfully" });
   } catch (error) {
@@ -188,7 +170,7 @@ router.get("/status/:status", async (req, res) => {
 router.get("/low-stock", async (req, res) => {
   try {
     const lowStockItems = await PharmacyInventory.find({
-      quantity: { $lt: 10 }, // Assuming 10 is the threshold for low stock
+      quantity: { $lt: 10 },
     });
     res.json(lowStockItems);
   } catch (error) {
@@ -235,12 +217,10 @@ router.post("/process-invoice", upload.single("invoice"), async (req, res) => {
         .json({ success: false, message: "No file uploaded" });
     }
 
-    // Call DeepSeek API to process the invoice
     const deepseekResponse = await axios.post(
       "https://api.deepseek.com/v1/vision/invoice",
       {
         image: req.file.path,
-        // Add any additional parameters required by DeepSeek API
       },
       {
         headers: {
@@ -250,10 +230,8 @@ router.post("/process-invoice", upload.single("invoice"), async (req, res) => {
       }
     );
 
-    // Process the response from DeepSeek API
     const extractedData = deepseekResponse.data;
 
-    // Format the response
     const response = {
       success: true,
       vendorName: extractedData.vendor_name,
@@ -293,341 +271,60 @@ router.post("/process-invoice", upload.single("invoice"), async (req, res) => {
   }
 });
 
-// Initialize Typesense and reindex all data
-router.post("/reindex", async (req, res) => {
+// Typesense management endpoints
+
+// Initialize Typesense
+router.post("/init-typesense", async (req, res) => {
   try {
-    console.log("🔄 Manual reindex requested...");
-
-    // First check if we have data in MongoDB
-    const totalCount = await PharmacyInventory.countDocuments({});
-    console.log(`📊 Found ${totalCount} documents in MongoDB`);
-
-    if (totalCount === 0) {
-      return res.json({
-        message: "No data found in MongoDB to index",
-        totalCount: 0,
-      });
-    }
-
-    // Force reindex
-    await initializeTypesense();
-
-    // Check the result
-    const { client } = require("../utils/typesense");
-    const collections = await client.collections().retrieve();
-    const pharmacyCollection = collections.find(
-      (col) => col.name === "pharmacyinventory"
-    );
-
+    const success = await initializeTypesense();
     res.json({
-      message: "Typesense reindex completed",
-      mongoCount: totalCount,
-      typesenseCount: pharmacyCollection ? pharmacyCollection.num_documents : 0,
-      success: true,
+      success,
+      message: success
+        ? "Typesense initialized successfully"
+        : "Typesense initialization failed",
     });
   } catch (error) {
-    console.error("❌ Reindex error:", error);
     res.status(500).json({
-      error: "Failed to reindex data",
-      details: error.message,
       success: false,
+      error: "Failed to initialize Typesense",
+      details: error.message,
     });
   }
 });
 
-// Force recreate collection with new schema
-router.post("/recreate", async (req, res) => {
+// Index all data
+router.post("/index-all", async (req, res) => {
   try {
-    console.log("🔄 Force recreate collection requested...");
-
-    // First check if we have data in MongoDB
-    const totalCount = await PharmacyInventory.countDocuments({});
-    console.log(`📊 Found ${totalCount} documents in MongoDB`);
-
-    if (totalCount === 0) {
-      return res.json({
-        message: "No data found in MongoDB to index",
-        totalCount: 0,
-      });
-    }
-
-    // Force recreate collection
-    await recreateCollection();
-
-    // Check the result
-    const { client } = require("../utils/typesense");
-    const collections = await client.collections().retrieve();
-    const pharmacyCollection = collections.find(
-      (col) => col.name === "pharmacyinventory"
-    );
-
+    const result = await indexAllData();
     res.json({
-      message: "Typesense collection recreated successfully",
-      mongoCount: totalCount,
-      typesenseCount: pharmacyCollection ? pharmacyCollection.num_documents : 0,
-      success: true,
+      success: result.success,
+      message: result.success ? "Data indexed successfully" : "Indexing failed",
+      indexed: result.indexed || 0,
+      errors: result.errors || 0,
     });
   } catch (error) {
-    console.error("❌ Recreate error:", error);
     res.status(500).json({
-      error: "Failed to recreate collection",
-      details: error.message,
       success: false,
-    });
-  }
-});
-
-// Progressive indexing - index data in chunks
-router.post("/progressive-index", async (req, res) => {
-  try {
-    console.log("🔄 Starting progressive indexing...");
-
-    const { client } = require("../utils/typesense");
-
-    // First ensure collection exists
-    const collections = await client.collections().retrieve();
-    const collectionExists = collections.find(
-      (c) => c.name === "pharmacyinventory"
-    );
-
-    if (!collectionExists) {
-      // Create collection
-      const pharmacySchema = {
-        name: "pharmacyinventory",
-        fields: [
-          { name: "id", type: "string" },
-          { name: "item_code", type: "string" },
-          { name: "generic_name", type: "string" },
-          { name: "generic_name2", type: "string" },
-          { name: "manufacturer", type: "string" },
-          { name: "description", type: "string" },
-          { name: "searchable_text", type: "string" },
-        ],
-        strict: false,
-      };
-
-      await client.collections().create(pharmacySchema);
-      console.log("✅ Created pharmacyinventory collection");
-    }
-
-    // Get total count
-    const totalCount = await PharmacyInventory.countDocuments({});
-    console.log(`📊 Total documents to index: ${totalCount}`);
-
-    // Index in chunks of 1000
-    const chunkSize = 1000;
-    let indexedCount = 0;
-    let errorCount = 0;
-
-    for (let skip = 0; skip < totalCount; skip += chunkSize) {
-      try {
-        console.log(
-          `📦 Processing chunk ${Math.floor(skip / chunkSize) + 1}/${Math.ceil(
-            totalCount / chunkSize
-          )}...`
-        );
-
-        const items = await PharmacyInventory.find({})
-          .skip(skip)
-          .limit(chunkSize);
-
-        const documents = items.map((item) => {
-          const doc = item.toObject();
-
-          const searchableText = [
-            doc.generic_name || "",
-            doc.generic_name2 || "",
-            doc.manufacturer || "",
-            doc.description || "",
-            doc.item_code || "",
-          ]
-            .filter(Boolean)
-            .join(" ");
-
-          return {
-            id: doc._id.toString(),
-            item_code: doc.item_code,
-            generic_name: doc.generic_name,
-            generic_name2: doc.generic_name2,
-            manufacturer: doc.manufacturer,
-            description: doc.description,
-            searchable_text: searchableText,
-          };
-        });
-
-        const results = await client
-          .collections("pharmacyinventory")
-          .documents()
-          .import(documents);
-
-        const successCount = results.filter((result) => !result.error).length;
-        const chunkErrors = results.filter((result) => result.error);
-
-        indexedCount += successCount;
-        errorCount += chunkErrors.length;
-
-        console.log(
-          `✅ Chunk ${
-            Math.floor(skip / chunkSize) + 1
-          }: ${successCount} success, ${chunkErrors.length} errors`
-        );
-
-        // Small delay to prevent overwhelming the server
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      } catch (chunkError) {
-        console.error(
-          `❌ Error processing chunk ${Math.floor(skip / chunkSize) + 1}:`,
-          chunkError.message
-        );
-        errorCount += chunkSize;
-      }
-    }
-
-    res.json({
-      message: "Progressive indexing completed",
-      totalCount: totalCount,
-      indexedCount: indexedCount,
-      errorCount: errorCount,
-      success: indexedCount > 0,
-    });
-  } catch (error) {
-    console.error("❌ Progressive indexing error:", error);
-    res.status(500).json({
-      error: "Progressive indexing failed",
+      error: "Failed to index data",
       details: error.message,
-      success: false,
     });
   }
 });
 
-// Test Typesense connection and collection creation
-router.post("/test-typesense", async (req, res) => {
-  try {
-    console.log("🔍 Testing Typesense connection...");
-
-    const { client } = require("../utils/typesense");
-
-    // Test health
-    const health = await client.health.retrieve();
-    console.log("✅ Health check:", health);
-
-    // List collections
-    const collections = await client.collections().retrieve();
-    console.log(
-      "📋 Collections:",
-      collections.map((c) => c.name)
-    );
-
-    // Try to create the pharmacy collection
-    const pharmacySchema = {
-      name: "pharmacyinventory",
-      fields: [
-        { name: "id", type: "string" },
-        { name: "item_code", type: "string" },
-        { name: "generic_name", type: "string" },
-        { name: "generic_name2", type: "string" },
-        { name: "manufacturer", type: "string" },
-        { name: "description", type: "string" },
-        { name: "searchable_text", type: "string" },
-      ],
-      strict: false,
-    };
-
-    try {
-      // Delete existing collection if it exists
-      const existingCollection = collections.find(
-        (c) => c.name === "pharmacyinventory"
-      );
-      if (existingCollection) {
-        await client.collections("pharmacyinventory").delete();
-        console.log("🗑️  Deleted existing pharmacyinventory collection");
-      }
-
-      // Create new collection
-      await client.collections().create(pharmacySchema);
-      console.log("✅ Pharmacy collection created successfully");
-
-      res.json({
-        message: "Pharmacy collection created successfully",
-        health: health,
-        collections: collections.map((c) => c.name),
-        canCreateCollections: true,
-        success: true,
-      });
-    } catch (createError) {
-      console.error("❌ Collection creation failed:", createError.message);
-      res.json({
-        message: "Typesense connection works but collection creation failed",
-        health: health,
-        collections: collections.map((c) => c.name),
-        canCreateCollections: false,
-        error: createError.message,
-        success: false,
-      });
-    }
-  } catch (error) {
-    console.error("❌ Typesense connection test failed:", error);
-    res.status(500).json({
-      error: "Typesense connection test failed",
-      details: error.message,
-      success: false,
-    });
-  }
-});
-
-// Get search statistics
-router.get("/search/stats", async (req, res) => {
-  try {
-    const { q } = req.query;
-    if (!q) {
-      return res
-        .status(400)
-        .json({ error: 'Missing search query parameter "q"' });
-    }
-
-    const startTime = Date.now();
-    const results = await searchMedicines(q, 1);
-    const searchTime = Date.now() - startTime;
-
-    res.json({
-      query: q,
-      searchTime: `${searchTime}ms`,
-      totalResults: results.length,
-      performance:
-        searchTime < 100 ? "Excellent" : searchTime < 500 ? "Good" : "Slow",
-    });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to get search stats" });
-  }
-});
-
-// Health check for Typesense
+// Get search health
 router.get("/search/health", async (req, res) => {
   try {
     const { client } = require("../utils/typesense");
     const health = await client.health.retrieve();
-    const collections = await client.collections().retrieve();
-    const pharmacyCollection = collections.find(
-      (col) => col.name === "pharmacyinventory"
-    );
-
-    // Also check MongoDB data
+    const collectionStats = await getCollectionStats();
     const mongoCount = await PharmacyInventory.countDocuments({});
-    const sampleItems = await PharmacyInventory.find({}).limit(3);
 
     res.json({
       status: "healthy",
       typesense: health,
-      collection: pharmacyCollection
-        ? {
-            name: pharmacyCollection.name,
-            documents: pharmacyCollection.num_documents,
-            fields: pharmacyCollection.num_documents > 0 ? "indexed" : "empty",
-          }
-        : null,
+      collection: collectionStats,
       mongodb: {
         totalDocuments: mongoCount,
-        sampleItems: sampleItems.length,
         hasData: mongoCount > 0,
       },
     });

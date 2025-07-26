@@ -66,14 +66,19 @@ const PORT = process.env.PORT || 3001;
 app.listen(PORT, "0.0.0.0", async () => {
   console.log(`🚀 Server running on port ${PORT}`);
 
-  // Initialize Typesense after server starts (non-blocking)
+  // Initialize Typesense after server starts
   setTimeout(async () => {
     try {
-      await initializeTypesense();
-      console.log("✅ Typesense initialized successfully");
+      const success = await initializeTypesense();
+      if (success) {
+        console.log("✅ Typesense initialized successfully");
+      } else {
+        console.log(
+          "⚠️  Typesense initialization failed - search will be disabled"
+        );
+      }
     } catch (error) {
       console.error("❌ Typesense initialization error:", error);
-      console.log("⚠️  Search functionality will be disabled");
     }
-  }, 2000); // Wait 2 seconds after server starts
+  }, 2000);
 });

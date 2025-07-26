@@ -11,13 +11,13 @@ const client = new Typesense.Client({
     },
   ],
   apiKey: process.env.TYPESENSE_API_KEY || "xyz",
-  connectionTimeoutSeconds: 5,
+  connectionTimeoutSeconds: 10,
   retryIntervalSeconds: 0.1,
   numRetries: 3,
 });
 
-// Collection schema for pharmacy inventory
-const pharmacyCollectionSchema = {
+// Simple collection schema
+const collectionSchema = {
   name: "pharmacyinventory",
   fields: [
     { name: "id", type: "string" },
@@ -26,18 +26,17 @@ const pharmacyCollectionSchema = {
     { name: "generic_name2", type: "string" },
     { name: "manufacturer", type: "string" },
     { name: "description", type: "string" },
-    { name: "searchable_text", type: "string" }, // Combined searchable text
+    { name: "searchable_text", type: "string" },
   ],
-  default_sorting_field: "orderingNumber",
-  strict: false, // Allow additional fields to be indexed
+  default_sorting_field: "id",
 };
 
-// Initialize Typesense collection
+// Initialize Typesense
 async function initializeTypesense() {
   try {
-    console.log("🔍 Checking Typesense connection...");
+    console.log("🔍 Initializing Typesense...");
 
-    // Test connection first
+    // Test connection
     await client.health.retrieve();
     console.log("✅ Typesense server is reachable");
 
@@ -48,236 +47,21 @@ async function initializeTypesense() {
     );
 
     if (!collectionExists) {
-      console.log("📦 Creating Typesense collection...");
-      await client.collections().create(pharmacyCollectionSchema);
-      console.log("✅ Typesense collection created successfully");
-
-      // Index all existing data
-      await indexAllData();
+      console.log("📦 Creating collection...");
+      await client.collections().create(collectionSchema);
+      console.log("✅ Collection created successfully");
     } else {
-      console.log("✅ Typesense collection already exists");
-      // Check if collection has data, if not, reindex
-      const stats = await client.collections("pharmacyinventory").retrieve();
-      if (stats.num_documents === 0) {
-        console.log("📝 Collection is empty, indexing data...");
-        await indexAllData();
-      } else {
-        console.log(`📊 Collection has ${stats.num_documents} documents`);
-      }
+      console.log("✅ Collection already exists");
     }
+
+    return true;
   } catch (error) {
-    console.error("❌ Error initializing Typesense:", error.message);
-    // Don't throw error, let the app continue without search
-    console.log("⚠️  Search functionality will be disabled");
+    console.error("❌ Typesense initialization failed:", error.message);
+    return false;
   }
 }
 
-// Force recreate collection with new schema
-async function recreateCollection() {
-  try {
-    console.log("🔄 Recreating Typesense collection...");
-
-    // Delete existing collection if it exists
-    const collections = await client.collections().retrieve();
-    const collectionExists = collections.find(
-      (col) => col.name === "pharmacyinventory"
-    );
-
-    if (collectionExists) {
-      await client.collections("pharmacyinventory").delete();
-      console.log("🗑️  Deleted existing collection");
-    }
-
-    // Create new collection with updated schema
-    await client.collections().create(pharmacyCollectionSchema);
-    console.log("✅ Created new collection with updated schema");
-
-    // Index all data
-    await indexAllData();
-
-    console.log("✅ Collection recreated and indexed successfully");
-  } catch (error) {
-    console.error("❌ Error recreating collection:", error.message);
-  }
-}
-
-// Index all pharmacy inventory data
-async function indexAllData() {
-  try {
-    console.log("📊 Indexing all pharmacy inventory data...");
-
-    // First, let's check what collections exist in MongoDB
-    const collections = await PharmacyInventory.db.listCollections().toArray();
-    console.log(
-      "📋 Available MongoDB collections:",
-      collections.map((c) => c.name)
-    );
-
-    // Check total count in the collection
-    const totalCount = await PharmacyInventory.countDocuments({});
-    console.log(
-      `📊 Total documents in pharmacyinventory collection: ${totalCount}`
-    );
-
-    const allItems = await PharmacyInventory.find({}).limit(5);
-    console.log(`📝 Sample items found: ${allItems.length}`);
-
-    if (allItems.length > 0) {
-      console.log(
-        "🔍 Sample item structure:",
-        JSON.stringify(allItems[0], null, 2)
-      );
-    }
-
-    if (totalCount === 0) {
-      console.log("⚠️  No pharmacy inventory data found to index");
-      return;
-    }
-
-    console.log(`📝 Processing ${totalCount} items...`);
-
-    // Get all items
-    const allItemsFull = await PharmacyInventory.find({});
-    console.log(`📝 Retrieved ${allItemsFull.length} items from database`);
-
-    const documents = allItemsFull.map((item) => {
-      const doc = item.toObject();
-
-      // Create a combined searchable text field
-      const searchableText = [
-        doc.generic_name || "",
-        doc.generic_name2 || "",
-        doc.manufacturer || "",
-        doc.description || "",
-        doc.item_code || "",
-      ]
-        .filter(Boolean)
-        .join(" ");
-
-      return {
-        id: doc._id.toString(),
-        item_code: doc.item_code,
-        generic_name: doc.generic_name,
-        generic_name2: doc.generic_name2,
-        manufacturer: doc.manufacturer,
-        description: doc.description,
-        searchable_text: searchableText,
-      };
-    });
-
-    // Index documents in batches
-    const batchSize = 100;
-    let indexedCount = 0;
-    let errorCount = 0;
-
-    console.log(`🔍 Starting to index ${documents.length} documents...`);
-    console.log(`📝 Sample document:`, JSON.stringify(documents[0], null, 2));
-
-    for (let i = 0; i < documents.length; i += batchSize) {
-      const batch = documents.slice(i, i + batchSize);
-
-      try {
-        console.log(
-          `📦 Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(
-            documents.length / batchSize
-          )}...`
-        );
-
-        const results = await client
-          .collections("pharmacyinventory")
-          .documents()
-          .import(batch);
-
-        // Count successful imports
-        const successCount = results.filter((result) => !result.error).length;
-        const batchErrors = results.filter((result) => result.error);
-
-        indexedCount += successCount;
-        errorCount += batchErrors.length;
-
-        if (batchErrors.length > 0) {
-          console.log(
-            `⚠️  Batch ${Math.floor(i / batchSize) + 1} had ${
-              batchErrors.length
-            } errors:`,
-            batchErrors[0]
-          );
-        }
-
-        console.log(
-          `📦 Batch ${
-            Math.floor(i / batchSize) + 1
-          }: ${successCount} success, ${batchErrors.length} errors`
-        );
-      } catch (error) {
-        console.error(
-          `❌ Error indexing batch ${Math.floor(i / batchSize) + 1}:`,
-          error.message
-        );
-        errorCount += batch.length;
-      }
-    }
-
-    console.log(
-      `✅ Successfully indexed ${indexedCount} documents (${errorCount} errors)`
-    );
-
-    if (indexedCount === 0) {
-      console.log("🔍 No documents indexed. Checking collection status...");
-      try {
-        const collection = await client
-          .collections("pharmacyinventory")
-          .retrieve();
-        console.log("📊 Collection info:", collection);
-      } catch (error) {
-        console.error("❌ Error getting collection info:", error.message);
-      }
-    }
-  } catch (error) {
-    console.error("❌ Error indexing data:", error.message);
-  }
-}
-
-// Search function with fuzzy matching
-async function searchMedicines(query, limit = 10) {
-  try {
-    // Clean and validate query
-    const cleanQuery = query.trim();
-    if (!cleanQuery || cleanQuery.length < 1) {
-      return [];
-    }
-
-    const searchParameters = {
-      q: cleanQuery,
-      query_by:
-        "generic_name,generic_name2,manufacturer,description,item_code,searchable_text",
-      sort_by: "orderingNumber:desc",
-      per_page: Math.min(limit, 50), // Cap at 50 results
-      num_typos: 2, // Allow 2 typos for fuzzy matching
-      prefix: true, // Enable prefix matching
-      group_by: "generic_name",
-      group_limit: 1,
-      highlight_full_fields: "generic_name,manufacturer,description,item_code",
-    };
-
-    const searchResults = await client
-      .collections("pharmacyinventory")
-      .documents()
-      .search(searchParameters);
-
-    return searchResults.hits.map((hit) => ({
-      ...hit.document,
-      score: hit.text_match,
-      highlights: hit.highlights || [],
-    }));
-  } catch (error) {
-    console.error("❌ Search error:", error.message);
-    // Return empty results instead of throwing error
-    return [];
-  }
-}
-
-// Add or update a single document
+// Index a single document
 async function indexDocument(doc) {
   try {
     const searchableText = [
@@ -301,19 +85,146 @@ async function indexDocument(doc) {
     };
 
     await client.collections("pharmacyinventory").documents().upsert(document);
+    return true;
   } catch (error) {
     console.error("❌ Error indexing document:", error.message);
-    // Don't throw error, just log it
+    return false;
   }
 }
 
-// Delete a document from index
+// Search medicines
+async function searchMedicines(query, limit = 10) {
+  try {
+    const cleanQuery = query.trim();
+    if (!cleanQuery) return [];
+
+    const searchParameters = {
+      q: cleanQuery,
+      query_by:
+        "generic_name,generic_name2,manufacturer,description,item_code,searchable_text",
+      sort_by: "id:desc",
+      per_page: Math.min(limit, 50),
+      num_typos: 2,
+      prefix: true,
+    };
+
+    const searchResults = await client
+      .collections("pharmacyinventory")
+      .documents()
+      .search(searchParameters);
+
+    return searchResults.hits.map((hit) => ({
+      ...hit.document,
+      score: hit.text_match,
+    }));
+  } catch (error) {
+    console.error("❌ Search error:", error.message);
+    return [];
+  }
+}
+
+// Index all data in small batches
+async function indexAllData() {
+  try {
+    console.log("📊 Starting data indexing...");
+
+    const totalCount = await PharmacyInventory.countDocuments({});
+    console.log(`📝 Total documents: ${totalCount}`);
+
+    if (totalCount === 0) {
+      console.log("⚠️ No data to index");
+      return { success: true, indexed: 0 };
+    }
+
+    const batchSize = 100;
+    let indexedCount = 0;
+    let errorCount = 0;
+
+    for (let skip = 0; skip < totalCount; skip += batchSize) {
+      try {
+        const items = await PharmacyInventory.find({})
+          .skip(skip)
+          .limit(batchSize);
+
+        const documents = items.map((item) => {
+          const doc = item.toObject();
+          const searchableText = [
+            doc.generic_name || "",
+            doc.generic_name2 || "",
+            doc.manufacturer || "",
+            doc.description || "",
+            doc.item_code || "",
+          ]
+            .filter(Boolean)
+            .join(" ");
+
+          return {
+            id: doc._id.toString(),
+            item_code: doc.item_code,
+            generic_name: doc.generic_name,
+            generic_name2: doc.generic_name2,
+            manufacturer: doc.manufacturer,
+            description: doc.description,
+            searchable_text: searchableText,
+          };
+        });
+
+        const results = await client
+          .collections("pharmacyinventory")
+          .documents()
+          .import(documents);
+        const successCount = results.filter((result) => !result.error).length;
+
+        indexedCount += successCount;
+        errorCount += results.length - successCount;
+
+        console.log(
+          `📦 Batch ${
+            Math.floor(skip / batchSize) + 1
+          }: ${successCount} indexed`
+        );
+
+        // Small delay
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      } catch (error) {
+        console.error(`❌ Batch error:`, error.message);
+        errorCount += batchSize;
+      }
+    }
+
+    console.log(
+      `✅ Indexing completed: ${indexedCount} success, ${errorCount} errors`
+    );
+    return { success: true, indexed: indexedCount, errors: errorCount };
+  } catch (error) {
+    console.error("❌ Indexing failed:", error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+// Delete document
 async function deleteDocument(id) {
   try {
     await client.collections("pharmacyinventory").documents(id).delete();
+    return true;
   } catch (error) {
     console.error("❌ Error deleting document:", error.message);
-    // Don't throw error, just log it
+    return false;
+  }
+}
+
+// Get collection stats
+async function getCollectionStats() {
+  try {
+    const collection = await client.collections("pharmacyinventory").retrieve();
+    return {
+      name: collection.name,
+      documents: collection.num_documents,
+      fields: collection.num_documents > 0 ? "indexed" : "empty",
+    };
+  } catch (error) {
+    console.error("❌ Error getting collection stats:", error.message);
+    return null;
   }
 }
 
@@ -324,5 +235,5 @@ module.exports = {
   indexDocument,
   deleteDocument,
   indexAllData,
-  recreateCollection,
+  getCollectionStats,
 };
