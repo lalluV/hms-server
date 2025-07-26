@@ -316,7 +316,7 @@ router.post("/reindex", async (req, res) => {
     const { client } = require("../utils/typesense");
     const collections = await client.collections().retrieve();
     const pharmacyCollection = collections.find(
-      (col) => col.name === "pharmacy_inventory"
+      (col) => col.name === "pharmacyinventory"
     );
 
     res.json({
@@ -358,7 +358,7 @@ router.post("/recreate", async (req, res) => {
     const { client } = require("../utils/typesense");
     const collections = await client.collections().retrieve();
     const pharmacyCollection = collections.find(
-      (col) => col.name === "pharmacy_inventory"
+      (col) => col.name === "pharmacyinventory"
     );
 
     res.json({
@@ -425,7 +425,7 @@ router.post("/test-index", async (req, res) => {
 
     try {
       const results = await client
-        .collections("pharmacy_inventory")
+        .collections("pharmacyinventory")
         .documents()
         .import(documents);
 
@@ -479,26 +479,37 @@ router.post("/test-typesense", async (req, res) => {
       collections.map((c) => c.name)
     );
 
-    // Try to create a test collection
-    const testSchema = {
-      name: "test_collection",
+    // Try to create the pharmacy collection
+    const pharmacySchema = {
+      name: "pharmacyinventory",
       fields: [
         { name: "id", type: "string" },
-        { name: "title", type: "string" },
+        { name: "item_code", type: "string" },
+        { name: "generic_name", type: "string" },
+        { name: "generic_name2", type: "string" },
+        { name: "manufacturer", type: "string" },
+        { name: "description", type: "string" },
+        { name: "searchable_text", type: "string" },
       ],
       strict: false,
     };
 
     try {
-      await client.collections().create(testSchema);
-      console.log("✅ Test collection created successfully");
+      // Delete existing collection if it exists
+      const existingCollection = collections.find(
+        (c) => c.name === "pharmacyinventory"
+      );
+      if (existingCollection) {
+        await client.collections("pharmacyinventory").delete();
+        console.log("🗑️  Deleted existing pharmacyinventory collection");
+      }
 
-      // Delete test collection
-      await client.collections("test_collection").delete();
-      console.log("🗑️  Test collection deleted");
+      // Create new collection
+      await client.collections().create(pharmacySchema);
+      console.log("✅ Pharmacy collection created successfully");
 
       res.json({
-        message: "Typesense connection test successful",
+        message: "Pharmacy collection created successfully",
         health: health,
         collections: collections.map((c) => c.name),
         canCreateCollections: true,
