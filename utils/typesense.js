@@ -18,7 +18,7 @@ const client = new Typesense.Client({
 
 // Collection schema for pharmacy inventory
 const pharmacyCollectionSchema = {
-  name: "pharmacyinventory",
+  name: "pharmacy_inventory",
   fields: [
     { name: "id", type: "string" },
     { name: "item_code", type: "string" },
@@ -44,7 +44,7 @@ async function initializeTypesense() {
     // Check if collection exists
     const collections = await client.collections().retrieve();
     const collectionExists = collections.find(
-      (col) => col.name === "pharmacyinventory"
+      (col) => col.name === "pharmacy_inventory"
     );
 
     if (!collectionExists) {
@@ -57,7 +57,7 @@ async function initializeTypesense() {
     } else {
       console.log("✅ Typesense collection already exists");
       // Check if collection has data, if not, reindex
-      const stats = await client.collections("pharmacyinventory").retrieve();
+      const stats = await client.collections("pharmacy_inventory").retrieve();
       if (stats.num_documents === 0) {
         console.log("📝 Collection is empty, indexing data...");
         await indexAllData();
@@ -80,11 +80,11 @@ async function recreateCollection() {
     // Delete existing collection if it exists
     const collections = await client.collections().retrieve();
     const collectionExists = collections.find(
-      (col) => col.name === "pharmacyinventory"
+      (col) => col.name === "pharmacy_inventory"
     );
 
     if (collectionExists) {
-      await client.collections("pharmacyinventory").delete();
+      await client.collections("pharmacy_inventory").delete();
       console.log("🗑️  Deleted existing collection");
     }
 
@@ -184,7 +184,7 @@ async function indexAllData() {
         );
 
         const results = await client
-          .collections("pharmacyinventory")
+          .collections("pharmacy_inventory")
           .documents()
           .import(batch);
 
@@ -226,7 +226,7 @@ async function indexAllData() {
       console.log("🔍 No documents indexed. Checking collection status...");
       try {
         const collection = await client
-          .collections("pharmacyinventory")
+          .collections("pharmacy_inventory")
           .retrieve();
         console.log("📊 Collection info:", collection);
       } catch (error) {
@@ -261,7 +261,7 @@ async function searchMedicines(query, limit = 10) {
     };
 
     const searchResults = await client
-      .collections("pharmacyinventory")
+      .collections("pharmacy_inventory")
       .documents()
       .search(searchParameters);
 
@@ -300,7 +300,7 @@ async function indexDocument(doc) {
       searchable_text: searchableText,
     };
 
-    await client.collections("pharmacyinventory").documents().upsert(document);
+    await client.collections("pharmacy_inventory").documents().upsert(document);
   } catch (error) {
     console.error("❌ Error indexing document:", error.message);
     // Don't throw error, just log it
@@ -310,7 +310,7 @@ async function indexDocument(doc) {
 // Delete a document from index
 async function deleteDocument(id) {
   try {
-    await client.collections("pharmacyinventory").documents(id).delete();
+    await client.collections("pharmacy_inventory").documents(id).delete();
   } catch (error) {
     console.error("❌ Error deleting document:", error.message);
     // Don't throw error, just log it

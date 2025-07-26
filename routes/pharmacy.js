@@ -316,7 +316,7 @@ router.post("/reindex", async (req, res) => {
     const { client } = require("../utils/typesense");
     const collections = await client.collections().retrieve();
     const pharmacyCollection = collections.find(
-      (col) => col.name === "pharmacyinventory"
+      (col) => col.name === "pharmacy_inventory"
     );
 
     res.json({
@@ -358,7 +358,7 @@ router.post("/recreate", async (req, res) => {
     const { client } = require("../utils/typesense");
     const collections = await client.collections().retrieve();
     const pharmacyCollection = collections.find(
-      (col) => col.name === "pharmacyinventory"
+      (col) => col.name === "pharmacy_inventory"
     );
 
     res.json({
@@ -423,7 +423,7 @@ router.post("/test-index", async (req, res) => {
     // Try to index the sample
     const { client } = require("../utils/typesense");
     const results = await client
-      .collections("pharmacyinventory")
+      .collections("pharmacy_inventory")
       .documents()
       .import(documents);
 
