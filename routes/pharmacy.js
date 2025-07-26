@@ -377,6 +377,76 @@ router.post("/recreate", async (req, res) => {
   }
 });
 
+// Test indexing with a small sample
+router.post("/test-index", async (req, res) => {
+  try {
+    console.log("🧪 Testing indexing with sample data...");
+
+    // Get just 5 documents for testing
+    const sampleItems = await PharmacyInventory.find({}).limit(5);
+    console.log(`📝 Found ${sampleItems.length} sample items`);
+
+    if (sampleItems.length === 0) {
+      return res.json({
+        message: "No sample data found",
+        success: false,
+      });
+    }
+
+    // Test the indexing logic
+    const documents = sampleItems.map((item) => {
+      const doc = item.toObject();
+
+      const searchableText = [
+        doc.generic_name || "",
+        doc.generic_name2 || "",
+        doc.manufacturer || "",
+        doc.description || "",
+        doc.item_code || "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+
+      return {
+        id: doc._id.toString(),
+        item_code: doc.item_code,
+        generic_name: doc.generic_name,
+        generic_name2: doc.generic_name2,
+        manufacturer: doc.manufacturer,
+        description: doc.description,
+        searchable_text: searchableText,
+      };
+    });
+
+    console.log("📝 Sample documents:", JSON.stringify(documents, null, 2));
+
+    // Try to index the sample
+    const { client } = require("../utils/typesense");
+    const results = await client
+      .collections("pharmacyinventory")
+      .documents()
+      .import(documents);
+
+    const successCount = results.filter((result) => !result.error).length;
+    const errors = results.filter((result) => result.error);
+
+    res.json({
+      message: "Test indexing completed",
+      sampleCount: sampleItems.length,
+      indexedCount: successCount,
+      errors: errors.length > 0 ? errors : null,
+      success: successCount > 0,
+    });
+  } catch (error) {
+    console.error("❌ Test indexing error:", error);
+    res.status(500).json({
+      error: "Test indexing failed",
+      details: error.message,
+      success: false,
+    });
+  }
+});
+
 // Get search statistics
 router.get("/search/stats", async (req, res) => {
   try {

@@ -170,10 +170,19 @@ async function indexAllData() {
     let indexedCount = 0;
     let errorCount = 0;
 
+    console.log(`🔍 Starting to index ${documents.length} documents...`);
+    console.log(`📝 Sample document:`, JSON.stringify(documents[0], null, 2));
+
     for (let i = 0; i < documents.length; i += batchSize) {
       const batch = documents.slice(i, i + batchSize);
 
       try {
+        console.log(
+          `📦 Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(
+            documents.length / batchSize
+          )}...`
+        );
+
         const results = await client
           .collections("pharmacyinventory")
           .documents()
@@ -195,11 +204,11 @@ async function indexAllData() {
           );
         }
 
-        if (i + batchSize < documents.length) {
-          console.log(
-            `📦 Indexed ${indexedCount}/${documents.length} items... (${errorCount} errors)`
-          );
-        }
+        console.log(
+          `📦 Batch ${
+            Math.floor(i / batchSize) + 1
+          }: ${successCount} success, ${batchErrors.length} errors`
+        );
       } catch (error) {
         console.error(
           `❌ Error indexing batch ${Math.floor(i / batchSize) + 1}:`,
@@ -214,10 +223,15 @@ async function indexAllData() {
     );
 
     if (indexedCount === 0) {
-      console.log(
-        "🔍 Sample document structure:",
-        JSON.stringify(documents[0], null, 2)
-      );
+      console.log("🔍 No documents indexed. Checking collection status...");
+      try {
+        const collection = await client
+          .collections("pharmacyinventory")
+          .retrieve();
+        console.log("📊 Collection info:", collection);
+      } catch (error) {
+        console.error("❌ Error getting collection info:", error.message);
+      }
     }
   } catch (error) {
     console.error("❌ Error indexing data:", error.message);
