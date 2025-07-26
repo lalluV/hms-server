@@ -6,112 +6,54 @@ const multer = require("multer");
 const path = require("path");
 const axios = require("axios");
 
-// Levenshtein distance function for fuzzy matching
-function levenshteinDistance(str1, str2) {
-  const matrix = [];
-  const n = str2.length;
-  const m = str1.length;
+// Simple fuzzy matching function for autocomplete
+function createFuzzyRegex(query) {
+  // Create a regex that allows for typos and partial matches
+  const chars = query.toLowerCase().split("");
+  const pattern = chars
+    .map((char) => {
+      // Allow optional characters between each character
+      return char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    })
+    .join(".*?");
 
-  if (n === 0) return m;
-  if (m === 0) return n;
-
-  // Create matrix
-  for (let i = 0; i <= n; i++) {
-    matrix[i] = [i];
-  }
-  for (let j = 0; j <= m; j++) {
-    matrix[0][j] = j;
-  }
-
-  // Fill matrix
-  for (let i = 1; i <= n; i++) {
-    for (let j = 1; j <= m; j++) {
-      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
-        matrix[i][j] = matrix[i - 1][j - 1];
-      } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1, // substitution
-          matrix[i][j - 1] + 1, // insertion
-          matrix[i - 1][j] + 1 // deletion
-        );
-      }
-    }
-  }
-
-  return matrix[n][m];
+  return new RegExp(pattern, "i");
 }
 
-// Calculate similarity score (0-1, where 1 is exact match)
-function calculateSimilarity(str1, str2) {
-  const maxLength = Math.max(str1.length, str2.length);
-  if (maxLength === 0) return 1;
-  const distance = levenshteinDistance(str1.toLowerCase(), str2.toLowerCase());
-  return (maxLength - distance) / maxLength;
+// Create multiple search patterns for better matching
+function createSearchPatterns(query) {
+  const cleanQuery = query.trim().toLowerCase();
+
+  return [
+    new RegExp(cleanQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"), // Exact match
+    new RegExp("^" + cleanQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"), // Starts with
+    new RegExp(cleanQuery.split("").join(".*?"), "i"), // Fuzzy match
+    new RegExp(cleanQuery.split(" ").join(".*"), "i"), // Word-based match
+  ];
 }
 
-// Enhanced fuzzy search function
-function fuzzySearch(items, query, threshold = 0.6) {
-  const results = [];
+// Score search results for better ranking
+function scoreResult(item, query, matchedField) {
   const queryLower = query.toLowerCase();
+  const fieldValue = (item[matchedField] || "").toLowerCase();
 
-  items.forEach((item) => {
-    let maxSimilarity = 0;
-    let matchedField = "";
+  // Exact match gets highest score
+  if (fieldValue === queryLower) return 100;
 
-    // Fields to search in
-    const searchFields = [
-      { field: "generic_name", value: item.generic_name || "" },
-      { field: "generic_name2", value: item.generic_name2 || "" },
-      { field: "manufacturer", value: item.manufacturer || "" },
-      { field: "description", value: item.description || "" },
-      { field: "brand_name", value: item.brand_name || "" },
-      { field: "composition", value: item.composition || "" },
-    ];
+  // Starts with query gets high score
+  if (fieldValue.startsWith(queryLower)) return 90;
 
-    searchFields.forEach(({ field, value }) => {
-      if (value) {
-        const valueLower = value.toLowerCase();
+  // Contains exact query gets good score
+  if (fieldValue.includes(queryLower)) return 80;
 
-        // Exact match gets highest score
-        if (valueLower.includes(queryLower)) {
-          maxSimilarity = Math.max(maxSimilarity, 1.0);
-          matchedField = field;
-        } else {
-          // Calculate fuzzy similarity
-          const similarity = calculateSimilarity(queryLower, valueLower);
-          if (similarity > maxSimilarity) {
-            maxSimilarity = similarity;
-            matchedField = field;
-          }
+  // Partial matches get lower scores based on position
+  const index = fieldValue.indexOf(queryLower);
+  if (index !== -1) {
+    return Math.max(70 - index, 50);
+  }
 
-          // Also check if query words are present in the value
-          const queryWords = queryLower.split(" ");
-          const valueWords = valueLower.split(" ");
-
-          queryWords.forEach((queryWord) => {
-            valueWords.forEach((valueWord) => {
-              const wordSimilarity = calculateSimilarity(queryWord, valueWord);
-              if (wordSimilarity > maxSimilarity) {
-                maxSimilarity = wordSimilarity;
-                matchedField = field;
-              }
-            });
-          });
-        }
-      }
-    });
-
-    if (maxSimilarity >= threshold) {
-      results.push({
-        item,
-        similarity: maxSimilarity,
-        matchedField,
-      });
-    }
-  });
-
-  // Sort by similarity score (highest first)
-  return results.sort((a, b) => b.similarity - a.similarity);
+  // Default score for fuzzy matches
+  return 30;
 }
 
 // Get popular medicines
@@ -126,52 +68,162 @@ router.get("/popular", async (req, res) => {
   }
 });
 
-// Enhanced search medicines with fuzzy matching
+// Enhanced search with 1mg-style functionality
 router.get("/search", async (req, res) => {
-  const { q, threshold = 0.6 } = req.query;
+  const { q, limit = 10 } = req.query;
 
-  if (!q) {
-    return res
-      .status(400)
-      .json({ error: 'Missing search query parameter "q"' });
+  if (!q || q.trim().length < 1) {
+    return res.json([]);
   }
 
   try {
-    // First try exact regex search for fast results
-    const searchRegex = new RegExp(q, "i");
-    const exactResults = await PharmacyInventory.find({
-      $or: [
-        { generic_name: searchRegex },
-        { generic_name2: searchRegex },
-        { manufacturer: searchRegex },
-        { description: searchRegex },
-        { brand_name: searchRegex },
-        { composition: searchRegex },
-      ],
-    }).limit(20);
+    const query = q.trim();
+    const searchPatterns = createSearchPatterns(query);
+    const searchLimit = Math.min(parseInt(limit), 50);
 
-    if (exactResults.length >= 10) {
-      // If we have enough exact matches, return them
-      return res.json(exactResults.slice(0, 10));
-    }
-
-    // If not enough exact matches, get all items and do fuzzy search
-    const allItems = await PharmacyInventory.find().lean();
-    const fuzzyResults = fuzzySearch(allItems, q, parseFloat(threshold));
-
-    // Combine exact and fuzzy results, avoiding duplicates
-    const exactIds = new Set(exactResults.map((item) => item._id.toString()));
-    const combinedResults = [
-      ...exactResults,
-      ...fuzzyResults
-        .filter((result) => !exactIds.has(result.item._id.toString()))
-        .map((result) => result.item),
+    // Define search fields with priority weights
+    const searchFields = [
+      "name",
+      "generic_name",
+      "brand_name",
+      "item_name",
+      "generic_name2",
+      "manufacturer",
+      "composition",
+      "description",
+      "drug_name",
+      "medicine_name",
     ];
 
-    res.json(combinedResults.slice(0, 10));
+    // Build MongoDB aggregation pipeline for better performance
+    const pipeline = [
+      {
+        $match: {
+          $or: searchFields.flatMap((field) =>
+            searchPatterns.map((pattern) => ({ [field]: pattern }))
+          ),
+        },
+      },
+      {
+        $addFields: {
+          searchScore: {
+            $switch: {
+              branches: searchFields.map((field, index) => ({
+                case: {
+                  $regexMatch: {
+                    input: { $ifNull: [`$${field}`, ""] },
+                    regex: searchPatterns[0],
+                  },
+                },
+                then: 100 - index * 2, // Higher score for priority fields
+              })),
+              default: 1,
+            },
+          },
+        },
+      },
+      { $sort: { searchScore: -1, name: 1 } },
+      { $limit: searchLimit },
+    ];
+
+    const results = await PharmacyInventory.aggregate(pipeline);
+
+    // If no results with complex search, try simpler approach
+    if (results.length === 0) {
+      const simpleResults = await PharmacyInventory.find({
+        $or: searchFields.map((field) => ({
+          [field]: { $regex: query, $options: "i" },
+        })),
+      }).limit(searchLimit);
+
+      return res.json(simpleResults);
+    }
+
+    res.json(results);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
+    console.error("Search error:", err);
+
+    // Fallback to simple search if aggregation fails
+    try {
+      const fallbackResults = await PharmacyInventory.find({
+        $or: [
+          { name: { $regex: query, $options: "i" } },
+          { generic_name: { $regex: query, $options: "i" } },
+          { brand_name: { $regex: query, $options: "i" } },
+          { manufacturer: { $regex: query, $options: "i" } },
+        ],
+      }).limit(10);
+
+      res.json(fallbackResults);
+    } catch (fallbackErr) {
+      console.error("Fallback search error:", fallbackErr);
+      res.status(500).json({ error: "Search failed" });
+    }
+  }
+});
+
+// Auto-suggestions endpoint for autocomplete
+router.get("/suggestions", async (req, res) => {
+  const { q, limit = 5 } = req.query;
+
+  if (!q || q.trim().length < 2) {
+    return res.json([]);
+  }
+
+  try {
+    const query = q.trim();
+    const suggestionsLimit = Math.min(parseInt(limit), 10);
+
+    // Get suggestions from different fields
+    const suggestions = await PharmacyInventory.aggregate([
+      {
+        $match: {
+          $or: [
+            { name: { $regex: `^${query}`, $options: "i" } },
+            { generic_name: { $regex: `^${query}`, $options: "i" } },
+            { brand_name: { $regex: `^${query}`, $options: "i" } },
+          ],
+        },
+      },
+      {
+        $project: {
+          suggestion: {
+            $cond: [
+              {
+                $regexMatch: {
+                  input: "$name",
+                  regex: `^${query}`,
+                  options: "i",
+                },
+              },
+              "$name",
+              {
+                $cond: [
+                  {
+                    $regexMatch: {
+                      input: "$generic_name",
+                      regex: `^${query}`,
+                      options: "i",
+                    },
+                  },
+                  "$generic_name",
+                  "$brand_name",
+                ],
+              },
+            ],
+          },
+        },
+      },
+      { $group: { _id: "$suggestion", count: { $sum: 1 } } },
+      { $sort: { count: -1, _id: 1 } },
+      { $limit: suggestionsLimit },
+      { $project: { suggestion: "$_id", _id: 0 } },
+    ]);
+
+    res.json(suggestions.map((s) => s.suggestion).filter(Boolean));
+  } catch (error) {
+    console.error("Suggestions error:", error);
+    res.json([]);
   }
 });
 
