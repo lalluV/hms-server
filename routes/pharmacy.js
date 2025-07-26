@@ -6,6 +6,114 @@ const multer = require("multer");
 const path = require("path");
 const axios = require("axios");
 
+// Levenshtein distance function for fuzzy matching
+function levenshteinDistance(str1, str2) {
+  const matrix = [];
+  const n = str2.length;
+  const m = str1.length;
+
+  if (n === 0) return m;
+  if (m === 0) return n;
+
+  // Create matrix
+  for (let i = 0; i <= n; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= m; j++) {
+    matrix[0][j] = j;
+  }
+
+  // Fill matrix
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1, // substitution
+          matrix[i][j - 1] + 1, // insertion
+          matrix[i - 1][j] + 1 // deletion
+        );
+      }
+    }
+  }
+
+  return matrix[n][m];
+}
+
+// Calculate similarity score (0-1, where 1 is exact match)
+function calculateSimilarity(str1, str2) {
+  const maxLength = Math.max(str1.length, str2.length);
+  if (maxLength === 0) return 1;
+  const distance = levenshteinDistance(str1.toLowerCase(), str2.toLowerCase());
+  return (maxLength - distance) / maxLength;
+}
+
+// Enhanced fuzzy search function
+function fuzzySearch(items, query, threshold = 0.6) {
+  const results = [];
+  const queryLower = query.toLowerCase();
+
+  items.forEach((item) => {
+    let maxSimilarity = 0;
+    let matchedField = "";
+
+    // Fields to search in
+    const searchFields = [
+      { field: "generic_name", value: item.generic_name || "" },
+      { field: "generic_name2", value: item.generic_name2 || "" },
+      { field: "manufacturer", value: item.manufacturer || "" },
+      { field: "description", value: item.description || "" },
+      { field: "brand_name", value: item.brand_name || "" },
+      { field: "composition", value: item.composition || "" },
+    ];
+
+    searchFields.forEach(({ field, value }) => {
+      if (value) {
+        const valueLower = value.toLowerCase();
+
+        // Exact match gets highest score
+        if (valueLower.includes(queryLower)) {
+          maxSimilarity = Math.max(maxSimilarity, 1.0);
+          matchedField = field;
+        } else {
+          // Calculate fuzzy similarity
+          const similarity = calculateSimilarity(queryLower, valueLower);
+          if (similarity > maxSimilarity) {
+            maxSimilarity = similarity;
+            matchedField = field;
+          }
+
+          // Also check if query words are present in the value
+          const queryWords = queryLower.split(" ");
+          const valueWords = valueLower.split(" ");
+
+          queryWords.forEach((queryWord) => {
+            valueWords.forEach((valueWord) => {
+              const wordSimilarity = calculateSimilarity(queryWord, valueWord);
+              if (wordSimilarity > maxSimilarity) {
+                maxSimilarity = wordSimilarity;
+                matchedField = field;
+              }
+            });
+          });
+        }
+      }
+    });
+
+    if (maxSimilarity >= threshold) {
+      results.push({
+        item,
+        similarity: maxSimilarity,
+        matchedField,
+      });
+    }
+  });
+
+  // Sort by similarity score (highest first)
+  return results.sort((a, b) => b.similarity - a.similarity);
+}
+
 // Get popular medicines
 router.get("/popular", async (req, res) => {
   try {
@@ -18,9 +126,9 @@ router.get("/popular", async (req, res) => {
   }
 });
 
-// Search medicines
+// Enhanced search medicines with fuzzy matching
 router.get("/search", async (req, res) => {
-  const { q } = req.query;
+  const { q, threshold = 0.6 } = req.query;
 
   if (!q) {
     return res
@@ -29,17 +137,38 @@ router.get("/search", async (req, res) => {
   }
 
   try {
+    // First try exact regex search for fast results
     const searchRegex = new RegExp(q, "i");
-    const results = await PharmacyInventory.find({
+    const exactResults = await PharmacyInventory.find({
       $or: [
         { generic_name: searchRegex },
         { generic_name2: searchRegex },
         { manufacturer: searchRegex },
         { description: searchRegex },
+        { brand_name: searchRegex },
+        { composition: searchRegex },
       ],
-    }).limit(10);
+    }).limit(20);
 
-    res.json(results);
+    if (exactResults.length >= 10) {
+      // If we have enough exact matches, return them
+      return res.json(exactResults.slice(0, 10));
+    }
+
+    // If not enough exact matches, get all items and do fuzzy search
+    const allItems = await PharmacyInventory.find().lean();
+    const fuzzyResults = fuzzySearch(allItems, q, parseFloat(threshold));
+
+    // Combine exact and fuzzy results, avoiding duplicates
+    const exactIds = new Set(exactResults.map((item) => item._id.toString()));
+    const combinedResults = [
+      ...exactResults,
+      ...fuzzyResults
+        .filter((result) => !exactIds.has(result.item._id.toString()))
+        .map((result) => result.item),
+    ];
+
+    res.json(combinedResults.slice(0, 10));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
