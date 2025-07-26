@@ -18,7 +18,7 @@ router.get("/popular", async (req, res) => {
   }
 });
 
-// Search medicines
+// Search medicines with fuzzy matching
 router.get("/search", async (req, res) => {
   const { q } = req.query;
   if (!q) {
@@ -27,70 +27,85 @@ router.get("/search", async (req, res) => {
       .json({ error: 'Missing search query parameter "q"' });
   }
   try {
-    const searchRegex = new RegExp(
-      q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-      "i"
-    );
-    const pipeline = [
-      {
-        $addFields: {
-          descriptionMatch: {
-            $cond: [
-              { $regexMatch: { input: "$description", regex: searchRegex } },
-              1,
-              0,
-            ],
-          },
-          genericNameMatch: {
-            $cond: [
-              { $regexMatch: { input: "$generic_name", regex: searchRegex } },
-              1,
-              0,
-            ],
-          },
-          genericName2Match: {
-            $cond: [
-              { $regexMatch: { input: "$generic_name2", regex: searchRegex } },
-              1,
-              0,
-            ],
-          },
-          manufacturerMatch: {
-            $cond: [
-              { $regexMatch: { input: "$manufacturer", regex: searchRegex } },
-              1,
-              0,
-            ],
-          },
-        },
-      },
-      {
-        $match: {
-          $or: [
-            { description: searchRegex },
-            { generic_name: searchRegex },
-            { generic_name2: searchRegex },
-            { manufacturer: searchRegex },
-          ],
-        },
-      },
-      {
-        $sort: {
-          descriptionMatch: -1,
-          genericNameMatch: -1,
-          genericName2Match: -1,
-          manufacturerMatch: -1,
-        },
-      },
-      { $limit: 10 },
-    ];
-    const results = await PharmacyInventory.aggregate(pipeline);
-    res.json(results);
+    const searchTerm = q.toLowerCase();
+    const terms = searchTerm.split(" ").filter((term) => term.length > 0);
+
+    // Create search patterns for each term
+    const searchPatterns = terms.map((term) => {
+      if (/^\d+$/.test(term)) {
+        // For numbers, match any number containing this number
+        return new RegExp(term, "i");
+      }
+      // Create fuzzy pattern - allows for one character difference
+      const fuzzyPattern = term
+        .split("")
+        .map((char) => `${char}.*`)
+        .join("");
+      return new RegExp(fuzzyPattern, "i");
+    });
+
+    // Build the query
+    const query = {
+      $or: [
+        // Match in description (highest priority)
+        ...searchPatterns.map((pattern) => ({ description: pattern })),
+        // Match in generic names (medium priority)
+        ...searchPatterns.map((pattern) => ({ generic_name: pattern })),
+        ...searchPatterns.map((pattern) => ({ generic_name2: pattern })),
+        // Match in manufacturer (lower priority)
+        ...searchPatterns.map((pattern) => ({ manufacturer: pattern })),
+      ],
+    };
+
+    // Execute search with limit and sorting
+    const results = await PharmacyInventory.find(query)
+      .select(
+        "item_code description generic_name generic_name2 manufacturer quantity price"
+      )
+      .limit(10)
+      .lean()
+      .exec();
+
+    // Sort results by relevance
+    const sortedResults = results.sort((a, b) => {
+      const aScore = calculateRelevanceScore(a, searchTerm);
+      const bScore = calculateRelevanceScore(b, searchTerm);
+      return bScore - aScore;
+    });
+
+    res.json(sortedResults);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
   }
 });
+
+// Helper function to calculate relevance score
+function calculateRelevanceScore(item, searchTerm) {
+  let score = 0;
+  const searchLower = searchTerm.toLowerCase();
+
+  // Exact matches get highest score
+  if (item.description?.toLowerCase().includes(searchLower)) score += 10;
+  if (item.generic_name?.toLowerCase().includes(searchLower)) score += 8;
+  if (item.generic_name2?.toLowerCase().includes(searchLower)) score += 8;
+  if (item.manufacturer?.toLowerCase().includes(searchLower)) score += 5;
+
+  // Partial matches
+  const words = searchTerm.split(" ");
+  words.forEach((word) => {
+    if (item.description?.toLowerCase().includes(word.toLowerCase()))
+      score += 5;
+    if (item.generic_name?.toLowerCase().includes(word.toLowerCase()))
+      score += 4;
+    if (item.generic_name2?.toLowerCase().includes(word.toLowerCase()))
+      score += 4;
+    if (item.manufacturer?.toLowerCase().includes(word.toLowerCase()))
+      score += 2;
+  });
+
+  return score;
+}
 
 // Get all pharmacy inventory items
 router.get("/", async (req, res) => {
