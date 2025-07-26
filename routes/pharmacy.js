@@ -377,84 +377,123 @@ router.post("/recreate", async (req, res) => {
   }
 });
 
-// Test indexing with a small sample
-router.post("/test-index", async (req, res) => {
+// Progressive indexing - index data in chunks
+router.post("/progressive-index", async (req, res) => {
   try {
-    console.log("🧪 Testing indexing with sample data...");
+    console.log("🔄 Starting progressive indexing...");
 
-    // Get just 5 documents for testing
-    const sampleItems = await PharmacyInventory.find({}).limit(5);
-    console.log(`📝 Found ${sampleItems.length} sample items`);
-
-    if (sampleItems.length === 0) {
-      return res.json({
-        message: "No sample data found",
-        success: false,
-      });
-    }
-
-    // Test the indexing logic
-    const documents = sampleItems.map((item) => {
-      const doc = item.toObject();
-
-      const searchableText = [
-        doc.generic_name || "",
-        doc.generic_name2 || "",
-        doc.manufacturer || "",
-        doc.description || "",
-        doc.item_code || "",
-      ]
-        .filter(Boolean)
-        .join(" ");
-
-      return {
-        id: doc._id.toString(),
-        item_code: doc.item_code,
-        generic_name: doc.generic_name,
-        generic_name2: doc.generic_name2,
-        manufacturer: doc.manufacturer,
-        description: doc.description,
-        searchable_text: searchableText,
-      };
-    });
-
-    console.log("📝 Sample documents:", JSON.stringify(documents, null, 2));
-
-    // Try to index the sample
     const { client } = require("../utils/typesense");
 
-    try {
-      const results = await client
-        .collections("pharmacyinventory")
-        .documents()
-        .import(documents);
+    // First ensure collection exists
+    const collections = await client.collections().retrieve();
+    const collectionExists = collections.find(
+      (c) => c.name === "pharmacyinventory"
+    );
 
-      const successCount = results.filter((result) => !result.error).length;
-      const errors = results.filter((result) => result.error);
+    if (!collectionExists) {
+      // Create collection
+      const pharmacySchema = {
+        name: "pharmacyinventory",
+        fields: [
+          { name: "id", type: "string" },
+          { name: "item_code", type: "string" },
+          { name: "generic_name", type: "string" },
+          { name: "generic_name2", type: "string" },
+          { name: "manufacturer", type: "string" },
+          { name: "description", type: "string" },
+          { name: "searchable_text", type: "string" },
+        ],
+        strict: false,
+      };
 
-      res.json({
-        message: "Test indexing completed",
-        sampleCount: sampleItems.length,
-        indexedCount: successCount,
-        errors: errors.length > 0 ? errors : null,
-        success: successCount > 0,
-      });
-    } catch (importError) {
-      console.error("❌ Import error details:", importError);
-
-      res.json({
-        message: "Test indexing failed",
-        sampleCount: sampleItems.length,
-        indexedCount: 0,
-        errors: importError.message,
-        importError: importError,
-        success: false,
-      });
+      await client.collections().create(pharmacySchema);
+      console.log("✅ Created pharmacyinventory collection");
     }
+
+    // Get total count
+    const totalCount = await PharmacyInventory.countDocuments({});
+    console.log(`📊 Total documents to index: ${totalCount}`);
+
+    // Index in chunks of 1000
+    const chunkSize = 1000;
+    let indexedCount = 0;
+    let errorCount = 0;
+
+    for (let skip = 0; skip < totalCount; skip += chunkSize) {
+      try {
+        console.log(
+          `📦 Processing chunk ${Math.floor(skip / chunkSize) + 1}/${Math.ceil(
+            totalCount / chunkSize
+          )}...`
+        );
+
+        const items = await PharmacyInventory.find({})
+          .skip(skip)
+          .limit(chunkSize);
+
+        const documents = items.map((item) => {
+          const doc = item.toObject();
+
+          const searchableText = [
+            doc.generic_name || "",
+            doc.generic_name2 || "",
+            doc.manufacturer || "",
+            doc.description || "",
+            doc.item_code || "",
+          ]
+            .filter(Boolean)
+            .join(" ");
+
+          return {
+            id: doc._id.toString(),
+            item_code: doc.item_code,
+            generic_name: doc.generic_name,
+            generic_name2: doc.generic_name2,
+            manufacturer: doc.manufacturer,
+            description: doc.description,
+            searchable_text: searchableText,
+          };
+        });
+
+        const results = await client
+          .collections("pharmacyinventory")
+          .documents()
+          .import(documents);
+
+        const successCount = results.filter((result) => !result.error).length;
+        const chunkErrors = results.filter((result) => result.error);
+
+        indexedCount += successCount;
+        errorCount += chunkErrors.length;
+
+        console.log(
+          `✅ Chunk ${
+            Math.floor(skip / chunkSize) + 1
+          }: ${successCount} success, ${chunkErrors.length} errors`
+        );
+
+        // Small delay to prevent overwhelming the server
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      } catch (chunkError) {
+        console.error(
+          `❌ Error processing chunk ${Math.floor(skip / chunkSize) + 1}:`,
+          chunkError.message
+        );
+        errorCount += chunkSize;
+      }
+    }
+
+    res.json({
+      message: "Progressive indexing completed",
+      totalCount: totalCount,
+      indexedCount: indexedCount,
+      errorCount: errorCount,
+      success: indexedCount > 0,
+    });
   } catch (error) {
-    console.error("❌ Test indexing error:", error);
+    console.error("❌ Progressive indexing error:", error);
     res.status(500).json({
-      error: "Test indexing failed",
+      error: "Progressive indexing failed",
       details: error.message,
       success: false,
     });
