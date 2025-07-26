@@ -10,6 +10,7 @@ const {
   indexDocument,
   deleteDocument,
   initializeTypesense,
+  recreateCollection,
 } = require("../utils/typesense");
 
 // Get popular medicines
@@ -295,15 +296,84 @@ router.post("/process-invoice", upload.single("invoice"), async (req, res) => {
 // Initialize Typesense and reindex all data
 router.post("/reindex", async (req, res) => {
   try {
+    console.log("🔄 Manual reindex requested...");
+
+    // First check if we have data in MongoDB
+    const totalCount = await PharmacyInventory.countDocuments({});
+    console.log(`📊 Found ${totalCount} documents in MongoDB`);
+
+    if (totalCount === 0) {
+      return res.json({
+        message: "No data found in MongoDB to index",
+        totalCount: 0,
+      });
+    }
+
+    // Force reindex
     await initializeTypesense();
+
+    // Check the result
+    const { client } = require("../utils/typesense");
+    const collections = await client.collections().retrieve();
+    const pharmacyCollection = collections.find(
+      (col) => col.name === "pharmacyinventory"
+    );
+
     res.json({
-      message: "Typesense initialized and data indexed successfully",
+      message: "Typesense reindex completed",
+      mongoCount: totalCount,
+      typesenseCount: pharmacyCollection ? pharmacyCollection.num_documents : 0,
+      success: true,
     });
   } catch (error) {
-    console.error("Reindex error:", error);
-    res
-      .status(500)
-      .json({ error: "Failed to reindex data", details: error.message });
+    console.error("❌ Reindex error:", error);
+    res.status(500).json({
+      error: "Failed to reindex data",
+      details: error.message,
+      success: false,
+    });
+  }
+});
+
+// Force recreate collection with new schema
+router.post("/recreate", async (req, res) => {
+  try {
+    console.log("🔄 Force recreate collection requested...");
+
+    // First check if we have data in MongoDB
+    const totalCount = await PharmacyInventory.countDocuments({});
+    console.log(`📊 Found ${totalCount} documents in MongoDB`);
+
+    if (totalCount === 0) {
+      return res.json({
+        message: "No data found in MongoDB to index",
+        totalCount: 0,
+      });
+    }
+
+    // Force recreate collection
+    await recreateCollection();
+
+    // Check the result
+    const { client } = require("../utils/typesense");
+    const collections = await client.collections().retrieve();
+    const pharmacyCollection = collections.find(
+      (col) => col.name === "pharmacyinventory"
+    );
+
+    res.json({
+      message: "Typesense collection recreated successfully",
+      mongoCount: totalCount,
+      typesenseCount: pharmacyCollection ? pharmacyCollection.num_documents : 0,
+      success: true,
+    });
+  } catch (error) {
+    console.error("❌ Recreate error:", error);
+    res.status(500).json({
+      error: "Failed to recreate collection",
+      details: error.message,
+      success: false,
+    });
   }
 });
 
@@ -343,6 +413,10 @@ router.get("/search/health", async (req, res) => {
       (col) => col.name === "pharmacyinventory"
     );
 
+    // Also check MongoDB data
+    const mongoCount = await PharmacyInventory.countDocuments({});
+    const sampleItems = await PharmacyInventory.find({}).limit(3);
+
     res.json({
       status: "healthy",
       typesense: health,
@@ -353,6 +427,11 @@ router.get("/search/health", async (req, res) => {
             fields: pharmacyCollection.num_documents > 0 ? "indexed" : "empty",
           }
         : null,
+      mongodb: {
+        totalDocuments: mongoCount,
+        sampleItems: sampleItems.length,
+        hasData: mongoCount > 0,
+      },
     });
   } catch (error) {
     res.json({
