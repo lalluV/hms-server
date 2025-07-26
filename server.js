@@ -2,6 +2,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors"); // <--- import cors
 require("dotenv").config();
+const { initializeTypesense } = require("./utils/typesense");
 
 const app = express();
 
@@ -62,6 +63,17 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, "0.0.0.0", () => {
+app.listen(PORT, "0.0.0.0", async () => {
   console.log(`🚀 Server running on port ${PORT}`);
+
+  // Initialize Typesense after server starts (non-blocking)
+  setTimeout(async () => {
+    try {
+      await initializeTypesense();
+      console.log("✅ Typesense initialized successfully");
+    } catch (error) {
+      console.error("❌ Typesense initialization error:", error);
+      console.log("⚠️  Search functionality will be disabled");
+    }
+  }, 2000); // Wait 2 seconds after server starts
 });

@@ -5,6 +5,12 @@ const PharmacyInventory = require("../models/PharmacyInventory");
 const multer = require("multer");
 const path = require("path");
 const axios = require("axios");
+const {
+  searchMedicines,
+  indexDocument,
+  deleteDocument,
+  initializeTypesense,
+} = require("../utils/typesense");
 
 // Get popular medicines
 router.get("/popular", async (req, res) => {
@@ -18,88 +24,44 @@ router.get("/popular", async (req, res) => {
   }
 });
 
-// Search medicines with fuzzy matching
+// Search medicines with Typesense (1mg style fast search)
 router.get("/search", async (req, res) => {
-  const { q } = req.query;
+  const { q, limit = 10 } = req.query;
+
   if (!q) {
     return res
       .status(400)
       .json({ error: 'Missing search query parameter "q"' });
   }
+
   try {
-    const searchTerm = q.toLowerCase();
-    const terms = searchTerm.split(" ").filter((term) => term.length > 0);
+    const startTime = Date.now();
 
-    // Create search patterns for each term
-    const searchPatterns = terms.map((term) => {
-      if (/^\d+$/.test(term)) {
-        // For numbers, match any number containing this number
-        return new RegExp(term, "i");
-      }
-      // Create fuzzy pattern - allows for one character difference
-      const fuzzyPattern = term
-        .split("")
-        .map((char) => `${char}.*`)
-        .join("");
-      return new RegExp(fuzzyPattern, "i");
+    // Use Typesense for fast, fuzzy search
+    const results = await searchMedicines(q, parseInt(limit));
+
+    const searchTime = Date.now() - startTime;
+
+    res.json({
+      results,
+      searchTime: `${searchTime}ms`,
+      totalResults: results.length,
+      query: q,
+      success: true,
     });
-
-    // Build the query
-    const query = {
-      $or: [
-        // Match in description (highest priority)
-        ...searchPatterns.map((pattern) => ({ description: pattern })),
-        // Match in generic names (medium priority)
-        ...searchPatterns.map((pattern) => ({ generic_name: pattern })),
-        ...searchPatterns.map((pattern) => ({ generic_name2: pattern })),
-        // Match in manufacturer (lower priority)
-        ...searchPatterns.map((pattern) => ({ manufacturer: pattern })),
-      ],
-    };
-
-    // Execute search with limit and sorting
-    const results = await PharmacyInventory.find(query).limit(10).lean().exec();
-
-    // Sort results by relevance
-    const sortedResults = results.sort((a, b) => {
-      const aScore = calculateRelevanceScore(a, searchTerm);
-      const bScore = calculateRelevanceScore(b, searchTerm);
-      return bScore - aScore;
-    });
-
-    res.json(sortedResults);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
+    console.error("❌ Search error:", err);
+    // Return empty results instead of error
+    res.json({
+      results: [],
+      searchTime: "0ms",
+      totalResults: 0,
+      query: q,
+      success: false,
+      error: "Search temporarily unavailable",
+    });
   }
 });
-
-// Helper function to calculate relevance score
-function calculateRelevanceScore(item, searchTerm) {
-  let score = 0;
-  const searchLower = searchTerm.toLowerCase();
-
-  // Exact matches get highest score
-  if (item.description?.toLowerCase().includes(searchLower)) score += 10;
-  if (item.generic_name?.toLowerCase().includes(searchLower)) score += 8;
-  if (item.generic_name2?.toLowerCase().includes(searchLower)) score += 8;
-  if (item.manufacturer?.toLowerCase().includes(searchLower)) score += 5;
-
-  // Partial matches
-  const words = searchTerm.split(" ");
-  words.forEach((word) => {
-    if (item.description?.toLowerCase().includes(word.toLowerCase()))
-      score += 5;
-    if (item.generic_name?.toLowerCase().includes(word.toLowerCase()))
-      score += 4;
-    if (item.generic_name2?.toLowerCase().includes(word.toLowerCase()))
-      score += 4;
-    if (item.manufacturer?.toLowerCase().includes(word.toLowerCase()))
-      score += 2;
-  });
-
-  return score;
-}
 
 // Get all pharmacy inventory items
 router.get("/", async (req, res) => {
@@ -129,6 +91,15 @@ router.post("/", async (req, res) => {
   try {
     const newItem = new PharmacyInventory(req.body);
     const savedItem = await newItem.save();
+
+    // Index the new item in Typesense
+    try {
+      await indexDocument(savedItem.toObject());
+    } catch (indexError) {
+      console.error("Failed to index item in Typesense:", indexError);
+      // Don't fail the request if indexing fails
+    }
+
     res.status(201).json(savedItem);
   } catch (error) {
     res.status(500).json({ error: "Failed to create item" });
@@ -148,6 +119,15 @@ router.put("/:id", async (req, res) => {
         .status(404)
         .json({ error: "Item not found with the given item code" });
     }
+
+    // Update the item in Typesense
+    try {
+      await indexDocument(updatedItem.toObject());
+    } catch (indexError) {
+      console.error("Failed to update item in Typesense:", indexError);
+      // Don't fail the request if indexing fails
+    }
+
     res.json(updatedItem);
   } catch (error) {
     console.error("Update error:", error);
@@ -166,6 +146,15 @@ router.delete("/:id", async (req, res) => {
     if (!deletedItem) {
       return res.status(404).json({ error: "Item not found" });
     }
+
+    // Remove the item from Typesense
+    try {
+      await deleteDocument(req.params.id);
+    } catch (indexError) {
+      console.error("Failed to delete item from Typesense:", indexError);
+      // Don't fail the request if deletion from index fails
+    }
+
     res.json({ message: "Item deleted successfully" });
   } catch (error) {
     res.status(500).json({ error: "Failed to delete item" });
@@ -298,6 +287,76 @@ router.post("/process-invoice", upload.single("invoice"), async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to process invoice",
+      error: error.message,
+    });
+  }
+});
+
+// Initialize Typesense and reindex all data
+router.post("/reindex", async (req, res) => {
+  try {
+    await initializeTypesense();
+    res.json({
+      message: "Typesense initialized and data indexed successfully",
+    });
+  } catch (error) {
+    console.error("Reindex error:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to reindex data", details: error.message });
+  }
+});
+
+// Get search statistics
+router.get("/search/stats", async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q) {
+      return res
+        .status(400)
+        .json({ error: 'Missing search query parameter "q"' });
+    }
+
+    const startTime = Date.now();
+    const results = await searchMedicines(q, 1);
+    const searchTime = Date.now() - startTime;
+
+    res.json({
+      query: q,
+      searchTime: `${searchTime}ms`,
+      totalResults: results.length,
+      performance:
+        searchTime < 100 ? "Excellent" : searchTime < 500 ? "Good" : "Slow",
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to get search stats" });
+  }
+});
+
+// Health check for Typesense
+router.get("/search/health", async (req, res) => {
+  try {
+    const { client } = require("../utils/typesense");
+    const health = await client.health.retrieve();
+    const collections = await client.collections().retrieve();
+    const pharmacyCollection = collections.find(
+      (col) => col.name === "pharmacy_inventory"
+    );
+
+    res.json({
+      status: "healthy",
+      typesense: health,
+      collection: pharmacyCollection
+        ? {
+            name: pharmacyCollection.name,
+            documents: pharmacyCollection.num_documents,
+            fields: pharmacyCollection.num_documents > 0 ? "indexed" : "empty",
+          }
+        : null,
+    });
+  } catch (error) {
+    res.json({
+      status: "unhealthy",
       error: error.message,
     });
   }
