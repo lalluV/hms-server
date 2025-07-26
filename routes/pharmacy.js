@@ -447,6 +447,70 @@ router.post("/test-index", async (req, res) => {
   }
 });
 
+// Test Typesense connection and collection creation
+router.post("/test-typesense", async (req, res) => {
+  try {
+    console.log("🔍 Testing Typesense connection...");
+
+    const { client } = require("../utils/typesense");
+
+    // Test health
+    const health = await client.health.retrieve();
+    console.log("✅ Health check:", health);
+
+    // List collections
+    const collections = await client.collections().retrieve();
+    console.log(
+      "📋 Collections:",
+      collections.map((c) => c.name)
+    );
+
+    // Try to create a test collection
+    const testSchema = {
+      name: "test_collection",
+      fields: [
+        { name: "id", type: "string" },
+        { name: "title", type: "string" },
+      ],
+      strict: false,
+    };
+
+    try {
+      await client.collections().create(testSchema);
+      console.log("✅ Test collection created successfully");
+
+      // Delete test collection
+      await client.collections("test_collection").delete();
+      console.log("🗑️  Test collection deleted");
+
+      res.json({
+        message: "Typesense connection test successful",
+        health: health,
+        collections: collections.map((c) => c.name),
+        canCreateCollections: true,
+        success: true,
+      });
+    } catch (createError) {
+      console.error("❌ Collection creation failed:", createError.message);
+      res.json({
+        message: "Typesense connection works but collection creation failed",
+        health: health,
+        collections: collections.map((c) => c.name),
+        canCreateCollections: false,
+        error: createError.message,
+        success: false,
+      });
+    }
+  } catch (error) {
+    console.error("❌ Typesense connection test failed:", error);
+    res.status(500).json({
+      error: "Typesense connection test failed",
+      details: error.message,
+      success: false,
+    });
+  }
+});
+
 // Get search statistics
 router.get("/search/stats", async (req, res) => {
   try {
