@@ -58,13 +58,7 @@ router.get("/search", async (req, res) => {
     };
 
     // Execute search with limit and sorting
-    const results = await PharmacyInventory.find(query)
-      .select(
-        "item_code description generic_name generic_name2 manufacturer quantity price"
-      )
-      .limit(10)
-      .lean()
-      .exec();
+    const results = await PharmacyInventory.find(query).limit(10).lean().exec();
 
     // Sort results by relevance
     const sortedResults = results.sort((a, b) => {
