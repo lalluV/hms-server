@@ -55,15 +55,6 @@ async function searchMedicines(query, limit = 10) {
       attributesToHighlight: ["generic_name", "description"],
       highlightPreTag: "<mark>",
       highlightPostTag: "</mark>",
-      // Better relevance
-      rankingRules: [
-        "words",
-        "typo",
-        "proximity",
-        "attribute",
-        "sort",
-        "exactness",
-      ],
     });
 
     console.log(`📊 Search results: ${searchResults.hits.length} hits found`);
