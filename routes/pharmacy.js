@@ -11,6 +11,7 @@ const {
   indexAllData,
   indexDocument,
   deleteDocument,
+  getIndexStats,
 } = require("../utils/meilisearch");
 
 // Get popular medicines
@@ -297,11 +298,13 @@ router.get("/search/health", async (req, res) => {
   try {
     const { client } = require("../utils/meilisearch");
     const health = await client.health();
+    const indexStats = await getIndexStats();
     const mongoCount = await PharmacyInventory.countDocuments({});
 
     res.json({
       status: "healthy",
       meilisearch: health,
+      index: indexStats,
       mongodb: {
         totalDocuments: mongoCount,
         hasData: mongoCount > 0,

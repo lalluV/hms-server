@@ -27,6 +27,8 @@ async function searchMedicines(query, limit = 10) {
     const cleanQuery = query.trim();
     if (!cleanQuery) return [];
 
+    console.log(`🔍 Searching for: "${cleanQuery}" with limit: ${limit}`);
+
     const searchResults = await index.search(cleanQuery, {
       attributesToSearchOn: [
         "generic_name",
@@ -37,6 +39,9 @@ async function searchMedicines(query, limit = 10) {
       ],
       limit: Math.min(limit, 50),
     });
+
+    console.log(`📊 Search results: ${searchResults.hits.length} hits found`);
+    console.log(`📊 Total estimated hits: ${searchResults.estimatedTotalHits}`);
 
     return searchResults.hits.map((hit) => ({
       ...hit,
@@ -124,10 +129,26 @@ async function indexAllData() {
   }
 }
 
+// Get index statistics
+async function getIndexStats() {
+  try {
+    const stats = await index.getStats();
+    return {
+      name: "pharmacy",
+      documents: stats.numberOfDocuments,
+      fields: stats.numberOfDocuments > 0 ? "indexed" : "empty",
+    };
+  } catch (error) {
+    console.error("❌ Error getting index stats:", error.message);
+    return null;
+  }
+}
+
 module.exports = {
   initializeMeilisearch,
   searchMedicines,
   indexDocument,
   deleteDocument,
   indexAllData,
+  getIndexStats,
 };
