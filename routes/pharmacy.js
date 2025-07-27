@@ -26,7 +26,7 @@ router.get("/popular", async (req, res) => {
   }
 });
 
-// Search medicines (Meilisearch)
+// Search medicines (Meilisearch) - Optimized for speed
 router.get("/search", async (req, res) => {
   const { q, limit = 10 } = req.query;
 
@@ -73,7 +73,7 @@ router.get("/", async (req, res) => {
 // Get pharmacy inventory item by ID
 router.get("/:id", async (req, res) => {
   try {
-    const item = await PharmacyInventory.findById(req.params.id);
+    const item = await PharmacyInventory.findOne({ item_code: req.params.id });
     if (!item) {
       return res.status(404).json({ error: "Item not found" });
     }
