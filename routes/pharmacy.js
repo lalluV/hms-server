@@ -410,7 +410,6 @@ router.post("/test-connection", async (req, res) => {
         { name: "description", type: "string" },
         { name: "searchable_text", type: "string" },
       ],
-      default_sorting_field: "id",
     };
 
     // Delete existing collection if it exists
