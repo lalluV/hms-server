@@ -3,7 +3,7 @@ const PharmacyInventory = require("../models/PharmacyInventory");
 
 const client = new MeiliSearch({
   host: process.env.MEILISEARCH_HOST || "http://localhost:7700",
-  apiKey: "ts_live_XY9v2@Qf38nLzr7WcD5MtaE1",
+  apiKey: process.env.MEILISEARCH_API_KEY || "your-secret-key-here",
 });
 
 const index = client.index("pharmacy");
