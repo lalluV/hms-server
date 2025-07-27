@@ -2,7 +2,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors"); // <--- import cors
 require("dotenv").config();
-const { initializeTypesense } = require("./utils/typesense");
+const { initializeMeilisearch } = require("./utils/meilisearch");
 
 const app = express();
 
@@ -66,19 +66,19 @@ const PORT = process.env.PORT || 3001;
 app.listen(PORT, "0.0.0.0", async () => {
   console.log(`🚀 Server running on port ${PORT}`);
 
-  // Initialize Typesense after server starts
+  // Initialize Meilisearch after server starts
   setTimeout(async () => {
     try {
-      const success = await initializeTypesense();
+      const success = await initializeMeilisearch();
       if (success) {
-        console.log("✅ Typesense initialized successfully");
+        console.log("✅ Meilisearch initialized successfully");
       } else {
         console.log(
-          "⚠️  Typesense initialization failed - search will be disabled"
+          "⚠️  Meilisearch initialization failed - search will be disabled"
         );
       }
     } catch (error) {
-      console.error("❌ Typesense initialization error:", error);
+      console.error("❌ Meilisearch initialization error:", error);
     }
   }, 2000);
 });

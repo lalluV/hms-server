@@ -7,12 +7,11 @@ const path = require("path");
 const axios = require("axios");
 const {
   searchMedicines,
+  initializeMeilisearch,
+  indexAllData,
   indexDocument,
   deleteDocument,
-  initializeTypesense,
-  indexAllData,
-  getCollectionStats,
-} = require("../utils/typesense");
+} = require("../utils/meilisearch");
 
 // Get popular medicines
 router.get("/popular", async (req, res) => {
@@ -26,7 +25,7 @@ router.get("/popular", async (req, res) => {
   }
 });
 
-// Fast search with Typesense
+// Search medicines (Meilisearch)
 router.get("/search", async (req, res) => {
   const { q, limit = 10 } = req.query;
 
@@ -49,7 +48,6 @@ router.get("/search", async (req, res) => {
       success: true,
     });
   } catch (err) {
-    console.error("❌ Search error:", err);
     res.json({
       results: [],
       searchTime: "0ms",
@@ -74,7 +72,7 @@ router.get("/", async (req, res) => {
 // Get pharmacy inventory item by ID
 router.get("/:id", async (req, res) => {
   try {
-    const item = await PharmacyInventory.findOne({ item_code: req.params.id });
+    const item = await PharmacyInventory.findById(req.params.id);
     if (!item) {
       return res.status(404).json({ error: "Item not found" });
     }
@@ -90,8 +88,8 @@ router.post("/", async (req, res) => {
     const newItem = new PharmacyInventory(req.body);
     const savedItem = await newItem.save();
 
-    // Index the new item
-    await indexDocument(savedItem.toObject());
+    // Index the new item in Meilisearch
+    await indexDocument(savedItem);
 
     res.status(201).json(savedItem);
   } catch (error) {
@@ -113,8 +111,8 @@ router.put("/:id", async (req, res) => {
         .json({ error: "Item not found with the given item code" });
     }
 
-    // Update the item in Typesense
-    await indexDocument(updatedItem.toObject());
+    // Update the item in Meilisearch
+    await indexDocument(updatedItem);
 
     res.json(updatedItem);
   } catch (error) {
@@ -135,8 +133,8 @@ router.delete("/:id", async (req, res) => {
       return res.status(404).json({ error: "Item not found" });
     }
 
-    // Remove from Typesense
-    await deleteDocument(req.params.id);
+    // Remove from Meilisearch
+    await deleteDocument(deletedItem._id.toString());
 
     res.json({ message: "Item deleted successfully" });
   } catch (error) {
@@ -170,7 +168,7 @@ router.get("/status/:status", async (req, res) => {
 router.get("/low-stock", async (req, res) => {
   try {
     const lowStockItems = await PharmacyInventory.find({
-      quantity: { $lt: 10 },
+      quantity: { $lt: 10 }, // Assuming 10 is the threshold for low stock
     });
     res.json(lowStockItems);
   } catch (error) {
@@ -217,10 +215,12 @@ router.post("/process-invoice", upload.single("invoice"), async (req, res) => {
         .json({ success: false, message: "No file uploaded" });
     }
 
+    // Call DeepSeek API to process the invoice
     const deepseekResponse = await axios.post(
       "https://api.deepseek.com/v1/vision/invoice",
       {
         image: req.file.path,
+        // Add any additional parameters required by DeepSeek API
       },
       {
         headers: {
@@ -230,8 +230,10 @@ router.post("/process-invoice", upload.single("invoice"), async (req, res) => {
       }
     );
 
+    // Process the response from DeepSeek API
     const extractedData = deepseekResponse.data;
 
+    // Format the response
     const response = {
       success: true,
       vendorName: extractedData.vendor_name,
@@ -271,28 +273,7 @@ router.post("/process-invoice", upload.single("invoice"), async (req, res) => {
   }
 });
 
-// Typesense management endpoints
-
-// Initialize Typesense
-router.post("/init-typesense", async (req, res) => {
-  try {
-    const success = await initializeTypesense();
-    res.json({
-      success,
-      message: success
-        ? "Typesense initialized successfully"
-        : "Typesense initialization failed",
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: "Failed to initialize Typesense",
-      details: error.message,
-    });
-  }
-});
-
-// Index all data
+// Index all data to Meilisearch
 router.post("/index-all", async (req, res) => {
   try {
     const result = await indexAllData();
@@ -311,175 +292,16 @@ router.post("/index-all", async (req, res) => {
   }
 });
 
-// Test indexing with small sample
-router.post("/test-index", async (req, res) => {
-  try {
-    console.log("🧪 Testing indexing with sample data...");
-
-    // Initialize Typesense first
-    await initializeTypesense();
-
-    // Get just 10 documents for testing
-    const sampleItems = await PharmacyInventory.find({}).limit(10);
-    console.log(`📝 Found ${sampleItems.length} sample items`);
-
-    if (sampleItems.length === 0) {
-      return res.json({
-        message: "No sample data found",
-        success: false,
-      });
-    }
-
-    // Index the sample
-    const documents = sampleItems.map((item) => {
-      const doc = item.toObject();
-      const searchableText = [
-        doc.generic_name || "",
-        doc.generic_name2 || "",
-        doc.manufacturer || "",
-        doc.description || "",
-        doc.item_code || "",
-      ]
-        .filter(Boolean)
-        .join(" ");
-
-      return {
-        id: doc._id.toString(),
-        item_code: doc.item_code,
-        generic_name: doc.generic_name,
-        generic_name2: doc.generic_name2,
-        manufacturer: doc.manufacturer,
-        description: doc.description,
-        searchable_text: searchableText,
-      };
-    });
-
-    const { client } = require("../utils/typesense");
-    const results = await client
-      .collections("pharmacyinventory")
-      .documents()
-      .import(documents);
-
-    const successCount = results.filter((result) => !result.error).length;
-    const errors = results.filter((result) => result.error);
-
-    res.json({
-      message: "Test indexing completed",
-      sampleCount: sampleItems.length,
-      indexedCount: successCount,
-      errors: errors.length > 0 ? errors : null,
-      success: successCount > 0,
-    });
-  } catch (error) {
-    console.error("❌ Test indexing error:", error);
-    res.status(500).json({
-      error: "Test indexing failed",
-      details: error.message,
-      success: false,
-    });
-  }
-});
-
-// Test Typesense connection
-router.post("/test-connection", async (req, res) => {
-  try {
-    console.log("🔍 Testing Typesense connection...");
-
-    const { client } = require("../utils/typesense");
-
-    // Test health
-    const health = await client.health.retrieve();
-    console.log("✅ Health check:", health);
-
-    // List collections
-    const collections = await client.collections().retrieve();
-    console.log(
-      "📋 Collections:",
-      collections.map((c) => c.name)
-    );
-
-    // Try to create collection
-    const collectionSchema = {
-      name: "pharmacyinventory",
-      fields: [
-        { name: "id", type: "string" },
-        { name: "item_code", type: "string" },
-        { name: "generic_name", type: "string" },
-        { name: "generic_name2", type: "string" },
-        { name: "manufacturer", type: "string" },
-        { name: "description", type: "string" },
-        { name: "searchable_text", type: "string" },
-      ],
-    };
-
-    // Delete existing collection if it exists
-    const existingCollection = collections.find(
-      (c) => c.name === "pharmacyinventory"
-    );
-    if (existingCollection) {
-      await client.collections("pharmacyinventory").delete();
-      console.log("🗑️ Deleted existing collection");
-    }
-
-    // Create new collection
-    await client.collections().create(collectionSchema);
-    console.log("✅ Collection created successfully");
-
-    res.json({
-      message: "Typesense connection test successful",
-      health: health,
-      collections: collections.map((c) => c.name),
-      canCreateCollections: true,
-      success: true,
-    });
-  } catch (error) {
-    console.error("❌ Typesense connection test failed:", error);
-    res.status(500).json({
-      error: "Typesense connection test failed",
-      details: error.message,
-      success: false,
-    });
-  }
-});
-
-// Get indexed documents (for debugging)
-router.get("/debug/indexed-docs", async (req, res) => {
-  try {
-    const { client } = require("../utils/typesense");
-
-    // Get all documents from the collection
-    const documents = await client
-      .collections("pharmacyinventory")
-      .documents()
-      .search({
-        q: "*",
-        per_page: 10,
-      });
-
-    res.json({
-      totalHits: documents.found,
-      documents: documents.hits.map((hit) => hit.document),
-    });
-  } catch (error) {
-    res.status(500).json({
-      error: "Failed to get indexed documents",
-      details: error.message,
-    });
-  }
-});
-
 // Get search health
 router.get("/search/health", async (req, res) => {
   try {
-    const { client } = require("../utils/typesense");
-    const health = await client.health.retrieve();
-    const collectionStats = await getCollectionStats();
+    const { client } = require("../utils/meilisearch");
+    const health = await client.health();
     const mongoCount = await PharmacyInventory.countDocuments({});
 
     res.json({
       status: "healthy",
-      typesense: health,
-      collection: collectionStats,
+      meilisearch: health,
       mongodb: {
         totalDocuments: mongoCount,
         hasData: mongoCount > 0,
