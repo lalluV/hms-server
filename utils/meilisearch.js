@@ -8,6 +8,10 @@ const client = new MeiliSearch({
 
 const index = client.index("pharmacy");
 
+// Simple cache for search results (5 minutes TTL)
+const searchCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 // Initialize Meilisearch
 async function initializeMeilisearch() {
   try {
@@ -27,6 +31,14 @@ async function searchMedicines(query, limit = 10) {
     const cleanQuery = query.trim();
     if (!cleanQuery) return [];
 
+    // Check cache first
+    const cacheKey = `${cleanQuery}_${limit}`;
+    const cached = searchCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      console.log(`🔍 Cache hit for: "${cleanQuery}"`);
+      return cached.results;
+    }
+
     console.log(`🔍 Searching for: "${cleanQuery}" with limit: ${limit}`);
 
     const searchResults = await index.search(cleanQuery, {
@@ -38,15 +50,52 @@ async function searchMedicines(query, limit = 10) {
         "item_code",
       ],
       limit: Math.min(limit, 50),
+      // Performance optimizations
+      attributesToRetrieve: ["id"], // Only get ID, not full document
+      attributesToHighlight: ["generic_name", "description"],
+      highlightPreTag: "<mark>",
+      highlightPostTag: "</mark>",
+      // Better relevance
+      rankingRules: [
+        "words",
+        "typo",
+        "proximity",
+        "attribute",
+        "sort",
+        "exactness",
+      ],
     });
 
     console.log(`📊 Search results: ${searchResults.hits.length} hits found`);
     console.log(`📊 Total estimated hits: ${searchResults.estimatedTotalHits}`);
 
-    return searchResults.hits.map((hit) => ({
-      ...hit,
-      score: hit._score,
-    }));
+    // Get IDs from Meilisearch results
+    const ids = searchResults.hits.map((hit) => hit.id);
+
+    // Fetch full documents from MongoDB using IDs (optimized query)
+    const fullDocuments = await PharmacyInventory.find({
+      _id: { $in: ids },
+    }).lean(); // Use lean() for better performance
+
+    // Map back to original order and add search score
+    const results = searchResults.hits.map((hit) => {
+      const fullDoc = fullDocuments.find(
+        (doc) => doc._id.toString() === hit.id
+      );
+      return {
+        ...fullDoc,
+        _score: hit._score,
+        _highlights: hit._formatted || {},
+      };
+    });
+
+    // Cache the results
+    searchCache.set(cacheKey, {
+      results,
+      timestamp: Date.now(),
+    });
+
+    return results;
   } catch (error) {
     console.error("❌ Search error:", error.message);
     return [];
@@ -92,23 +141,23 @@ async function indexAllData() {
     const totalCount = await PharmacyInventory.countDocuments({});
     console.log(`📝 Total documents: ${totalCount}`);
 
-    const batchSize = 100;
+    const batchSize = 500; // Increased from 100 for better performance
     let indexedCount = 0;
 
     for (let skip = 0; skip < totalCount; skip += batchSize) {
       const items = await PharmacyInventory.find({})
         .skip(skip)
-        .limit(batchSize);
+        .limit(batchSize)
+        .lean(); // Use lean() for better performance
 
       const documents = items.map((item) => {
-        const doc = item.toObject();
         return {
-          id: doc._id.toString(),
-          item_code: doc.item_code,
-          generic_name: doc.generic_name,
-          generic_name2: doc.generic_name2,
-          manufacturer: doc.manufacturer,
-          description: doc.description,
+          id: item._id.toString(),
+          item_code: item.item_code,
+          generic_name: item.generic_name,
+          generic_name2: item.generic_name2,
+          manufacturer: item.manufacturer,
+          description: item.description,
         };
       });
 
@@ -120,7 +169,7 @@ async function indexAllData() {
           documents.length
         } indexed`
       );
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 50)); // Reduced delay
     }
 
     return { success: true, indexed: indexedCount };
