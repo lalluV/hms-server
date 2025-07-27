@@ -101,16 +101,19 @@ async function searchMedicines(query, limit = 10) {
       q: cleanQuery,
       query_by:
         "generic_name,generic_name2,manufacturer,description,item_code,searchable_text",
-      sort_by: "id:desc",
       per_page: Math.min(limit, 50),
       num_typos: 2,
       prefix: true,
     };
 
+    console.log("🔍 Searching with parameters:", searchParameters);
+
     const searchResults = await client
       .collections("pharmacyinventory")
       .documents()
       .search(searchParameters);
+
+    console.log("📊 Search results:", searchResults.hits.length, "hits");
 
     return searchResults.hits.map((hit) => ({
       ...hit.document,
