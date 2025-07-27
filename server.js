@@ -2,7 +2,11 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors"); // <--- import cors
 require("dotenv").config();
-const { initializeMeilisearch } = require("./utils/meilisearch");
+const {
+  initializeMeilisearch,
+  indexAllData,
+  getIndexStats,
+} = require("./utils/meilisearch");
 
 const app = express();
 
@@ -66,12 +70,30 @@ const PORT = process.env.PORT || 3001;
 app.listen(PORT, "0.0.0.0", async () => {
   console.log(`🚀 Server running on port ${PORT}`);
 
-  // Initialize Meilisearch after server starts
+  // Initialize Meilisearch and index data after server starts
   setTimeout(async () => {
     try {
       const success = await initializeMeilisearch();
       if (success) {
         console.log("✅ Meilisearch initialized successfully");
+
+        // Check if data needs to be indexed
+        const indexStats = await getIndexStats();
+        if (!indexStats || indexStats.documents === 0) {
+          console.log("📝 No data indexed, starting automatic indexing...");
+          const result = await indexAllData();
+          if (result.success) {
+            console.log(
+              `✅ Automatic indexing completed: ${result.indexed} documents indexed`
+            );
+          } else {
+            console.log("❌ Automatic indexing failed:", result.error);
+          }
+        } else {
+          console.log(
+            `✅ Meilisearch already has ${indexStats.documents} documents indexed`
+          );
+        }
       } else {
         console.log(
           "⚠️  Meilisearch initialization failed - search will be disabled"

@@ -132,7 +132,10 @@ async function indexAllData() {
 // Get index statistics
 async function getIndexStats() {
   try {
+    console.log("📊 Getting index stats...");
     const stats = await index.getStats();
+    console.log("📊 Index stats:", stats);
+
     return {
       name: "pharmacy",
       documents: stats.numberOfDocuments,
@@ -140,6 +143,7 @@ async function getIndexStats() {
     };
   } catch (error) {
     console.error("❌ Error getting index stats:", error.message);
+    console.error("❌ Full error:", error);
     return null;
   }
 }
