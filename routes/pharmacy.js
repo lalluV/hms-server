@@ -293,10 +293,32 @@ router.post("/index-all", async (req, res) => {
   }
 });
 
+// Test Meilisearch connection
+router.get("/test-meilisearch", async (req, res) => {
+  try {
+    const { client } = require("../utils/meilisearch");
+
+    // Test basic connection
+    const health = await client.health();
+
+    res.json({
+      success: true,
+      message: "Meilisearch connection successful",
+      health: health,
+    });
+  } catch (error) {
+    res.json({
+      success: false,
+      message: "Meilisearch connection failed",
+      error: error.message,
+    });
+  }
+});
+
 // Get search health
 router.get("/search/health", async (req, res) => {
   try {
-    const { client } = require("../utils/meilisearch");
+    const { client, getIndexStats } = require("../utils/meilisearch");
     const health = await client.health();
     const indexStats = await getIndexStats();
     const mongoCount = await PharmacyInventory.countDocuments({});

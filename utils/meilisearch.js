@@ -145,6 +145,7 @@ async function getIndexStats() {
 }
 
 module.exports = {
+  client,
   initializeMeilisearch,
   searchMedicines,
   indexDocument,
