@@ -443,7 +443,7 @@ router.post("/test-connection", async (req, res) => {
 });
 
 // Get indexed documents (for debugging)
-router.get("/indexed-docs", async (req, res) => {
+router.get("/debug/indexed-docs", async (req, res) => {
   try {
     const { client } = require("../utils/typesense");
 
