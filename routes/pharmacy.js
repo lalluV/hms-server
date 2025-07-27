@@ -442,6 +442,32 @@ router.post("/test-connection", async (req, res) => {
   }
 });
 
+// Get indexed documents (for debugging)
+router.get("/indexed-docs", async (req, res) => {
+  try {
+    const { client } = require("../utils/typesense");
+
+    // Get all documents from the collection
+    const documents = await client
+      .collections("pharmacyinventory")
+      .documents()
+      .search({
+        q: "*",
+        per_page: 10,
+      });
+
+    res.json({
+      totalHits: documents.found,
+      documents: documents.hits.map((hit) => hit.document),
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to get indexed documents",
+      details: error.message,
+    });
+  }
+});
+
 // Get search health
 router.get("/search/health", async (req, res) => {
   try {
