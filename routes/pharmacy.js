@@ -311,6 +311,138 @@ router.post("/index-all", async (req, res) => {
   }
 });
 
+// Test indexing with small sample
+router.post("/test-index", async (req, res) => {
+  try {
+    console.log("🧪 Testing indexing with sample data...");
+
+    // Initialize Typesense first
+    await initializeTypesense();
+
+    // Get just 10 documents for testing
+    const sampleItems = await PharmacyInventory.find({}).limit(10);
+    console.log(`📝 Found ${sampleItems.length} sample items`);
+
+    if (sampleItems.length === 0) {
+      return res.json({
+        message: "No sample data found",
+        success: false,
+      });
+    }
+
+    // Index the sample
+    const documents = sampleItems.map((item) => {
+      const doc = item.toObject();
+      const searchableText = [
+        doc.generic_name || "",
+        doc.generic_name2 || "",
+        doc.manufacturer || "",
+        doc.description || "",
+        doc.item_code || "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+
+      return {
+        id: doc._id.toString(),
+        item_code: doc.item_code,
+        generic_name: doc.generic_name,
+        generic_name2: doc.generic_name2,
+        manufacturer: doc.manufacturer,
+        description: doc.description,
+        searchable_text: searchableText,
+      };
+    });
+
+    const { client } = require("../utils/typesense");
+    const results = await client
+      .collections("pharmacyinventory")
+      .documents()
+      .import(documents);
+
+    const successCount = results.filter((result) => !result.error).length;
+    const errors = results.filter((result) => result.error);
+
+    res.json({
+      message: "Test indexing completed",
+      sampleCount: sampleItems.length,
+      indexedCount: successCount,
+      errors: errors.length > 0 ? errors : null,
+      success: successCount > 0,
+    });
+  } catch (error) {
+    console.error("❌ Test indexing error:", error);
+    res.status(500).json({
+      error: "Test indexing failed",
+      details: error.message,
+      success: false,
+    });
+  }
+});
+
+// Test Typesense connection
+router.post("/test-connection", async (req, res) => {
+  try {
+    console.log("🔍 Testing Typesense connection...");
+
+    const { client } = require("../utils/typesense");
+
+    // Test health
+    const health = await client.health.retrieve();
+    console.log("✅ Health check:", health);
+
+    // List collections
+    const collections = await client.collections().retrieve();
+    console.log(
+      "📋 Collections:",
+      collections.map((c) => c.name)
+    );
+
+    // Try to create collection
+    const collectionSchema = {
+      name: "pharmacyinventory",
+      fields: [
+        { name: "id", type: "string" },
+        { name: "item_code", type: "string" },
+        { name: "generic_name", type: "string" },
+        { name: "generic_name2", type: "string" },
+        { name: "manufacturer", type: "string" },
+        { name: "description", type: "string" },
+        { name: "searchable_text", type: "string" },
+      ],
+      default_sorting_field: "id",
+    };
+
+    // Delete existing collection if it exists
+    const existingCollection = collections.find(
+      (c) => c.name === "pharmacyinventory"
+    );
+    if (existingCollection) {
+      await client.collections("pharmacyinventory").delete();
+      console.log("🗑️ Deleted existing collection");
+    }
+
+    // Create new collection
+    await client.collections().create(collectionSchema);
+    console.log("✅ Collection created successfully");
+
+    res.json({
+      message: "Typesense connection test successful",
+      health: health,
+      collections: collections.map((c) => c.name),
+      canCreateCollections: true,
+      success: true,
+    });
+  } catch (error) {
+    console.error("❌ Typesense connection test failed:", error);
+    res.status(500).json({
+      error: "Typesense connection test failed",
+      details: error.message,
+      success: false,
+    });
+  }
+});
+
 // Get search health
 router.get("/search/health", async (req, res) => {
   try {
