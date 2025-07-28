@@ -92,18 +92,14 @@ router.post("/rewrite-section", async (req, res) => {
       typeof sectionType !== "string" ||
       !sectionType.trim()
     ) {
-      return res
-        .status(400)
-        .json({
-          error: "sectionType is required and must be a non-empty string",
-        });
+      return res.status(400).json({
+        error: "sectionType is required and must be a non-empty string",
+      });
     }
     if (!inputText || typeof inputText !== "string" || !inputText.trim()) {
-      return res
-        .status(400)
-        .json({
-          error: "inputText is required and must be a non-empty string",
-        });
+      return res.status(400).json({
+        error: "inputText is required and must be a non-empty string",
+      });
     }
     if (age && (typeof age !== "number" || age < 0 || age > 130)) {
       return res
@@ -119,15 +115,15 @@ router.post("/rewrite-section", async (req, res) => {
         .json({ error: "gender must be 'male', 'female', or 'other'" });
     }
 
-    // Build context for the prompt
+    // Build context for the prompt, but do not include age/gender in rewritten output
     let context = "";
     if (age) context += `Age: ${age}. `;
     if (gender) context += `Gender: ${gender}. `;
 
-    const prompt = `\n${context}\nRewrite the following doctor's notes as a well-formatted \"${sectionType.replace(
+    const prompt = `\n${context}\nRewrite the following doctor's notes as a well-formatted "${sectionType.replace(
       /_/g,
       " "
-    )}\" section. \nUse clear, professional medical language and structure. Only include relevant details.\n\nDoctor's notes:\n${inputText}\n`;
+    )}" section.\nUse clear, professional medical language and structure. Only include relevant details.\nDo not include age or gender in the rewritten text, even if provided, only return if provided in Doctor's notes: inputText.\nReturn only the rewritten text, with no heading, explanations, or placeholders below.\n\nDoctor's notes:\n${inputText}\n`;
 
     let response;
     try {
