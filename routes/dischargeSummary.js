@@ -78,4 +78,108 @@ ${JSON.stringify(patientData, null, 2)}`;
   }
 });
 
+/**
+ * POST /rewrite-section
+ * Body: { sectionType: string, inputText: string, age?: number, gender?: string }
+ * Returns: { rewritten: string }
+ */
+router.post("/rewrite-section", async (req, res) => {
+  try {
+    const { sectionType, inputText, age, gender } = req.body;
+    // Improved input validation
+    if (
+      !sectionType ||
+      typeof sectionType !== "string" ||
+      !sectionType.trim()
+    ) {
+      return res
+        .status(400)
+        .json({
+          error: "sectionType is required and must be a non-empty string",
+        });
+    }
+    if (!inputText || typeof inputText !== "string" || !inputText.trim()) {
+      return res
+        .status(400)
+        .json({
+          error: "inputText is required and must be a non-empty string",
+        });
+    }
+    if (age && (typeof age !== "number" || age < 0 || age > 130)) {
+      return res
+        .status(400)
+        .json({ error: "age must be a valid number between 0 and 130" });
+    }
+    if (
+      gender &&
+      !["male", "female", "other", "Male", "Female", "Other"].includes(gender)
+    ) {
+      return res
+        .status(400)
+        .json({ error: "gender must be 'male', 'female', or 'other'" });
+    }
+
+    // Build context for the prompt
+    let context = "";
+    if (age) context += `Age: ${age}. `;
+    if (gender) context += `Gender: ${gender}. `;
+
+    const prompt = `\n${context}\nRewrite the following doctor's notes as a well-formatted \"${sectionType.replace(
+      /_/g,
+      " "
+    )}\" section. \nUse clear, professional medical language and structure. Only include relevant details.\n\nDoctor's notes:\n${inputText}\n`;
+
+    let response;
+    try {
+      response = await deepseekApi.post(
+        "/chat/completions",
+        {
+          model: "deepseek-chat",
+          messages: [
+            {
+              role: "system",
+              content: `You are a senior doctor rewriting clinical notes into a formal, well-structured section for a medical record.`,
+            },
+            {
+              role: "user",
+              content: prompt,
+            },
+          ],
+          max_tokens: 800,
+          temperature: 0.3,
+          top_p: 0.9,
+          frequency_penalty: 0.5,
+        },
+        { timeout: 15000 } // 15s timeout
+      );
+    } catch (apiError) {
+      console.error(
+        "DeepSeek API error:",
+        apiError?.response?.data || apiError.message
+      );
+      return res.status(502).json({
+        error: "Failed to contact DeepSeek API",
+        details: apiError?.response?.data || apiError.message,
+      });
+    }
+
+    if (
+      !response?.data?.choices ||
+      !response.data.choices[0]?.message?.content
+    ) {
+      return res
+        .status(500)
+        .json({ error: "Invalid response from DeepSeek API" });
+    }
+    const rewritten = response.data.choices[0].message.content;
+    res.json({ rewritten });
+  } catch (error) {
+    console.error("Error rewriting section:", error);
+    res.status(500).json({
+      error: "Failed to rewrite section",
+      details: error.message,
+    });
+  }
+});
+
 module.exports = router;
