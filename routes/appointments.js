@@ -15,7 +15,7 @@ router.get("/", async (req, res) => {
 // Get appointment by ID
 router.get("/:id", async (req, res) => {
   try {
-    const appointment = await Appointment.findOne({ id: req.params.id });
+    const appointment = await Appointment.findById(req.params.id);
     if (!appointment) {
       return res.status(404).json({ message: "Appointment not found" });
     }
@@ -39,8 +39,8 @@ router.post("/", async (req, res) => {
 // Update appointment
 router.put("/:id", async (req, res) => {
   try {
-    const appointment = await Appointment.findOneAndUpdate(
-      { id: req.params.id },
+    const appointment = await Appointment.findByIdAndUpdate(
+      req.params.id,
       req.body,
       { new: true }
     );
@@ -56,9 +56,7 @@ router.put("/:id", async (req, res) => {
 // Delete appointment
 router.delete("/:id", async (req, res) => {
   try {
-    const appointment = await Appointment.findOneAndDelete({
-      id: req.params.id,
-    });
+    const appointment = await Appointment.findByIdAndDelete(req.params.id);
     if (!appointment) {
       return res.status(404).json({ message: "Appointment not found" });
     }
