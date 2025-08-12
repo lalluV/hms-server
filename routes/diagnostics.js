@@ -2,11 +2,63 @@ const express = require("express");
 const router = express.Router();
 const Diagnostic = require("../models/Diagnostic");
 
-// Get all diagnostics
+// Get all diagnostics with pagination and search
 router.get("/", async (req, res) => {
   try {
-    const diagnostics = await Diagnostic.find({});
-    res.json(diagnostics);
+    const { search, page = 1, limit } = req.query;
+
+    // Use different limits based on whether search is active
+    const defaultLimit = search ? 10 : 50;
+    const actualLimit = limit ? parseInt(limit) : defaultLimit;
+
+    // Build search query
+    let searchQuery = {};
+    if (search) {
+      searchQuery = {
+        $or: [
+          { code: { $regex: search, $options: "i" } },
+          { name: { $regex: search, $options: "i" } },
+          { description: { $regex: search, $options: "i" } },
+          { deptname: { $regex: search, $options: "i" } },
+          { subdeptname: { $regex: search, $options: "i" } },
+          { type: { $regex: search, $options: "i" } },
+          { visitType: { $regex: search, $options: "i" } },
+          { "parameters.name": { $regex: search, $options: "i" } },
+          { "parameters.category": { $regex: search, $options: "i" } },
+        ],
+      };
+    }
+
+    // Calculate skip value for pagination
+    const skip = (parseInt(page) - 1) * actualLimit;
+
+    // Get total count for pagination info
+    const totalDiagnostics = await Diagnostic.countDocuments(searchQuery);
+
+    // Fetch diagnostics with pagination and search
+    const diagnostics = await Diagnostic.find(searchQuery)
+      .sort({ createdAt: -1 }) // Sort by newest first
+      .skip(skip)
+      .limit(actualLimit);
+
+    // Calculate pagination info
+    const totalPages = Math.ceil(totalDiagnostics / actualLimit);
+    const hasNextPage = page < totalPages;
+    const hasPrevPage = page > 1;
+
+    res.json({
+      diagnostics,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages,
+        totalDiagnostics,
+        hasNextPage,
+        hasPrevPage,
+        limit: actualLimit,
+        isSearchActive: !!search,
+        searchTerm: search || null,
+      },
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
