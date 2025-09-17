@@ -18,10 +18,12 @@
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
+    "meilisearch": "^0.45.0",
     "mongodb": "^6.18.0",
     "mongoose": "^8.14.3",
-    "multer": "^2.0.0",
-    "meilisearch": "^0.45.0",
+    "multer": "^2.0.2",
+    "pdf-lib": "^1.17.1",
+    "sharp": "^0.34.3",
     "uuid": "^11.1.0"
   }
 }

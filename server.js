@@ -13,7 +13,11 @@ const app = express();
 // Enable CORS for all routes (you can restrict origins if needed)
 app.use(
   cors({
-    origin: ["http://localhost:5173", "https://srichakrahms.web.app"],
+    origin: [
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "https://srichakrahms.web.app",
+    ],
     credentials: true,
   })
 );
@@ -43,6 +47,7 @@ app.use("/api/expenses", require("./routes/expenses"));
 app.use("/api/leaves", require("./routes/leaves"));
 app.use("/api/holidays", require("./routes/holidays"));
 app.use("/api/wards", require("./routes/wards"));
+app.use("/api/departments", require("./routes/departments"));
 app.use("/api/shifts", require("./routes/shifts"));
 app.use("/api/nurse-desc", require("./routes/nurseDesc"));
 app.use("/api/consultations", require("./routes/consultations"));
@@ -60,7 +65,9 @@ app.use("/api/diagnostics-receipts", require("./routes/diagnosticsReceipts"));
 app.use("/api/discharge-summary", require("./routes/dischargeSummary"));
 app.use("/api/consents", require("./routes/consentRoutes"));
 app.use("/api/consent-templates", require("./routes/consentTemplateRoutes"));
-app.use("/api", require("./routes/upload"));
+app.use("/api/stamps", require("./routes/stamps"));
+app.use("/api/upload", require("./routes/upload"));
+app.use("/api/diagnostics-users", require("./routes/diagnosticsUsers"));
 
 // Error handling middleware
 app.use((err, req, res, next) => {

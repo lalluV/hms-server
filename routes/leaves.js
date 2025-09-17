@@ -15,7 +15,14 @@ router.get("/", async (req, res) => {
 // Get leave by ID
 router.get("/:id", async (req, res) => {
   try {
-    const leave = await Leave.findOne({ id: req.params.id });
+    // Try to find by id first, then by _id
+    let leave = await Leave.findOne({ id: req.params.id });
+
+    // If not found by id, try by _id
+    if (!leave) {
+      leave = await Leave.findOne({ _id: req.params.id });
+    }
+
     if (!leave) {
       return res.status(404).json({ message: "Leave not found" });
     }
@@ -39,11 +46,18 @@ router.post("/", async (req, res) => {
 // Update leave request
 router.put("/:id", async (req, res) => {
   try {
-    const leave = await Leave.findOneAndUpdate(
-      { id: req.params.id },
-      req.body,
-      { new: true }
-    );
+    // Try to find by id first, then by _id
+    let leave = await Leave.findOneAndUpdate({ id: req.params.id }, req.body, {
+      new: true,
+    });
+
+    // If not found by id, try by _id
+    if (!leave) {
+      leave = await Leave.findOneAndUpdate({ _id: req.params.id }, req.body, {
+        new: true,
+      });
+    }
+
     if (!leave) {
       return res.status(404).json({ message: "Leave not found" });
     }
@@ -56,7 +70,14 @@ router.put("/:id", async (req, res) => {
 // Delete leave request
 router.delete("/:id", async (req, res) => {
   try {
-    const leave = await Leave.findOneAndDelete({ id: req.params.id });
+    // Try to find by id first, then by _id
+    let leave = await Leave.findOneAndDelete({ id: req.params.id });
+
+    // If not found by id, try by _id
+    if (!leave) {
+      leave = await Leave.findOneAndDelete({ _id: req.params.id });
+    }
+
     if (!leave) {
       return res.status(404).json({ message: "Leave not found" });
     }
@@ -69,7 +90,7 @@ router.delete("/:id", async (req, res) => {
 // Get leaves by staff ID
 router.get("/staff/:staffId", async (req, res) => {
   try {
-    const leaves = await Leave.find({ staffId: req.params.staffId });
+    const leaves = await Leave.find({ employeeId: req.params.staffId });
     res.json(leaves);
   } catch (error) {
     res.status(500).json({ message: error.message });

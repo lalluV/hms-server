@@ -12,6 +12,16 @@ router.get("/", async (req, res) => {
   }
 });
 
+// Get patients by phone number
+router.get("/phone/:phoneNumber", async (req, res) => {
+  try {
+    const patients = await Patient.find({ phone: req.params.phoneNumber });
+    res.json(patients);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Get patient by ID
 router.get("/:id", async (req, res) => {
   try {

@@ -12,10 +12,23 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Get staff member by ID
+// Get staff member by ID (userId)
 router.get("/:id", async (req, res) => {
   try {
     const staff = await Staff.findOne({ userId: req.params.id });
+    if (!staff) {
+      return res.status(404).json({ message: "Staff member not found" });
+    }
+    res.json(staff);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get staff member by employee ID
+router.get("/employee/:employeeId", async (req, res) => {
+  try {
+    const staff = await Staff.findOne({ id: req.params.employeeId });
     if (!staff) {
       return res.status(404).json({ message: "Staff member not found" });
     }
