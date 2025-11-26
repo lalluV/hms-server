@@ -100,4 +100,16 @@ router.get("/status/:status", async (req, res) => {
   }
 });
 
+// Get diagnostics receipts by account phone (for mobile app)
+router.get("/account/:accountPhone", async (req, res) => {
+  try {
+    const receipts = await DiagnosticsReceipt.find({
+      accountPhone: req.params.accountPhone,
+    });
+    res.json(receipts);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router;

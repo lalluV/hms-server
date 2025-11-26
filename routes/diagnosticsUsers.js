@@ -83,9 +83,81 @@ router.delete("/:id", auth, async (req, res) => {
   }
 });
 
+// @route   GET api/diagnostics-users/phone/:phoneNumber
+// @desc    Get diagnostics user by phone number
+// @access  Public (for mobile app)
+router.get("/phone/:phoneNumber", async (req, res) => {
+  try {
+    const user = await DiagnosticsUser.findOne({
+      phone: req.params.phoneNumber,
+    });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.json(user);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server error");
+  }
+});
+
+// @route   POST api/diagnostics-users/phone
+// @desc    Create or get diagnostics user by phone number
+// @access  Public (for mobile app)
+router.post("/phone", async (req, res) => {
+  try {
+    const { phone, ...userData } = req.body;
+
+    if (!phone) {
+      return res.status(400).json({ message: "Phone number is required" });
+    }
+
+    // Check if user already exists
+    let user = await DiagnosticsUser.findOne({ phone });
+
+    if (user) {
+      return res.json(user);
+    }
+
+    // Create new user
+    const newUser = new DiagnosticsUser({
+      phone,
+      ...userData,
+    });
+
+    await newUser.save();
+    res.json(newUser);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server error");
+  }
+});
+
+// @route   PUT api/diagnostics-users/phone/:phoneNumber
+// @desc    Update diagnostics user by phone number
+// @access  Public (for mobile app)
+router.put("/phone/:phoneNumber", async (req, res) => {
+  try {
+    const user = await DiagnosticsUser.findOneAndUpdate(
+      { phone: req.params.phoneNumber },
+      req.body,
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json(user);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server error");
+  }
+});
+
 // @route   POST api/diagnostics-users/send-otp
 // @desc    Send OTP to phone number
-// @access  Public
+// @access  Public (for mobile app)
 router.post("/send-otp", async (req, res) => {
   try {
     const { phoneNumber } = req.body;
@@ -94,16 +166,14 @@ router.post("/send-otp", async (req, res) => {
       return res.status(400).json({ message: "Phone number is required" });
     }
 
-    // Generate 4-digit OTP
-    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    // Generate OTP (in real app, send via SMS service)
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // For demo purposes, we'll just return the OTP
-    // In production, you would send this via SMS service
+    // Store OTP temporarily (in real app, use Redis or similar)
+    // For now, just return success
     res.json({
-      success: true,
       message: "OTP sent successfully",
       otp: otp, // Remove this in production
-      confirmCode: otp,
     });
   } catch (err) {
     console.error(err.message);
@@ -112,136 +182,43 @@ router.post("/send-otp", async (req, res) => {
 });
 
 // @route   POST api/diagnostics-users/verify-otp
-// @desc    Verify OTP and login/register user
-// @access  Public
+// @desc    Verify OTP and get/create user
+// @access  Public (for mobile app)
 router.post("/verify-otp", async (req, res) => {
   try {
     const { phoneNumber, otp } = req.body;
 
     if (!phoneNumber || !otp) {
-      return res
-        .status(400)
-        .json({ message: "Phone number and OTP are required" });
+      return res.status(400).json({
+        message: "Phone number and OTP are required",
+      });
     }
 
-    // For demo purposes, accept any 4-digit OTP
-    // In production, you would verify against stored OTP
-    if (otp.length !== 4) {
-      return res.status(400).json({ message: "Invalid OTP format" });
-    }
+    // In real app, verify OTP here
+    // For now, just proceed with user creation/lookup
 
-    // Check if user exists
     let user = await DiagnosticsUser.findOne({ phone: phoneNumber });
 
     if (!user) {
-      // Create new user with basic info
+      // Create new user
       user = new DiagnosticsUser({
         phone: phoneNumber,
-        createdAt: new Date(),
-        isActive: true,
+        userType: "Patient",
         name: "",
-        email: "",
-        gender: "",
         age: "",
+        gender: "",
+        email: "",
+        addresses: [],
+        familyMembers: [],
       });
+
       await user.save();
     }
 
-    // Create JWT token
-    const payload = {
-      user: {
-        id: user.id,
-        phone: user.phone,
-      },
-    };
-
-    jwt.sign(
-      payload,
-      process.env.JWT_SECRET,
-      { expiresIn: "24h" },
-      (err, token) => {
-        if (err) throw err;
-        res.json({
-          success: true,
-          message: "OTP verified successfully",
-          token,
-          user: {
-            id: user.id,
-            phoneNumber: user.phoneNumber,
-            name: user.name || "",
-            email: user.email || "",
-            createdAt: user.createdAt,
-          },
-        });
-      }
-    );
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send("Server error");
-  }
-});
-
-// @route   POST api/diagnostics-users/get-or-create-user
-// @desc    Get or create user with phone number
-// @access  Public
-router.post("/get-or-create-user", async (req, res) => {
-  try {
-    const { phoneNumber, ...userData } = req.body;
-
-    if (!phoneNumber) {
-      return res.status(400).json({ message: "Phone number is required" });
-    }
-
-    // Check if user exists
-    let user = await DiagnosticsUser.findOne({ phoneNumber });
-
-    if (!user) {
-      // Create new user with all provided data
-      user = new DiagnosticsUser({
-        phone: phoneNumber,
-        name: userData.name || "",
-        email: userData.email || "",
-        gender: userData.gender || "",
-        age: userData.age || "",
-        ...userData,
-        createdAt: new Date(),
-        isActive: true,
-      });
-      await user.save();
-    } else {
-      // Update existing user with new data
-      Object.assign(user, userData);
-      await user.save();
-    }
-
-    // Create JWT token
-    const payload = {
-      user: {
-        id: user.id,
-        phone: user.phone,
-      },
-    };
-
-    jwt.sign(
-      payload,
-      process.env.JWT_SECRET,
-      { expiresIn: "24h" },
-      (err, token) => {
-        if (err) throw err;
-        res.json({
-          success: true,
-          message: "User retrieved/created successfully",
-          token,
-          user: {
-            id: user.id,
-            phone: user.phone,
-            name: user.name || "",
-            email: user.email || "",
-            createdAt: user.createdAt,
-          },
-        });
-      }
-    );
+    res.json({
+      message: "OTP verified successfully",
+      user: user,
+    });
   } catch (err) {
     console.error(err.message);
     res.status(500).send("Server error");

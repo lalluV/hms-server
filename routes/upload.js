@@ -101,6 +101,63 @@ router.post("/signature", upload.single("signature"), async (req, res) => {
   }
 });
 
+// Handle employee photo upload
+router.post("/photo", upload.single("photo"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No photo file uploaded" });
+    }
+
+    const { employeeId } = req.body;
+    if (!employeeId) {
+      return res.status(400).json({ error: "Employee ID is required" });
+    }
+
+    if (!req.file.mimetype.startsWith("image/")) {
+      return res
+        .status(400)
+        .json({ error: "Only image files are allowed for photos" });
+    }
+
+    if (req.file.size > 5 * 1024 * 1024) {
+      return res
+        .status(400)
+        .json({ error: "Photo file size should be less than 5MB" });
+    }
+
+    const fileExtension = req.file.originalname.split(".").pop();
+    const fileName = `employees/${employeeId}/${uuidv4()}.${fileExtension}`;
+
+    const command = new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: fileName,
+      Body: req.file.buffer,
+      ContentType: req.file.mimetype,
+    });
+
+    await s3Client.send(command);
+
+    const fileUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
+
+    res.json({
+      success: true,
+      fileUrl,
+      message: "Employee photo uploaded successfully",
+      fileInfo: {
+        originalName: req.file.originalname,
+        size: req.file.size,
+        mimeType: req.file.mimetype,
+      },
+    });
+  } catch (error) {
+    console.error("Error uploading employee photo:", error);
+    res.status(500).json({
+      error: "Failed to upload photo",
+      details: error.message,
+    });
+  }
+});
+
 // Handle stamp upload
 router.post("/stamp", upload.single("stamp"), async (req, res) => {
   try {

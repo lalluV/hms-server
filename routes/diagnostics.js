@@ -67,7 +67,7 @@ router.get("/", async (req, res) => {
 // Get diagnostic by ID
 router.get("/:id", async (req, res) => {
   try {
-    const diagnostic = await Diagnostic.findOne({ id: req.params.id });
+    const diagnostic = await Diagnostic.findById(req.params.id);
     if (!diagnostic) {
       return res.status(404).json({ message: "Diagnostic not found" });
     }
@@ -91,8 +91,8 @@ router.post("/", async (req, res) => {
 // Update diagnostic
 router.put("/:id", async (req, res) => {
   try {
-    const diagnostic = await Diagnostic.findOneAndUpdate(
-      { id: req.params.id },
+    const diagnostic = await Diagnostic.findByIdAndUpdate(
+      req.params.id,
       req.body,
       { new: true }
     );
@@ -108,7 +108,7 @@ router.put("/:id", async (req, res) => {
 // Delete diagnostic
 router.delete("/:id", async (req, res) => {
   try {
-    const diagnostic = await Diagnostic.findOneAndDelete({ id: req.params.id });
+    const diagnostic = await Diagnostic.findByIdAndDelete(req.params.id);
     if (!diagnostic) {
       return res.status(404).json({ message: "Diagnostic not found" });
     }
