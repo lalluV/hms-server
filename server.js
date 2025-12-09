@@ -36,12 +36,9 @@ mongoose
 app.use("/api/pharmacy", require("./routes/pharmacy"));
 // Use routes
 app.use("/api/auth", require("./routes/auth"));
-app.use("/api/doctors", require("./routes/doctors"));
 app.use("/api/patients", require("./routes/patients"));
 app.use("/api/appointments", require("./routes/appointments"));
 app.use("/api/staff", require("./routes/staff"));
-app.use("/api/inventory", require("./routes/inventory"));
-app.use("/api/prescriptions", require("./routes/prescriptions"));
 app.use("/api/diagnostics", require("./routes/diagnostics"));
 app.use("/api/expenses", require("./routes/expenses"));
 app.use("/api/leaves", require("./routes/leaves"));
@@ -68,6 +65,8 @@ app.use("/api/consent-templates", require("./routes/consentTemplateRoutes"));
 app.use("/api/stamps", require("./routes/stamps"));
 app.use("/api/upload", require("./routes/upload"));
 app.use("/api/diagnostics-users", require("./routes/diagnosticsUsers"));
+app.use("/api/dashboard", require("./routes/dashboard"));
+app.use("/api/commissions", require("./routes/commissions"));
 
 // Error handling middleware
 app.use((err, req, res, next) => {

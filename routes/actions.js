@@ -2,11 +2,90 @@ const express = require("express");
 const router = express.Router();
 const Action = require("../models/Action");
 
-// Get all actions
+// Get all actions with pagination support
 router.get("/", async (req, res) => {
   try {
-    const actions = await Action.find({});
-    res.json(actions);
+    const {
+      page = 1,
+      limit = 20,
+      search = "",
+      type = "",
+      status = "",
+      patientId = "",
+      doctorId = "",
+      startDate = "",
+      endDate = "",
+    } = req.query;
+
+    // Build query
+    const query = {};
+
+    // Filter by type
+    if (type) {
+      query.type = type;
+    }
+
+    // Filter by status
+    if (status) {
+      query.status = status;
+    }
+
+    // Filter by patient ID
+    if (patientId) {
+      query.patientId = patientId;
+    }
+
+    // Filter by doctor ID
+    if (doctorId) {
+      query.doctorId = doctorId;
+    }
+
+    // Filter by date range
+    if (startDate && endDate) {
+      query.createdAt = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate),
+      };
+    } else if (startDate) {
+      query.createdAt = { $gte: new Date(startDate) };
+    } else if (endDate) {
+      query.createdAt = { $lte: new Date(endDate) };
+    }
+
+    // Search filter
+    if (search && search.length >= 2) {
+      query.$or = [
+        { receiptId: { $regex: search, $options: "i" } },
+        { patientId: { $regex: search, $options: "i" } },
+        { "items.name": { $regex: search, $options: "i" } },
+      ];
+    }
+
+    // Calculate pagination
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Get total count
+    const total = await Action.countDocuments(query);
+
+    // Get paginated actions
+    const actions = await Action.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum);
+
+    res.json({
+      actions: actions,
+      pagination: {
+        currentPage: pageNum,
+        totalPages: Math.ceil(total / limitNum),
+        totalItems: total,
+        itemsPerPage: limitNum,
+        hasNextPage: pageNum < Math.ceil(total / limitNum),
+        hasPrevPage: pageNum > 1,
+      },
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

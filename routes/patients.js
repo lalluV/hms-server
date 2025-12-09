@@ -1,6 +1,13 @@
 const express = require("express");
 const router = express.Router();
 const Patient = require("../models/Patient");
+const Action = require("../models/Action");
+const Consultation = require("../models/Consultation");
+const DiagnosticsReceipt = require("../models/DiagnosticsReceipt");
+const PharmacyReceipt = require("../models/PharmacyReceipt");
+const AdvanceReceipt = require("../models/AdvanceReceipt");
+const InsuranceTariff = require("../models/InsuranceTariff");
+const InsuranceExclusion = require("../models/InsuranceExclusion");
 
 // Get all patients with pagination support
 router.get("/", async (req, res) => {
@@ -195,6 +202,229 @@ router.put("/:id/medical-history/:historyId", async (req, res) => {
     res.json(patient);
   } catch (error) {
     res.status(400).json({ message: error.message });
+  }
+});
+
+// Calculate interim bill for a patient
+router.get("/:id/interim-bill", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { endDate } = req.query;
+
+    const patient = await Patient.findOne({ UMRNo: id });
+    if (!patient) {
+      return res.status(404).json({ message: "Patient not found" });
+    }
+
+    // Fetch all receipts for this patient
+    const consultationReceipts = await Consultation.find({ patientId: id });
+    const actionReceipts = await Action.find({ patientId: id });
+    const diagnosticsReceipts = await DiagnosticsReceipt.find({
+      patientId: id,
+    });
+    const pharmacyReceipts = await PharmacyReceipt.find({ patientId: id });
+    const advanceReceipts = await AdvanceReceipt.find({ patientId: id });
+
+    // Fetch insurance data
+    const insuranceTariffs = await InsuranceTariff.find();
+    const insuranceExclusions = await InsuranceExclusion.find();
+
+    // Calculate bill breakdown
+    const dayjs = require("dayjs");
+    const calculateEndDate = endDate ? new Date(endDate) : new Date();
+    const isDischarged = patient?.active === false;
+    const dischargeDt = isDischarged
+      ? patient?.dischargeDate || dayjs(calculateEndDate).format("YYYY-MM-DD")
+      : dayjs(calculateEndDate).format("YYYY-MM-DD");
+
+    // Calculate ward charges
+    let wardCharges = 0;
+    const patientTransfers = patient.transfers || [];
+    for (let i = 0; i < patientTransfers.length; i++) {
+      const currentTransfer = patientTransfers[i];
+      const nextTransfer = patientTransfers[i + 1] || {
+        transferDate: dischargeDt,
+      };
+      const daysSpent =
+        dayjs(nextTransfer.transferDate).diff(
+          dayjs(currentTransfer.transferDate),
+          "day"
+        ) + 1;
+      const wardPrice = parseInt(currentTransfer.price, 10);
+      wardCharges += daysSpent * wardPrice;
+    }
+
+    // Calculate consultation charges
+    const consultationCharges = consultationReceipts.reduce(
+      (total, receipt) =>
+        total +
+        (receipt.items || []).reduce(
+          (sum, item) =>
+            sum + parseFloat(item.charges || 0) * (item.quantity || 1),
+          0
+        ),
+      0
+    );
+
+    // Calculate investigation charges
+    const investigationCharges = diagnosticsReceipts.reduce(
+      (total, receipt) =>
+        total +
+        (receipt.items || []).reduce(
+          (sum, item) => sum + parseFloat(item.price || 0),
+          0
+        ),
+      0
+    );
+
+    // Calculate procedure charges
+    const procedureCharges = actionReceipts.reduce(
+      (total, receipt) =>
+        total +
+        (receipt.items || [])
+          .filter((data) => data.category === "Procedure Charges")
+          .reduce(
+            (sum, item) =>
+              sum + parseFloat(item.rate || 0) * (item.quantity || 1),
+            0
+          ),
+      0
+    );
+
+    // Calculate service charges
+    const serviceCharges = actionReceipts.reduce(
+      (total, receipt) =>
+        total +
+        (receipt.items || [])
+          .filter((data) => data.category === "Service Charges")
+          .reduce(
+            (sum, item) =>
+              sum + parseFloat(item.rate || 0) * (item.quantity || 1),
+            0
+          ),
+      0
+    );
+
+    // Calculate pharmacy charges
+    const pharmacyCharges = pharmacyReceipts.reduce(
+      (total, receipt) =>
+        total +
+        (receipt.items || []).reduce((prev, item) => {
+          const batchTotal = (item?.batches || []).reduce(
+            (batchPrev, { bill_amount }) =>
+              batchPrev + parseFloat(bill_amount || 0),
+            0
+          );
+          return prev + batchTotal;
+        }, 0),
+      0
+    );
+
+    const billBreakdown = {
+      Ward: wardCharges,
+      Consultation: consultationCharges,
+      Investigation: investigationCharges,
+      Procedure: procedureCharges,
+      Service: serviceCharges,
+      Pharmacy: pharmacyCharges,
+    };
+
+    // Calculate insurance coverage
+    const applicableTariff = insuranceTariffs.find(
+      (t) => t.companyId === patient.insurance_providerId
+    );
+    const applicableExclusions = insuranceExclusions.filter(
+      (e) => e.companyId === patient.insurance_providerId
+    );
+
+    const totalBill = Object.values(billBreakdown).reduce(
+      (sum, amount) => sum + (amount || 0),
+      0
+    );
+
+    // Apply exclusions
+    const exclusionsApplied = [];
+    const billAfterExclusions = { ...billBreakdown };
+    applicableExclusions.forEach((exclusion) => {
+      if (billAfterExclusions[exclusion.excludedService]) {
+        exclusionsApplied.push({
+          service: exclusion.excludedService,
+          amount: billAfterExclusions[exclusion.excludedService],
+          reason: exclusion.description,
+        });
+        billAfterExclusions[exclusion.excludedService] = 0;
+      }
+    });
+
+    // Calculate coverage (simplified - you may want to use the full calculation logic)
+    let insuranceCoverage = 0;
+    let patientPayable = totalBill;
+    const coverageBreakdown = [];
+
+    if (applicableTariff) {
+      Object.entries(billAfterExclusions).forEach(([service, amount]) => {
+        if (amount > 0) {
+          const serviceKey = service.toLowerCase().replace(" ", "");
+          const coveragePercentage =
+            applicableTariff[`${serviceKey}CoveragePercentage`] ||
+            applicableTariff.coveragePercentage ||
+            0;
+          const deductible =
+            applicableTariff[`${serviceKey}Deductible`] ||
+            applicableTariff.deductible ||
+            0;
+          const coverageLimit =
+            applicableTariff[`${serviceKey}CoverageLimit`] ||
+            applicableTariff.coverageLimit ||
+            0;
+
+          const amountAfterDeductible = Math.max(0, amount - deductible);
+          let coverage = (amountAfterDeductible * coveragePercentage) / 100;
+
+          if (coverageLimit > 0) {
+            coverage = Math.min(coverage, coverageLimit);
+          }
+
+          insuranceCoverage += coverage;
+          const patientShare = amount - coverage;
+          patientPayable -= coverage;
+
+          coverageBreakdown.push({
+            service,
+            amount,
+            coverage,
+            patientShare,
+            excluded: false,
+            coveragePercentage,
+            coverageLimit,
+            deductible,
+          });
+        }
+      });
+    }
+
+    patientPayable = Math.max(0, patientPayable);
+
+    res.json({
+      totalBill,
+      insuranceCoverage,
+      patientPayable,
+      breakdown: billBreakdown,
+      coverageBreakdown,
+      exclusionsApplied,
+      endDate: calculateEndDate,
+      patient: {
+        UMRNo: patient.UMRNo,
+        name: patient.name,
+        age: patient.age,
+        gender: patient.gender,
+        phone: patient.phone,
+        insurance_providerId: patient.insurance_providerId,
+      },
+    });
+  } catch (error) {
+    console.error("Error calculating interim bill:", error);
+    res.status(500).json({ message: error.message });
   }
 });
 
