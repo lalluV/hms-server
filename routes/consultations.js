@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const Consultation = require("../models/Consultation");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 // Get all consultations with pagination support
 router.get("/", async (req, res) => {
@@ -17,7 +20,7 @@ router.get("/", async (req, res) => {
     } = req.query;
 
     // Build query
-    const query = {};
+    const query = { hospitalId: req.hospitalId };
 
     // Filter by doctor ID
     if (doctorId) {
@@ -89,7 +92,10 @@ router.get("/", async (req, res) => {
 // Get consultation by ID
 router.get("/:id", async (req, res) => {
   try {
-    const consultation = await Consultation.findOne({ id: req.params.id });
+    const consultation = await Consultation.findOne({
+      id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!consultation) {
       return res.status(404).json({ message: "Consultation not found" });
     }
@@ -102,7 +108,10 @@ router.get("/:id", async (req, res) => {
 // Create new consultation
 router.post("/", async (req, res) => {
   try {
-    const consultation = new Consultation(req.body);
+    const consultation = new Consultation({
+      ...req.body,
+      hospitalId: req.hospitalId,
+    });
     const newConsultation = await consultation.save();
     res.status(201).json(newConsultation);
   } catch (error) {
@@ -114,7 +123,7 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const consultation = await Consultation.findOneAndUpdate(
-      { id: req.params.id },
+      { id: req.params.id, hospitalId: req.hospitalId },
       req.body,
       { new: true }
     );
@@ -132,6 +141,7 @@ router.delete("/:id", async (req, res) => {
   try {
     const consultation = await Consultation.findOneAndDelete({
       id: req.params.id,
+      hospitalId: req.hospitalId,
     });
     if (!consultation) {
       return res.status(404).json({ message: "Consultation not found" });
@@ -147,6 +157,7 @@ router.get("/patient/:patientId", async (req, res) => {
   try {
     const consultations = await Consultation.find({
       patientId: req.params.patientId,
+      hospitalId: req.hospitalId,
     });
     res.json(consultations);
   } catch (error) {
@@ -159,6 +170,7 @@ router.get("/doctor/:doctorId", async (req, res) => {
   try {
     const consultations = await Consultation.find({
       doctorId: req.params.doctorId,
+      hospitalId: req.hospitalId,
     });
     res.json(consultations);
   } catch (error) {
@@ -171,6 +183,7 @@ router.get("/status/:status", async (req, res) => {
   try {
     const consultations = await Consultation.find({
       status: req.params.status,
+      hospitalId: req.hospitalId,
     });
     res.json(consultations);
   } catch (error) {
@@ -187,6 +200,7 @@ router.get("/date-range", async (req, res) => {
         $gte: new Date(startDate),
         $lte: new Date(endDate),
       },
+      hospitalId: req.hospitalId,
     });
     res.json(consultations);
   } catch (error) {

@@ -1,11 +1,14 @@
 const express = require("express");
 const router = express.Router();
 const Consent = require("../models/Consent");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 // Consent routes
 router.post("/", async (req, res) => {
   try {
-    const consent = new Consent(req.body);
+    const consent = new Consent({ ...req.body, hospitalId: req.hospitalId });
     await consent.save();
     res.status(201).json(consent);
   } catch (error) {
@@ -15,7 +18,7 @@ router.post("/", async (req, res) => {
 
 router.get("/", async (req, res) => {
   try {
-    const consents = await Consent.find({});
+    const consents = await Consent.find({ hospitalId: req.hospitalId });
     res.json(consents);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -24,7 +27,10 @@ router.get("/", async (req, res) => {
 
 router.get("/:id", async (req, res) => {
   try {
-    const consent = await Consent.findById(req.params.id);
+    const consent = await Consent.findOne({
+      _id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!consent) {
       return res.status(404).json({ message: "Consent not found" });
     }
@@ -36,7 +42,10 @@ router.get("/:id", async (req, res) => {
 
 router.get("/patient/:patientId", async (req, res) => {
   try {
-    const consents = await Consent.find({ patientId: req.params.patientId });
+    const consents = await Consent.find({
+      patientId: req.params.patientId,
+      hospitalId: req.hospitalId,
+    });
     res.json(consents);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -45,8 +54,8 @@ router.get("/patient/:patientId", async (req, res) => {
 
 router.put("/:id", async (req, res) => {
   try {
-    const consent = await Consent.findByIdAndUpdate(
-      req.params.id,
+    const consent = await Consent.findOneAndUpdate(
+      { _id: req.params.id, hospitalId: req.hospitalId },
       { $set: req.body },
       { new: true }
     );
@@ -61,7 +70,10 @@ router.put("/:id", async (req, res) => {
 
 router.delete("/:id", async (req, res) => {
   try {
-    const consent = await Consent.findByIdAndDelete(req.params.id);
+    const consent = await Consent.findOneAndDelete({
+      _id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!consent) {
       return res.status(404).json({ message: "Consent not found" });
     }

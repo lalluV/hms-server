@@ -1,11 +1,14 @@
 const express = require("express");
 const router = express.Router();
 const Expense = require("../models/Expense");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 // Get all expenses
 router.get("/", async (req, res) => {
   try {
-    const expenses = await Expense.find({});
+    const expenses = await Expense.find({ hospitalId: req.hospitalId });
     res.json(expenses);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -15,7 +18,10 @@ router.get("/", async (req, res) => {
 // Get expense by ID
 router.get("/:id", async (req, res) => {
   try {
-    const expense = await Expense.findOne({ id: req.params.id });
+    const expense = await Expense.findOne({
+      id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!expense) {
       return res.status(404).json({ message: "Expense not found" });
     }
@@ -28,7 +34,7 @@ router.get("/:id", async (req, res) => {
 // Create new expense
 router.post("/", async (req, res) => {
   try {
-    const expense = new Expense(req.body);
+    const expense = new Expense({ ...req.body, hospitalId: req.hospitalId });
     const newExpense = await expense.save();
     res.status(201).json(newExpense);
   } catch (error) {
@@ -40,7 +46,7 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const expense = await Expense.findOneAndUpdate(
-      { id: req.params.id },
+      { id: req.params.id, hospitalId: req.hospitalId },
       req.body,
       { new: true }
     );
@@ -56,7 +62,10 @@ router.put("/:id", async (req, res) => {
 // Delete expense
 router.delete("/:id", async (req, res) => {
   try {
-    const expense = await Expense.findOneAndDelete({ id: req.params.id });
+    const expense = await Expense.findOneAndDelete({
+      id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!expense) {
       return res.status(404).json({ message: "Expense not found" });
     }
@@ -69,7 +78,10 @@ router.delete("/:id", async (req, res) => {
 // Get expenses by category
 router.get("/category/:category", async (req, res) => {
   try {
-    const expenses = await Expense.find({ category: req.params.category });
+    const expenses = await Expense.find({
+      category: req.params.category,
+      hospitalId: req.hospitalId,
+    });
     res.json(expenses);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -85,6 +97,7 @@ router.get("/date-range", async (req, res) => {
         $gte: new Date(startDate),
         $lte: new Date(endDate),
       },
+      hospitalId: req.hospitalId,
     });
     res.json(expenses);
   } catch (error) {

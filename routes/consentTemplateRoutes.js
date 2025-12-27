@@ -1,11 +1,17 @@
 const express = require("express");
 const router = express.Router();
 const ConsentTemplate = require("../models/ConsentTemplate");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 // Consent Template routes
 router.post("/", async (req, res) => {
   try {
-    const template = new ConsentTemplate(req.body);
+    const template = new ConsentTemplate({
+      ...req.body,
+      hospitalId: req.hospitalId,
+    });
     await template.save();
     res.status(201).json(template);
   } catch (error) {
@@ -15,7 +21,9 @@ router.post("/", async (req, res) => {
 
 router.get("/", async (req, res) => {
   try {
-    const templates = await ConsentTemplate.find({});
+    const templates = await ConsentTemplate.find({
+      hospitalId: req.hospitalId,
+    });
     res.json(templates);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -24,7 +32,10 @@ router.get("/", async (req, res) => {
 
 router.get("/:id", async (req, res) => {
   try {
-    const template = await ConsentTemplate.findById(req.params.id);
+    const template = await ConsentTemplate.findOne({
+      _id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!template) {
       return res.status(404).json({ message: "Template not found" });
     }
@@ -36,8 +47,8 @@ router.get("/:id", async (req, res) => {
 
 router.put("/:id", async (req, res) => {
   try {
-    const template = await ConsentTemplate.findByIdAndUpdate(
-      req.params.id,
+    const template = await ConsentTemplate.findOneAndUpdate(
+      { _id: req.params.id, hospitalId: req.hospitalId },
       { $set: req.body },
       { new: true }
     );
@@ -52,7 +63,10 @@ router.put("/:id", async (req, res) => {
 
 router.delete("/:id", async (req, res) => {
   try {
-    const template = await ConsentTemplate.findByIdAndDelete(req.params.id);
+    const template = await ConsentTemplate.findOneAndDelete({
+      _id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!template) {
       return res.status(404).json({ message: "Template not found" });
     }

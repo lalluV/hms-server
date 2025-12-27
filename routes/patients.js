@@ -8,6 +8,9 @@ const PharmacyReceipt = require("../models/PharmacyReceipt");
 const AdvanceReceipt = require("../models/AdvanceReceipt");
 const InsuranceTariff = require("../models/InsuranceTariff");
 const InsuranceExclusion = require("../models/InsuranceExclusion");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 // Get all patients with pagination support
 router.get("/", async (req, res) => {
@@ -22,7 +25,7 @@ router.get("/", async (req, res) => {
     } = req.query;
 
     // Build query
-    const query = {};
+    const query = { hospitalId: req.hospitalId };
 
     // Filter by patient type (OP, IP, OPtoIP)
     if (patientType) {
@@ -99,7 +102,10 @@ router.get("/", async (req, res) => {
 // Get patients by phone number
 router.get("/phone/:phoneNumber", async (req, res) => {
   try {
-    const patients = await Patient.find({ phone: req.params.phoneNumber });
+    const patients = await Patient.find({
+      phone: req.params.phoneNumber,
+      hospitalId: req.hospitalId,
+    });
     res.json(patients);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -109,7 +115,10 @@ router.get("/phone/:phoneNumber", async (req, res) => {
 // Get patient by ID
 router.get("/:id", async (req, res) => {
   try {
-    const patient = await Patient.findOne({ UMRNo: req.params.id });
+    const patient = await Patient.findOne({
+      UMRNo: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!patient) {
       return res.status(404).json({ message: "Patient not found" });
     }
@@ -122,7 +131,7 @@ router.get("/:id", async (req, res) => {
 // Create new patient
 router.post("/", async (req, res) => {
   try {
-    const patient = new Patient(req.body);
+    const patient = new Patient({ ...req.body, hospitalId: req.hospitalId });
     const newPatient = await patient.save();
     res.status(201).json(newPatient);
   } catch (error) {
@@ -134,7 +143,7 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const patient = await Patient.findOneAndUpdate(
-      { UMRNo: req.params.id },
+      { UMRNo: req.params.id, hospitalId: req.hospitalId },
       req.body,
       { new: true }
     );
@@ -150,7 +159,10 @@ router.put("/:id", async (req, res) => {
 // Delete patient
 router.delete("/:id", async (req, res) => {
   try {
-    const patient = await Patient.findOneAndDelete({ UMRNo: req.params.id });
+    const patient = await Patient.findOneAndDelete({
+      UMRNo: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!patient) {
       return res.status(404).json({ message: "Patient not found" });
     }
@@ -163,7 +175,10 @@ router.delete("/:id", async (req, res) => {
 // Add medical history to patient
 router.post("/:id/medical-history", async (req, res) => {
   try {
-    const patient = await Patient.findOne({ UMRNo: req.params.id });
+    const patient = await Patient.findOne({
+      UMRNo: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!patient) {
       return res.status(404).json({ message: "Patient not found" });
     }
@@ -180,7 +195,10 @@ router.post("/:id/medical-history", async (req, res) => {
 // Update medical history
 router.put("/:id/medical-history/:historyId", async (req, res) => {
   try {
-    const patient = await Patient.findOne({ UMRNo: req.params.id });
+    const patient = await Patient.findOne({
+      UMRNo: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!patient) {
       return res.status(404).json({ message: "Patient not found" });
     }
@@ -211,23 +229,43 @@ router.get("/:id/interim-bill", async (req, res) => {
     const { id } = req.params;
     const { endDate } = req.query;
 
-    const patient = await Patient.findOne({ UMRNo: id });
+    const patient = await Patient.findOne({
+      UMRNo: id,
+      hospitalId: req.hospitalId,
+    });
     if (!patient) {
       return res.status(404).json({ message: "Patient not found" });
     }
 
     // Fetch all receipts for this patient
-    const consultationReceipts = await Consultation.find({ patientId: id });
-    const actionReceipts = await Action.find({ patientId: id });
+    const consultationReceipts = await Consultation.find({
+      patientId: id,
+      hospitalId: req.hospitalId,
+    });
+    const actionReceipts = await Action.find({
+      patientId: id,
+      hospitalId: req.hospitalId,
+    });
     const diagnosticsReceipts = await DiagnosticsReceipt.find({
       patientId: id,
+      hospitalId: req.hospitalId,
     });
-    const pharmacyReceipts = await PharmacyReceipt.find({ patientId: id });
-    const advanceReceipts = await AdvanceReceipt.find({ patientId: id });
+    const pharmacyReceipts = await PharmacyReceipt.find({
+      patientId: id,
+      hospitalId: req.hospitalId,
+    });
+    const advanceReceipts = await AdvanceReceipt.find({
+      patientId: id,
+      hospitalId: req.hospitalId,
+    });
 
     // Fetch insurance data
-    const insuranceTariffs = await InsuranceTariff.find();
-    const insuranceExclusions = await InsuranceExclusion.find();
+    const insuranceTariffs = await InsuranceTariff.find({
+      hospitalId: req.hospitalId,
+    });
+    const insuranceExclusions = await InsuranceExclusion.find({
+      hospitalId: req.hospitalId,
+    });
 
     // Calculate bill breakdown
     const dayjs = require("dayjs");

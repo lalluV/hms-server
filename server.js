@@ -16,6 +16,7 @@ app.use(
     origin: [
       "http://localhost:5173",
       "http://localhost:5174",
+      "http://localhost:5175",
       "https://srichakrahms.web.app",
     ],
     credentials: true,
@@ -36,6 +37,7 @@ mongoose
 app.use("/api/pharmacy", require("./routes/pharmacy"));
 // Use routes
 app.use("/api/auth", require("./routes/auth"));
+app.use("/api/admin/auth", require("./routes/adminAuth"));
 app.use("/api/patients", require("./routes/patients"));
 app.use("/api/appointments", require("./routes/appointments"));
 app.use("/api/staff", require("./routes/staff"));
@@ -67,6 +69,11 @@ app.use("/api/upload", require("./routes/upload"));
 app.use("/api/diagnostics-users", require("./routes/diagnosticsUsers"));
 app.use("/api/dashboard", require("./routes/dashboard"));
 app.use("/api/commissions", require("./routes/commissions"));
+app.use("/api/hospitals", require("./routes/hospitals"));
+app.use("/api/master-medicines", require("./routes/masterMedicines"));
+app.use("/api/master-parameters", require("./routes/masterParameters"));
+app.use("/api/master-diagnostics", require("./routes/masterDiagnostics"));
+app.use("/api/master-lab-items", require("./routes/masterLabItems"));
 
 // Error handling middleware
 app.use((err, req, res, next) => {

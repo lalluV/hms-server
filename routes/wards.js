@@ -1,11 +1,14 @@
 const express = require("express");
 const router = express.Router();
 const Ward = require("../models/Ward");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 // Get all wards
 router.get("/", async (req, res) => {
   try {
-    const wards = await Ward.find({});
+    const wards = await Ward.find({ hospitalId: req.hospitalId });
     res.json(wards);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -15,7 +18,10 @@ router.get("/", async (req, res) => {
 // Get ward by ID
 router.get("/:id", async (req, res) => {
   try {
-    const ward = await Ward.findOne({ wardId: req.params.id });
+    const ward = await Ward.findOne({
+      wardId: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!ward) {
       return res.status(404).json({ message: "Ward not found" });
     }
@@ -28,7 +34,10 @@ router.get("/:id", async (req, res) => {
 // Create new ward
 router.post("/", async (req, res) => {
   try {
-    const ward = new Ward(req.body);
+    const ward = new Ward({
+      ...req.body,
+      hospitalId: req.hospitalId,
+    });
     const newWard = await ward.save();
     res.status(201).json(newWard);
   } catch (error) {
@@ -40,7 +49,7 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const ward = await Ward.findOneAndUpdate(
-      { wardId: req.params.id },
+      { wardId: req.params.id, hospitalId: req.hospitalId },
       req.body,
       {
         new: true,
@@ -58,7 +67,10 @@ router.put("/:id", async (req, res) => {
 // Delete ward
 router.delete("/:id", async (req, res) => {
   try {
-    const ward = await Ward.findOneAndDelete({ wardId: req.params.id });
+    const ward = await Ward.findOneAndDelete({
+      wardId: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!ward) {
       return res.status(404).json({ message: "Ward not found" });
     }
@@ -71,7 +83,10 @@ router.delete("/:id", async (req, res) => {
 // Get ward by type
 router.get("/type/:type", async (req, res) => {
   try {
-    const wards = await Ward.find({ type: req.params.type });
+    const wards = await Ward.find({
+      type: req.params.type,
+      hospitalId: req.hospitalId,
+    });
     res.json(wards);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -81,7 +96,10 @@ router.get("/type/:type", async (req, res) => {
 // Get ward by status
 router.get("/status/:status", async (req, res) => {
   try {
-    const wards = await Ward.find({ status: req.params.status });
+    const wards = await Ward.find({
+      status: req.params.status,
+      hospitalId: req.hospitalId,
+    });
     res.json(wards);
   } catch (error) {
     res.status(500).json({ message: error.message });

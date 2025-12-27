@@ -6,6 +6,9 @@ const Action = require("../models/Action");
 const DiagnosticsReceipt = require("../models/DiagnosticsReceipt");
 const PharmacyReceipt = require("../models/PharmacyReceipt");
 const AdvanceReceipt = require("../models/AdvanceReceipt");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 // Helper functions (same logic as frontend commissionService)
 const getReceiptType = (receipt) => {
@@ -386,12 +389,18 @@ router.get("/", async (req, res) => {
       pharmacyReceipts,
       advanceReceipts,
     ] = await Promise.all([
-      Patient.find({}),
-      Consultation.find({}),
-      Action.find({ patientId: { $exists: true, $ne: null } }),
-      DiagnosticsReceipt.find({}),
-      PharmacyReceipt.find({ type: "pharmacy-sale" }),
-      AdvanceReceipt.find({}),
+      Patient.find({ hospitalId: req.hospitalId }),
+      Consultation.find({ hospitalId: req.hospitalId }),
+      Action.find({
+        patientId: { $exists: true, $ne: null },
+        hospitalId: req.hospitalId,
+      }),
+      DiagnosticsReceipt.find({ hospitalId: req.hospitalId }),
+      PharmacyReceipt.find({
+        type: "pharmacy-sale",
+        hospitalId: req.hospitalId,
+      }),
+      AdvanceReceipt.find({ hospitalId: req.hospitalId }),
     ]);
 
     const allReceipts = [
@@ -510,12 +519,18 @@ router.get("/summary", async (req, res) => {
       pharmacyReceipts,
       advanceReceipts,
     ] = await Promise.all([
-      Patient.find({}),
-      Consultation.find({}),
-      Action.find({ patientId: { $exists: true, $ne: null } }),
-      DiagnosticsReceipt.find({}),
-      PharmacyReceipt.find({ type: "pharmacy-sale" }),
-      AdvanceReceipt.find({}),
+      Patient.find({ hospitalId: req.hospitalId }),
+      Consultation.find({ hospitalId: req.hospitalId }),
+      Action.find({
+        patientId: { $exists: true, $ne: null },
+        hospitalId: req.hospitalId,
+      }),
+      DiagnosticsReceipt.find({ hospitalId: req.hospitalId }),
+      PharmacyReceipt.find({
+        type: "pharmacy-sale",
+        hospitalId: req.hospitalId,
+      }),
+      AdvanceReceipt.find({ hospitalId: req.hospitalId }),
     ]);
 
     const allReceipts = [
@@ -686,6 +701,7 @@ router.get("/patients-with-commission", async (req, res) => {
       commissionEarnerType: { $exists: true, $ne: null },
       commissionEarnerId: { $exists: true, $ne: null },
       commissionEarnerName: { $exists: true, $ne: null },
+      hospitalId: req.hospitalId,
     });
     res.json(patients);
   } catch (error) {

@@ -1,11 +1,16 @@
 const express = require("express");
 const router = express.Router();
 const InsuranceExclusion = require("../models/InsuranceExclusion");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 // Get all insurance exclusions
 router.get("/", async (req, res) => {
   try {
-    const exclusions = await InsuranceExclusion.find();
+    const exclusions = await InsuranceExclusion.find({
+      hospitalId: req.hospitalId,
+    });
     res.json(exclusions);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -15,7 +20,10 @@ router.get("/", async (req, res) => {
 // Get insurance exclusion by ID
 router.get("/:id", async (req, res) => {
   try {
-    const exclusion = await InsuranceExclusion.findById(req.params.id);
+    const exclusion = await InsuranceExclusion.findOne({
+      _id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!exclusion)
       return res.status(404).json({ message: "Exclusion not found" });
     res.json(exclusion);
@@ -26,7 +34,10 @@ router.get("/:id", async (req, res) => {
 
 // Create insurance exclusion
 router.post("/", async (req, res) => {
-  const exclusion = new InsuranceExclusion(req.body);
+  const exclusion = new InsuranceExclusion({
+    ...req.body,
+    hospitalId: req.hospitalId,
+  });
   try {
     const newExclusion = await exclusion.save();
     res.status(201).json(newExclusion);
@@ -38,8 +49,8 @@ router.post("/", async (req, res) => {
 // Update insurance exclusion
 router.put("/:id", async (req, res) => {
   try {
-    const exclusion = await InsuranceExclusion.findByIdAndUpdate(
-      req.params.id,
+    const exclusion = await InsuranceExclusion.findOneAndUpdate(
+      { _id: req.params.id, hospitalId: req.hospitalId },
       req.body,
       { new: true }
     );
@@ -54,7 +65,10 @@ router.put("/:id", async (req, res) => {
 // Delete insurance exclusion
 router.delete("/:id", async (req, res) => {
   try {
-    const exclusion = await InsuranceExclusion.findByIdAndDelete(req.params.id);
+    const exclusion = await InsuranceExclusion.findOneAndDelete({
+      _id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!exclusion)
       return res.status(404).json({ message: "Exclusion not found" });
     res.json({ message: "Exclusion deleted" });
@@ -68,6 +82,7 @@ router.get("/company/:companyId", async (req, res) => {
   try {
     const exclusions = await InsuranceExclusion.find({
       companyId: req.params.companyId,
+      hospitalId: req.hospitalId,
     });
     res.json(exclusions);
   } catch (error) {

@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const axios = require("axios");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 const DEEPSEEK_API_BASE_URL = "https://api.deepseek.com/v1";
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;

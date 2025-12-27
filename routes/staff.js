@@ -2,11 +2,14 @@ const express = require("express");
 const router = express.Router();
 const bcrypt = require("bcryptjs");
 const Staff = require("../models/Staff");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 // Get all staff members
 router.get("/", async (req, res) => {
   try {
-    const staff = await Staff.find({});
+    const staff = await Staff.find({ hospitalId: req.hospitalId });
     res.json(staff);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -16,7 +19,10 @@ router.get("/", async (req, res) => {
 // Get staff member by ID (userId)
 router.get("/:id", async (req, res) => {
   try {
-    const staff = await Staff.findOne({ userId: req.params.id });
+    const staff = await Staff.findOne({
+      userId: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!staff) {
       return res.status(404).json({ message: "Staff member not found" });
     }
@@ -29,7 +35,10 @@ router.get("/:id", async (req, res) => {
 // Get staff member by employee ID
 router.get("/employee/:employeeId", async (req, res) => {
   try {
-    const staff = await Staff.findOne({ id: req.params.employeeId });
+    const staff = await Staff.findOne({
+      id: req.params.employeeId,
+      hospitalId: req.hospitalId,
+    });
     if (!staff) {
       return res.status(404).json({ message: "Staff member not found" });
     }
@@ -46,7 +55,10 @@ router.post("/", async (req, res) => {
 
     // Check if staff member with userId already exists
     if (staffData.userId) {
-      const existingStaff = await Staff.findOne({ userId: staffData.userId });
+      const existingStaff = await Staff.findOne({
+        userId: staffData.userId,
+        hospitalId: req.hospitalId,
+      });
       if (existingStaff) {
         return res.status(400).json({ message: "User ID already exists" });
       }
@@ -58,7 +70,7 @@ router.post("/", async (req, res) => {
       staffData.password = await bcrypt.hash(password, salt);
     }
 
-    const staff = new Staff(staffData);
+    const staff = new Staff({ ...staffData, hospitalId: req.hospitalId });
     const newStaff = await staff.save();
     res.status(201).json(newStaff);
   } catch (error) {
@@ -78,7 +90,7 @@ router.put("/user/:userId", async (req, res) => {
     }
 
     const staff = await Staff.findOneAndUpdate(
-      { userId: req.params.userId },
+      { userId: req.params.userId, hospitalId: req.hospitalId },
       updateData,
       { new: true }
     );
@@ -103,7 +115,7 @@ router.put("/:id", async (req, res) => {
     }
 
     const staff = await Staff.findOneAndUpdate(
-      { id: req.params.id },
+      { id: req.params.id, hospitalId: req.hospitalId },
       updateData,
       { new: true }
     );
@@ -119,7 +131,10 @@ router.put("/:id", async (req, res) => {
 // Delete staff member
 router.delete("/:id", async (req, res) => {
   try {
-    const staff = await Staff.findOneAndDelete({ id: req.params.id });
+    const staff = await Staff.findOneAndDelete({
+      id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!staff) {
       return res.status(404).json({ message: "Staff member not found" });
     }
@@ -132,7 +147,10 @@ router.delete("/:id", async (req, res) => {
 // Get staff by department
 router.get("/department/:department", async (req, res) => {
   try {
-    const staff = await Staff.find({ department: req.params.department });
+    const staff = await Staff.find({
+      department: req.params.department,
+      hospitalId: req.hospitalId,
+    });
     res.json(staff);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -142,7 +160,10 @@ router.get("/department/:department", async (req, res) => {
 // Get staff by type
 router.get("/type/:type", async (req, res) => {
   try {
-    const staff = await Staff.find({ type: req.params.type });
+    const staff = await Staff.find({
+      type: req.params.type,
+      hospitalId: req.hospitalId,
+    });
     res.json(staff);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -152,7 +173,10 @@ router.get("/type/:type", async (req, res) => {
 // Get staff by status
 router.get("/status/:status", async (req, res) => {
   try {
-    const staff = await Staff.find({ status: req.params.status });
+    const staff = await Staff.find({
+      status: req.params.status,
+      hospitalId: req.hospitalId,
+    });
     res.json(staff);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -164,7 +188,7 @@ router.put("/:id/status", async (req, res) => {
   try {
     const { status } = req.body;
     const staff = await Staff.findOneAndUpdate(
-      { id: req.params.id },
+      { id: req.params.id, hospitalId: req.hospitalId },
       { $set: { status } },
       { new: true }
     );

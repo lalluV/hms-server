@@ -1,11 +1,14 @@
 const express = require("express");
 const router = express.Router();
 const Vendor = require("../models/Vendor");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 // Get all vendors
 router.get("/", async (req, res) => {
   try {
-    const vendors = await Vendor.find();
+    const vendors = await Vendor.find({ hospitalId: req.hospitalId });
     res.json(vendors);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -15,7 +18,10 @@ router.get("/", async (req, res) => {
 // Get vendor by ID
 router.get("/:id", async (req, res) => {
   try {
-    const vendor = await Vendor.findById(req.params.id);
+    const vendor = await Vendor.findOne({
+      _id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!vendor) {
       return res.status(404).json({ message: "Vendor not found" });
     }
@@ -27,7 +33,7 @@ router.get("/:id", async (req, res) => {
 
 // Create vendor
 router.post("/", async (req, res) => {
-  const vendor = new Vendor(req.body);
+  const vendor = new Vendor({ ...req.body, hospitalId: req.hospitalId });
   try {
     const newVendor = await vendor.save();
     res.status(201).json(newVendor);
@@ -39,9 +45,13 @@ router.post("/", async (req, res) => {
 // Update vendor
 router.put("/:id", async (req, res) => {
   try {
-    const vendor = await Vendor.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-    });
+    const vendor = await Vendor.findOneAndUpdate(
+      { _id: req.params.id, hospitalId: req.hospitalId },
+      req.body,
+      {
+        new: true,
+      }
+    );
     if (!vendor) {
       return res.status(404).json({ message: "Vendor not found" });
     }
@@ -54,7 +64,10 @@ router.put("/:id", async (req, res) => {
 // Delete vendor
 router.delete("/:id", async (req, res) => {
   try {
-    const vendor = await Vendor.findByIdAndDelete(req.params.id);
+    const vendor = await Vendor.findOneAndDelete({
+      _id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!vendor) {
       return res.status(404).json({ message: "Vendor not found" });
     }
@@ -67,7 +80,10 @@ router.delete("/:id", async (req, res) => {
 // Get vendors by type
 router.get("/type/:type", async (req, res) => {
   try {
-    const vendors = await Vendor.find({ type: req.params.type });
+    const vendors = await Vendor.find({
+      type: req.params.type,
+      hospitalId: req.hospitalId,
+    });
     res.json(vendors);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -77,7 +93,10 @@ router.get("/type/:type", async (req, res) => {
 // Get vendors by status
 router.get("/status/:status", async (req, res) => {
   try {
-    const vendors = await Vendor.find({ status: req.params.status });
+    const vendors = await Vendor.find({
+      status: req.params.status,
+      hospitalId: req.hospitalId,
+    });
     res.json(vendors);
   } catch (error) {
     res.status(500).json({ message: error.message });

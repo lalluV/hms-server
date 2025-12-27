@@ -1,11 +1,16 @@
 const express = require("express");
 const router = express.Router();
 const Stamp = require("../models/Stamp");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 // Get all stamps
 router.get("/", async (req, res) => {
   try {
-    const stamps = await Stamp.find({}).sort({ createdAt: -1 });
+    const stamps = await Stamp.find({ hospitalId: req.hospitalId }).sort({
+      createdAt: -1,
+    });
     res.json(stamps);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -15,7 +20,10 @@ router.get("/", async (req, res) => {
 // Get stamp by ID
 router.get("/:id", async (req, res) => {
   try {
-    const stamp = await Stamp.findOne({ id: req.params.id });
+    const stamp = await Stamp.findOne({
+      id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!stamp) {
       return res.status(404).json({ message: "Stamp not found" });
     }
@@ -31,6 +39,7 @@ router.get("/department/:department", async (req, res) => {
     const stamps = await Stamp.find({
       department: req.params.department,
       isActive: true,
+      hospitalId: req.hospitalId,
     }).sort({ createdAt: -1 });
     res.json(stamps);
   } catch (error) {
@@ -44,6 +53,7 @@ router.get("/category/:category", async (req, res) => {
     const stamps = await Stamp.find({
       category: req.params.category,
       isActive: true,
+      hospitalId: req.hospitalId,
     }).sort({ createdAt: -1 });
     res.json(stamps);
   } catch (error) {
@@ -60,6 +70,7 @@ router.post("/", async (req, res) => {
       id: stampId,
       createdAt: new Date(),
       updatedAt: new Date(),
+      hospitalId: req.hospitalId,
     };
 
     const stamp = new Stamp(stampData);
@@ -74,7 +85,7 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const stamp = await Stamp.findOneAndUpdate(
-      { id: req.params.id },
+      { id: req.params.id, hospitalId: req.hospitalId },
       { ...req.body, updatedAt: new Date() },
       { new: true, runValidators: true }
     );
@@ -92,7 +103,10 @@ router.put("/:id", async (req, res) => {
 // Delete stamp
 router.delete("/:id", async (req, res) => {
   try {
-    const stamp = await Stamp.findOneAndDelete({ id: req.params.id });
+    const stamp = await Stamp.findOneAndDelete({
+      id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!stamp) {
       return res.status(404).json({ message: "Stamp not found" });
     }
@@ -105,7 +119,10 @@ router.delete("/:id", async (req, res) => {
 // Toggle stamp active status
 router.patch("/:id/toggle", async (req, res) => {
   try {
-    const stamp = await Stamp.findOne({ id: req.params.id });
+    const stamp = await Stamp.findOne({
+      id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!stamp) {
       return res.status(404).json({ message: "Stamp not found" });
     }

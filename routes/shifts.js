@@ -1,11 +1,14 @@
 const express = require("express");
 const router = express.Router();
 const Shift = require("../models/Shift");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 // Get all shifts
 router.get("/", async (req, res) => {
   try {
-    const shifts = await Shift.find({});
+    const shifts = await Shift.find({ hospitalId: req.hospitalId });
     res.json(shifts);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -15,7 +18,10 @@ router.get("/", async (req, res) => {
 // Get shift by ID
 router.get("/:id", async (req, res) => {
   try {
-    const shift = await Shift.findOne({ id: req.params.id });
+    const shift = await Shift.findOne({
+      id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!shift) {
       return res.status(404).json({ message: "Shift not found" });
     }
@@ -28,7 +34,7 @@ router.get("/:id", async (req, res) => {
 // Create new shift
 router.post("/", async (req, res) => {
   try {
-    const shift = new Shift(req.body);
+    const shift = new Shift({ ...req.body, hospitalId: req.hospitalId });
     const newShift = await shift.save();
     res.status(201).json(newShift);
   } catch (error) {
@@ -40,7 +46,7 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const shift = await Shift.findOneAndUpdate(
-      { id: req.params.id },
+      { id: req.params.id, hospitalId: req.hospitalId },
       req.body,
       { new: true }
     );
@@ -56,7 +62,10 @@ router.put("/:id", async (req, res) => {
 // Delete shift
 router.delete("/:id", async (req, res) => {
   try {
-    const shift = await Shift.findOneAndDelete({ id: req.params.id });
+    const shift = await Shift.findOneAndDelete({
+      id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!shift) {
       return res.status(404).json({ message: "Shift not found" });
     }
@@ -69,7 +78,10 @@ router.delete("/:id", async (req, res) => {
 // Get shifts by staff ID
 router.get("/staff/:staffId", async (req, res) => {
   try {
-    const shifts = await Shift.find({ staffId: req.params.staffId });
+    const shifts = await Shift.find({
+      staffId: req.params.staffId,
+      hospitalId: req.hospitalId,
+    });
     res.json(shifts);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -79,7 +91,10 @@ router.get("/staff/:staffId", async (req, res) => {
 // Get shifts by type
 router.get("/type/:type", async (req, res) => {
   try {
-    const shifts = await Shift.find({ type: req.params.type });
+    const shifts = await Shift.find({
+      type: req.params.type,
+      hospitalId: req.hospitalId,
+    });
     res.json(shifts);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -95,6 +110,7 @@ router.get("/date-range", async (req, res) => {
         $gte: new Date(startDate),
         $lte: new Date(endDate),
       },
+      hospitalId: req.hospitalId,
     });
     res.json(shifts);
   } catch (error) {
@@ -106,7 +122,7 @@ router.get("/date-range", async (req, res) => {
 router.post("/initialize", async (req, res) => {
   try {
     // Check if shifts already exist
-    const existingShifts = await Shift.find({});
+    const existingShifts = await Shift.find({ hospitalId: req.hospitalId });
 
     if (existingShifts.length > 0) {
       return res.json({
@@ -140,7 +156,9 @@ router.post("/initialize", async (req, res) => {
       },
     ];
 
-    const createdShifts = await Shift.insertMany(defaultShifts);
+    const createdShifts = await Shift.insertMany(
+      defaultShifts.map((s) => ({ ...s, hospitalId: req.hospitalId }))
+    );
     res
       .status(201)
       .json({ message: "Default shifts initialized", shifts: createdShifts });
@@ -161,13 +179,13 @@ router.post("/:shiftId/assign-employee", async (req, res) => {
 
     // Remove employee from all other shifts first
     await Shift.updateMany(
-      { "employees.id": employee.id },
+      { "employees.id": employee.id, hospitalId: req.hospitalId },
       { $pull: { employees: { id: employee.id } } }
     );
 
     // Add employee to the specified shift
     const shift = await Shift.findOneAndUpdate(
-      { id: shiftId },
+      { id: shiftId, hospitalId: req.hospitalId },
       { $addToSet: { employees: employee } },
       { new: true }
     );
@@ -188,7 +206,7 @@ router.delete("/:shiftId/remove-employee/:employeeId", async (req, res) => {
     const { shiftId, employeeId } = req.params;
 
     const shift = await Shift.findOneAndUpdate(
-      { id: shiftId },
+      { id: shiftId, hospitalId: req.hospitalId },
       { $pull: { employees: { id: employeeId } } },
       { new: true }
     );
@@ -216,13 +234,13 @@ router.post("/move-employee", async (req, res) => {
 
     // Remove employee from current shift
     await Shift.updateOne(
-      { shiftName: fromShiftName },
+      { shiftName: fromShiftName, hospitalId: req.hospitalId },
       { $pull: { employees: { id: employee.id } } }
     );
 
     // Add employee to new shift
     const updatedShift = await Shift.findOneAndUpdate(
-      { shiftName: toShiftName },
+      { shiftName: toShiftName, hospitalId: req.hospitalId },
       { $addToSet: { employees: employee } },
       { new: true }
     );
@@ -232,7 +250,7 @@ router.post("/move-employee", async (req, res) => {
     }
 
     // Get all shifts to return complete data
-    const allShifts = await Shift.find({});
+    const allShifts = await Shift.find({ hospitalId: req.hospitalId });
     res.json(allShifts);
   } catch (error) {
     res.status(500).json({ message: error.message });

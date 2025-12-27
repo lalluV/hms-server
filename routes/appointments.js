@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const Appointment = require("../models/Appointment");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 // Get all appointments with pagination support
 router.get("/", async (req, res) => {
@@ -17,7 +20,7 @@ router.get("/", async (req, res) => {
     } = req.query;
 
     // Build query
-    const query = {};
+    const query = { hospitalId: req.hospitalId };
 
     // Filter by doctor ID
     if (doctorId) {
@@ -88,7 +91,10 @@ router.get("/", async (req, res) => {
 // Get appointment by ID
 router.get("/:id", async (req, res) => {
   try {
-    const appointment = await Appointment.findById(req.params.id);
+    const appointment = await Appointment.findOne({
+      _id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!appointment) {
       return res.status(404).json({ message: "Appointment not found" });
     }
@@ -101,7 +107,10 @@ router.get("/:id", async (req, res) => {
 // Create new appointment
 router.post("/", async (req, res) => {
   try {
-    const appointment = new Appointment(req.body);
+    const appointment = new Appointment({
+      ...req.body,
+      hospitalId: req.hospitalId,
+    });
     const newAppointment = await appointment.save();
     res.status(201).json(newAppointment);
   } catch (error) {
@@ -112,8 +121,8 @@ router.post("/", async (req, res) => {
 // Update appointment
 router.put("/:id", async (req, res) => {
   try {
-    const appointment = await Appointment.findByIdAndUpdate(
-      req.params.id,
+    const appointment = await Appointment.findOneAndUpdate(
+      { _id: req.params.id, hospitalId: req.hospitalId },
       req.body,
       { new: true }
     );
@@ -129,7 +138,10 @@ router.put("/:id", async (req, res) => {
 // Delete appointment
 router.delete("/:id", async (req, res) => {
   try {
-    const appointment = await Appointment.findByIdAndDelete(req.params.id);
+    const appointment = await Appointment.findOneAndDelete({
+      _id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!appointment) {
       return res.status(404).json({ message: "Appointment not found" });
     }
@@ -144,6 +156,7 @@ router.get("/doctor/:doctorId", async (req, res) => {
   try {
     const appointments = await Appointment.find({
       doctorId: req.params.doctorId,
+      hospitalId: req.hospitalId,
     });
     res.json(appointments);
   } catch (error) {
@@ -156,6 +169,7 @@ router.get("/patient/:patientId", async (req, res) => {
   try {
     const appointments = await Appointment.find({
       patientId: req.params.patientId,
+      hospitalId: req.hospitalId,
     });
     res.json(appointments);
   } catch (error) {

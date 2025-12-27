@@ -10,6 +10,9 @@ const AdvanceReceipt = require("../models/AdvanceReceipt");
 const Expense = require("../models/Expense");
 const Staff = require("../models/Staff");
 const dayjs = require("dayjs");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 // Helper function to calculate days between dates
 const calculateDays = (startDate, endDate) => {
@@ -38,15 +41,18 @@ router.get("/statistics", async (req, res) => {
       expenses,
       staff,
     ] = await Promise.all([
-      Patient.find({}),
-      Appointment.find({}),
-      Consultation.find({}),
-      Action.find({ patientId: { $exists: true, $ne: null } }),
-      DiagnosticsReceipt.find({}),
-      PharmacyReceipt.find({}),
-      AdvanceReceipt.find({}),
-      Expense.find({}),
-      Staff.find({}),
+      Patient.find({ hospitalId: req.hospitalId }),
+      Appointment.find({ hospitalId: req.hospitalId }),
+      Consultation.find({ hospitalId: req.hospitalId }),
+      Action.find({
+        patientId: { $exists: true, $ne: null },
+        hospitalId: req.hospitalId,
+      }),
+      DiagnosticsReceipt.find({ hospitalId: req.hospitalId }),
+      PharmacyReceipt.find({ hospitalId: req.hospitalId }),
+      AdvanceReceipt.find({ hospitalId: req.hospitalId }),
+      Expense.find({ hospitalId: req.hospitalId }),
+      Staff.find({ hospitalId: req.hospitalId }),
     ]);
 
     // Calculate consultation charges

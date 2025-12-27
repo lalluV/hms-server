@@ -1,11 +1,14 @@
 const express = require("express");
 const router = express.Router();
 const Department = require("../models/Department");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 // Get all departments
 router.get("/", async (req, res) => {
   try {
-    const departments = await Department.find({});
+    const departments = await Department.find({ hospitalId: req.hospitalId });
     res.json(departments);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -28,7 +31,10 @@ router.get("/:id", async (req, res) => {
 // Create new department
 router.post("/", async (req, res) => {
   try {
-    const department = new Department(req.body);
+    const department = new Department({
+      ...req.body,
+      hospitalId: req.hospitalId,
+    });
     const newDepartment = await department.save();
     res.status(201).json(newDepartment);
   } catch (error) {
@@ -71,7 +77,10 @@ router.delete("/:id", async (req, res) => {
 // Get departments by type
 router.get("/type/:type", async (req, res) => {
   try {
-    const departments = await Department.find({ type: req.params.type });
+    const departments = await Department.find({
+      type: req.params.type,
+      hospitalId: req.hospitalId,
+    });
     res.json(departments);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -81,7 +90,10 @@ router.get("/type/:type", async (req, res) => {
 // Get departments by status
 router.get("/status/:status", async (req, res) => {
   try {
-    const departments = await Department.find({ status: req.params.status });
+    const departments = await Department.find({
+      status: req.params.status,
+      hospitalId: req.hospitalId,
+    });
     res.json(departments);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -91,7 +103,10 @@ router.get("/status/:status", async (req, res) => {
 // Get departments by HOD
 router.get("/hod/:hodName", async (req, res) => {
   try {
-    const departments = await Department.find({ hod_name: req.params.hodName });
+    const departments = await Department.find({
+      hod_name: req.params.hodName,
+      hospitalId: req.hospitalId,
+    });
     res.json(departments);
   } catch (error) {
     res.status(500).json({ message: error.message });

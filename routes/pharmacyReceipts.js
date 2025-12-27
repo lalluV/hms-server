@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const PharmacyReceipt = require("../models/PharmacyReceipt");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 // Get all pharmacy receipts with pagination support
 router.get("/", async (req, res) => {
@@ -17,11 +20,17 @@ router.get("/", async (req, res) => {
     } = req.query;
 
     // Build query
-    const query = {};
+    const query = { hospitalId: req.hospitalId };
 
-    // Filter by type
+    // Filter by type (supports single type or comma-separated multiple types)
     if (type) {
-      query.type = type;
+      if (type.includes(",")) {
+        // Multiple types - use $in operator
+        query.type = { $in: type.split(",").map((t) => t.trim()) };
+      } else {
+        // Single type
+        query.type = type;
+      }
     }
 
     // Filter by status
@@ -53,6 +62,11 @@ router.get("/", async (req, res) => {
         { patientId: { $regex: search, $options: "i" } },
         { "items.item_code": { $regex: search, $options: "i" } },
         { "items.generic_name": { $regex: search, $options: "i" } },
+        // Purchase bill specific search fields
+        { "vendorData.vendorName": { $regex: search, $options: "i" } },
+        { "vendorData.mobile": { $regex: search, $options: "i" } },
+        { "items.code": { $regex: search, $options: "i" } },
+        { "items.quantity": { $regex: search, $options: "i" } },
       ];
     }
 
@@ -91,6 +105,7 @@ router.get("/:id", async (req, res) => {
   try {
     const receipt = await PharmacyReceipt.findById({
       receiptId: req.params.id,
+      hospitalId: req.hospitalId,
     });
     if (!receipt) {
       return res.status(404).json({ message: "Pharmacy receipt not found" });
@@ -103,7 +118,10 @@ router.get("/:id", async (req, res) => {
 
 // Create new pharmacy receipt
 router.post("/", async (req, res) => {
-  const receipt = new PharmacyReceipt(req.body);
+  const receipt = new PharmacyReceipt({
+    ...req.body,
+    hospitalId: req.hospitalId,
+  });
   try {
     const newReceipt = await receipt.save();
     res.status(201).json(newReceipt);
@@ -116,7 +134,7 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const receipt = await PharmacyReceipt.findByIdAndUpdate(
-      { receiptId: req.params.id },
+      { receiptId: req.params.id, hospitalId: req.hospitalId },
       req.body,
       { new: true }
     );
@@ -134,6 +152,7 @@ router.delete("/:id", async (req, res) => {
   try {
     const receipt = await PharmacyReceipt.findByIdAndDelete({
       receiptId: req.params.id,
+      hospitalId: req.hospitalId,
     });
     if (!receipt) {
       return res.status(404).json({ message: "Pharmacy receipt not found" });
@@ -147,7 +166,10 @@ router.delete("/:id", async (req, res) => {
 // Get pharmacy receipts by type
 router.get("/type/:type", async (req, res) => {
   try {
-    const receipts = await PharmacyReceipt.find({ type: req.params.type });
+    const receipts = await PharmacyReceipt.find({
+      type: req.params.type,
+      hospitalId: req.hospitalId,
+    });
     res.json(receipts);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -159,6 +181,7 @@ router.get("/patient/:patientId", async (req, res) => {
   try {
     const receipts = await PharmacyReceipt.find({
       patientId: req.params.patientId,
+      hospitalId: req.hospitalId,
     });
     res.json(receipts);
   } catch (error) {
@@ -175,6 +198,7 @@ router.get("/date-range", async (req, res) => {
         $gte: new Date(startDate),
         $lte: new Date(endDate),
       },
+      hospitalId: req.hospitalId,
     });
     res.json(receipts);
   } catch (error) {
@@ -185,7 +209,10 @@ router.get("/date-range", async (req, res) => {
 // Get pharmacy receipts by status
 router.get("/status/:status", async (req, res) => {
   try {
-    const receipts = await PharmacyReceipt.find({ status: req.params.status });
+    const receipts = await PharmacyReceipt.find({
+      status: req.params.status,
+      hospitalId: req.hospitalId,
+    });
     res.json(receipts);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -196,7 +223,7 @@ router.get("/status/:status", async (req, res) => {
 router.patch("/:id/status", async (req, res) => {
   try {
     const receipt = await PharmacyReceipt.findByIdAndUpdate(
-      req.params.id,
+      { _id: req.params.id, hospitalId: req.hospitalId },
       { status: req.body.status },
       { new: true }
     );

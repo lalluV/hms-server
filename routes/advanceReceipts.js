@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const AdvanceReceipt = require("../models/AdvanceReceipt");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 // Get all advance receipts with pagination support
 router.get("/", async (req, res) => {
@@ -16,7 +19,7 @@ router.get("/", async (req, res) => {
     } = req.query;
 
     // Build query
-    const query = {};
+    const query = { hospitalId: req.hospitalId };
 
     // Filter by status
     if (status) {
@@ -82,7 +85,10 @@ router.get("/", async (req, res) => {
 // Get advance receipt by ID
 router.get("/:id", async (req, res) => {
   try {
-    const receipt = await AdvanceReceipt.findOne({ id: req.params.id });
+    const receipt = await AdvanceReceipt.findOne({
+      id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!receipt) {
       return res.status(404).json({ message: "Advance receipt not found" });
     }
@@ -95,7 +101,10 @@ router.get("/:id", async (req, res) => {
 // Create new advance receipt
 router.post("/", async (req, res) => {
   try {
-    const receipt = new AdvanceReceipt(req.body);
+    const receipt = new AdvanceReceipt({
+      ...req.body,
+      hospitalId: req.hospitalId,
+    });
     const newReceipt = await receipt.save();
     res.status(201).json(newReceipt);
   } catch (error) {
@@ -107,7 +116,7 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const receipt = await AdvanceReceipt.findOneAndUpdate(
-      { id: req.params.id },
+      { id: req.params.id, hospitalId: req.hospitalId },
       req.body,
       { new: true }
     );
@@ -125,6 +134,7 @@ router.delete("/:id", async (req, res) => {
   try {
     const receipt = await AdvanceReceipt.findOneAndDelete({
       id: req.params.id,
+      hospitalId: req.hospitalId,
     });
     if (!receipt) {
       return res.status(404).json({ message: "Advance receipt not found" });
@@ -140,6 +150,7 @@ router.get("/patient/:patientId", async (req, res) => {
   try {
     const receipts = await AdvanceReceipt.find({
       patientId: req.params.patientId,
+      hospitalId: req.hospitalId,
     });
     res.json(receipts);
   } catch (error) {
@@ -152,6 +163,7 @@ router.get("/status/:status", async (req, res) => {
   try {
     const receipts = await AdvanceReceipt.find({
       status: req.params.status,
+      hospitalId: req.hospitalId,
     });
     res.json(receipts);
   } catch (error) {
@@ -168,6 +180,7 @@ router.get("/date-range", async (req, res) => {
         $gte: new Date(startDate),
         $lte: new Date(endDate),
       },
+      hospitalId: req.hospitalId,
     });
     res.json(receipts);
   } catch (error) {

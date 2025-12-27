@@ -14,6 +14,11 @@ async function initializeMeilisearch() {
     console.log("🔍 Initializing Meilisearch...");
     const health = await client.health();
     console.log("✅ Meilisearch server is reachable");
+
+    // Configure filterable attributes
+    await index.updateFilterableAttributes(["hospitalId"]);
+    console.log("✅ Meilisearch filterable attributes updated");
+
     return true;
   } catch (error) {
     console.error("❌ Meilisearch initialization failed:", error.message);
@@ -22,7 +27,7 @@ async function initializeMeilisearch() {
 }
 
 // Search medicines (optimized for speed)
-async function searchMedicines(query, limit = 10) {
+async function searchMedicines(query, hospitalId, limit = 10) {
   try {
     const cleanQuery = query.trim();
     if (!cleanQuery) return [];
@@ -49,6 +54,7 @@ async function searchMedicines(query, limit = 10) {
       attributesToHighlight: [],
       showRankingScore: false,
       showMatchesPosition: false,
+      filter: [`hospitalId = "${hospitalId}"`],
     });
 
     // Get full MongoDB documents for exact structure
@@ -97,6 +103,7 @@ async function indexDocument(doc) {
       generic_name2: doc.generic_name2,
       manufacturer: doc.manufacturer,
       description: doc.description,
+      hospitalId: doc.hospitalId.toString(),
     };
 
     await index.addDocuments([document]);
@@ -142,6 +149,7 @@ async function indexAllData() {
           generic_name2: doc.generic_name2,
           manufacturer: doc.manufacturer,
           description: doc.description,
+          hospitalId: doc.hospitalId.toString(),
         };
       });
 

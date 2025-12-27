@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const Action = require("../models/Action");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 // Get all actions with pagination support
 router.get("/", async (req, res) => {
@@ -18,7 +21,7 @@ router.get("/", async (req, res) => {
     } = req.query;
 
     // Build query
-    const query = {};
+    const query = { hospitalId: req.hospitalId };
 
     // Filter by type
     if (type) {
@@ -94,7 +97,10 @@ router.get("/", async (req, res) => {
 // Get action by ID
 router.get("/:id", async (req, res) => {
   try {
-    const action = await Action.findOne({ id: req.params.id });
+    const action = await Action.findOne({
+      id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!action) {
       return res.status(404).json({ message: "Action not found" });
     }
@@ -107,7 +113,7 @@ router.get("/:id", async (req, res) => {
 // Create new action
 router.post("/", async (req, res) => {
   try {
-    const action = new Action(req.body);
+    const action = new Action({ ...req.body, hospitalId: req.hospitalId });
     const newAction = await action.save();
     res.status(201).json(newAction);
   } catch (error) {
@@ -119,7 +125,7 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const action = await Action.findOneAndUpdate(
-      { id: req.params.id },
+      { id: req.params.id, hospitalId: req.hospitalId },
       req.body,
       { new: true }
     );
@@ -135,7 +141,10 @@ router.put("/:id", async (req, res) => {
 // Delete action
 router.delete("/:id", async (req, res) => {
   try {
-    const action = await Action.findOneAndDelete({ id: req.params.id });
+    const action = await Action.findOneAndDelete({
+      id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!action) {
       return res.status(404).json({ message: "Action not found" });
     }
@@ -150,6 +159,7 @@ router.get("/patient/:patientId", async (req, res) => {
   try {
     const actions = await Action.find({
       patientId: req.params.patientId,
+      hospitalId: req.hospitalId,
     });
     res.json(actions);
   } catch (error) {
@@ -162,6 +172,7 @@ router.get("/doctor/:doctorId", async (req, res) => {
   try {
     const actions = await Action.find({
       doctorId: req.params.doctorId,
+      hospitalId: req.hospitalId,
     });
     res.json(actions);
   } catch (error) {
@@ -174,6 +185,7 @@ router.get("/type/:type", async (req, res) => {
   try {
     const actions = await Action.find({
       type: req.params.type,
+      hospitalId: req.hospitalId,
     });
     res.json(actions);
   } catch (error) {
@@ -186,6 +198,7 @@ router.get("/status/:status", async (req, res) => {
   try {
     const actions = await Action.find({
       status: req.params.status,
+      hospitalId: req.hospitalId,
     });
     res.json(actions);
   } catch (error) {
@@ -202,6 +215,7 @@ router.get("/date-range", async (req, res) => {
         $gte: new Date(startDate),
         $lte: new Date(endDate),
       },
+      hospitalId: req.hospitalId,
     });
     res.json(actions);
   } catch (error) {

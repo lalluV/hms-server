@@ -1,11 +1,16 @@
 const express = require("express");
 const router = express.Router();
 const NurseDesc = require("../models/NurseDesc");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 // Get all nurse descriptions
 router.get("/", async (req, res) => {
   try {
-    const descriptions = await NurseDesc.find({});
+    const descriptions = await NurseDesc.find({
+      hospitalId: req.hospitalId,
+    });
     res.json(descriptions);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -15,7 +20,10 @@ router.get("/", async (req, res) => {
 // Get nurse description by ID
 router.get("/:id", async (req, res) => {
   try {
-    const description = await NurseDesc.findOne({ id: req.params.id });
+    const description = await NurseDesc.findOne({
+      id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!description) {
       return res.status(404).json({ message: "Nurse description not found" });
     }
@@ -28,7 +36,10 @@ router.get("/:id", async (req, res) => {
 // Create new nurse description
 router.post("/", async (req, res) => {
   try {
-    const description = new NurseDesc(req.body);
+    const description = new NurseDesc({
+      ...req.body,
+      hospitalId: req.hospitalId,
+    });
     const newDescription = await description.save();
     res.status(201).json(newDescription);
   } catch (error) {
@@ -40,7 +51,7 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const description = await NurseDesc.findOneAndUpdate(
-      { id: req.params.id },
+      { id: req.params.id, hospitalId: req.hospitalId },
       req.body,
       { new: true }
     );
@@ -56,7 +67,10 @@ router.put("/:id", async (req, res) => {
 // Delete nurse description
 router.delete("/:id", async (req, res) => {
   try {
-    const description = await NurseDesc.findOneAndDelete({ id: req.params.id });
+    const description = await NurseDesc.findOneAndDelete({
+      id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!description) {
       return res.status(404).json({ message: "Nurse description not found" });
     }
@@ -69,7 +83,10 @@ router.delete("/:id", async (req, res) => {
 // Get descriptions by nurse ID
 router.get("/nurse/:nurseId", async (req, res) => {
   try {
-    const descriptions = await NurseDesc.find({ nurseId: req.params.nurseId });
+    const descriptions = await NurseDesc.find({
+      nurseId: req.params.nurseId,
+      hospitalId: req.hospitalId,
+    });
     res.json(descriptions);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -81,6 +98,7 @@ router.get("/patient/:patientId", async (req, res) => {
   try {
     const descriptions = await NurseDesc.find({
       patientId: req.params.patientId,
+      hospitalId: req.hospitalId,
     });
     res.json(descriptions);
   } catch (error) {
@@ -97,6 +115,7 @@ router.get("/date-range", async (req, res) => {
         $gte: new Date(startDate),
         $lte: new Date(endDate),
       },
+      hospitalId: req.hospitalId,
     });
     res.json(descriptions);
   } catch (error) {

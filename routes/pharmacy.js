@@ -1,7 +1,12 @@
 // routes/pharmacy.js
 const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
 const PharmacyInventory = require("../models/PharmacyInventory");
+const MasterMedicine = require("../models/MasterMedicine");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 const multer = require("multer");
 const path = require("path");
 const axios = require("axios");
@@ -17,7 +22,14 @@ const {
 // Get popular medicines
 router.get("/popular", async (req, res) => {
   try {
-    const popularMedicines = await PharmacyInventory.find()
+    const popularMedicines = await PharmacyInventory.find({
+      hospitalId: req.hospitalId,
+      active: true,
+    })
+      .populate(
+        "medicineId",
+        "item_code generic_name generic_name2 manufacturer pack type description hsn_code"
+      )
       .sort({ orderingNumber: -1 })
       .limit(5);
     res.json(popularMedicines);
@@ -38,7 +50,7 @@ router.get("/search", async (req, res) => {
 
   try {
     const startTime = Date.now();
-    const results = await searchMedicines(q, parseInt(limit));
+    const results = await searchMedicines(q, req.hospitalId, parseInt(limit));
     const searchTime = Date.now() - startTime;
 
     res.json({
@@ -63,7 +75,15 @@ router.get("/search", async (req, res) => {
 // Get all pharmacy inventory items
 router.get("/", async (req, res) => {
   try {
-    const items = await PharmacyInventory.find();
+    const items = await PharmacyInventory.find({
+      hospitalId: req.hospitalId,
+      active: true,
+    })
+      .populate(
+        "medicineId",
+        "item_code generic_name generic_name2 manufacturer pack type description hsn_code"
+      )
+      .sort({ orderingNumber: -1 });
     res.json(items);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch pharmacy inventory" });
@@ -73,7 +93,26 @@ router.get("/", async (req, res) => {
 // Get pharmacy inventory item by ID
 router.get("/:id", async (req, res) => {
   try {
-    const item = await PharmacyInventory.findOne({ item_code: req.params.id });
+    // Check if id is a valid ObjectId
+    const isValidObjectId = mongoose.Types.ObjectId.isValid(req.params.id);
+
+    // Build query - only use _id if it's a valid ObjectId
+    const query = {
+      hospitalId: req.hospitalId,
+    };
+
+    if (isValidObjectId) {
+      // If valid ObjectId, try both _id and item_code
+      query.$or = [{ _id: req.params.id }, { item_code: req.params.id }];
+    } else {
+      // If not valid ObjectId, it must be an item_code
+      query.item_code = req.params.id;
+    }
+
+    const item = await PharmacyInventory.findOne(query).populate(
+      "medicineId",
+      "item_code generic_name generic_name2 manufacturer pack type description hsn_code"
+    );
     if (!item) {
       return res.status(404).json({ error: "Item not found" });
     }
@@ -86,30 +125,122 @@ router.get("/:id", async (req, res) => {
 // Create new pharmacy inventory item
 router.post("/", async (req, res) => {
   try {
-    const newItem = new PharmacyInventory(req.body);
+    let medicineId = req.body.medicineId;
+    let masterMedicine = null;
+
+    // If medicineId is provided, fetch master medicine and populate legacy fields
+    if (medicineId) {
+      masterMedicine = await MasterMedicine.findById(medicineId);
+      if (!masterMedicine) {
+        return res.status(404).json({ error: "Master medicine not found" });
+      }
+      if (!masterMedicine.active) {
+        return res.status(400).json({ error: "Master medicine is inactive" });
+      }
+    } else if (req.body.item_code) {
+      // Try to find master medicine by item_code
+      masterMedicine = await MasterMedicine.findOne({
+        item_code: req.body.item_code,
+        active: true,
+      });
+      if (masterMedicine) {
+        medicineId = masterMedicine._id;
+      }
+    }
+
+    // Check if inventory already exists for this medicine
+    if (medicineId) {
+      const existing = await PharmacyInventory.findOne({
+        hospitalId: req.hospitalId,
+        medicineId: medicineId,
+      });
+      if (existing) {
+        return res.status(400).json({
+          error: "Inventory already exists for this medicine",
+          existingItem: existing,
+        });
+      }
+    }
+
+    // Create inventory item
+    const inventoryData = {
+      ...req.body,
+      hospitalId: req.hospitalId,
+    };
+
+    // If master medicine found, populate legacy fields and set medicineId
+    if (masterMedicine) {
+      inventoryData.medicineId = masterMedicine._id;
+      // Populate legacy fields from master medicine if not provided
+      if (!inventoryData.item_code)
+        inventoryData.item_code = masterMedicine.item_code;
+      if (!inventoryData.generic_name)
+        inventoryData.generic_name = masterMedicine.generic_name;
+      if (!inventoryData.generic_name2)
+        inventoryData.generic_name2 = masterMedicine.generic_name2;
+      if (!inventoryData.pack) inventoryData.pack = masterMedicine.pack;
+      if (!inventoryData.manufacturer)
+        inventoryData.manufacturer = masterMedicine.manufacturer;
+      if (!inventoryData.type) inventoryData.type = masterMedicine.type;
+      if (!inventoryData.description)
+        inventoryData.description = masterMedicine.description;
+    }
+
+    const newItem = new PharmacyInventory(inventoryData);
     const savedItem = await newItem.save();
+
+    // Populate master medicine before returning
+    await savedItem.populate(
+      "medicineId",
+      "item_code generic_name generic_name2 manufacturer pack type description hsn_code"
+    );
 
     // Index the new item in Meilisearch
     await indexDocument(savedItem);
 
     res.status(201).json(savedItem);
   } catch (error) {
-    res.status(500).json({ error: "Failed to create item" });
+    console.error("Error creating pharmacy inventory:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to create item", details: error.message });
   }
 });
 
 // Update pharmacy inventory item
 router.put("/:id", async (req, res) => {
   try {
+    // Check if id is a valid ObjectId
+    const isValidObjectId = mongoose.Types.ObjectId.isValid(req.params.id);
+
+    // Build query - only use _id if it's a valid ObjectId
+    const query = {
+      hospitalId: req.hospitalId,
+    };
+
+    if (isValidObjectId) {
+      // If valid ObjectId, try both _id and item_code
+      query.$or = [{ _id: req.params.id }, { item_code: req.params.id }];
+    } else {
+      // If not valid ObjectId, it must be an item_code
+      query.item_code = req.params.id;
+    }
+
+    // Don't allow updating medicineId directly - it should be set during creation
+    const updateData = { ...req.body };
+    delete updateData.medicineId;
+
     const updatedItem = await PharmacyInventory.findOneAndUpdate(
-      { item_code: req.params.id },
-      req.body,
+      query,
+      updateData,
       { new: true }
+    ).populate(
+      "medicineId",
+      "item_code generic_name generic_name2 manufacturer pack type description hsn_code"
     );
+
     if (!updatedItem) {
-      return res
-        .status(404)
-        .json({ error: "Item not found with the given item code" });
+      return res.status(404).json({ error: "Item not found" });
     }
 
     // Update the item in Meilisearch
@@ -127,9 +258,10 @@ router.put("/:id", async (req, res) => {
 // Delete pharmacy inventory item
 router.delete("/:id", async (req, res) => {
   try {
-    const deletedItem = await PharmacyInventory.findByIdAndDelete(
-      req.params.id
-    );
+    const deletedItem = await PharmacyInventory.findByIdAndDelete({
+      _id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!deletedItem) {
       return res.status(404).json({ error: "Item not found" });
     }
@@ -148,7 +280,12 @@ router.get("/category/:category", async (req, res) => {
   try {
     const items = await PharmacyInventory.find({
       category: req.params.category,
-    });
+      hospitalId: req.hospitalId,
+      active: true,
+    }).populate(
+      "medicineId",
+      "item_code generic_name generic_name2 manufacturer pack type description hsn_code"
+    );
     res.json(items);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch items by category" });
@@ -158,7 +295,14 @@ router.get("/category/:category", async (req, res) => {
 // Get items by status
 router.get("/status/:status", async (req, res) => {
   try {
-    const items = await PharmacyInventory.find({ status: req.params.status });
+    const items = await PharmacyInventory.find({
+      status: req.params.status,
+      hospitalId: req.hospitalId,
+      active: true,
+    }).populate(
+      "medicineId",
+      "item_code generic_name generic_name2 manufacturer pack type description hsn_code"
+    );
     res.json(items);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch items by status" });
@@ -169,8 +313,24 @@ router.get("/status/:status", async (req, res) => {
 router.get("/low-stock", async (req, res) => {
   try {
     const lowStockItems = await PharmacyInventory.find({
-      quantity: { $lt: 10 }, // Assuming 10 is the threshold for low stock
-    });
+      hospitalId: req.hospitalId,
+      active: true,
+      $expr: {
+        $lt: [
+          {
+            $reduce: {
+              input: "$batches",
+              initialValue: 0,
+              in: { $add: ["$$value", { $ifNull: ["$$this.quantity", 0] }] },
+            },
+          },
+          10,
+        ],
+      },
+    }).populate(
+      "medicineId",
+      "item_code generic_name generic_name2 manufacturer pack type description hsn_code"
+    );
     res.json(lowStockItems);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch low stock items" });
@@ -182,7 +342,7 @@ router.put("/:id/quantity", async (req, res) => {
   try {
     const { quantity } = req.body;
     const updatedItem = await PharmacyInventory.findByIdAndUpdate(
-      req.params.id,
+      { _id: req.params.id, hospitalId: req.hospitalId },
       { quantity },
       { new: true }
     );
@@ -321,7 +481,9 @@ router.get("/search/health", async (req, res) => {
     const { client, getIndexStats } = require("../utils/meilisearch");
     const health = await client.health();
     const indexStats = await getIndexStats();
-    const mongoCount = await PharmacyInventory.countDocuments({});
+    const mongoCount = await PharmacyInventory.countDocuments({
+      hospitalId: req.hospitalId,
+    });
 
     res.json({
       status: "healthy",

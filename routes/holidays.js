@@ -1,11 +1,14 @@
 const express = require("express");
 const router = express.Router();
 const Holiday = require("../models/Holiday");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 // Get all holidays
 router.get("/", async (req, res) => {
   try {
-    const holidays = await Holiday.find({});
+    const holidays = await Holiday.find({ hospitalId: req.hospitalId });
     res.json(holidays);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -15,7 +18,10 @@ router.get("/", async (req, res) => {
 // Get holiday by ID
 router.get("/:id", async (req, res) => {
   try {
-    const holiday = await Holiday.findOne({ id: req.params.id });
+    const holiday = await Holiday.findOne({
+      id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!holiday) {
       return res.status(404).json({ message: "Holiday not found" });
     }
@@ -28,7 +34,7 @@ router.get("/:id", async (req, res) => {
 // Create new holiday
 router.post("/", async (req, res) => {
   try {
-    const holiday = new Holiday(req.body);
+    const holiday = new Holiday({ ...req.body, hospitalId: req.hospitalId });
     const newHoliday = await holiday.save();
     res.status(201).json(newHoliday);
   } catch (error) {
@@ -40,7 +46,7 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const holiday = await Holiday.findOneAndUpdate(
-      { id: req.params.id },
+      { id: req.params.id, hospitalId: req.hospitalId },
       req.body,
       { new: true }
     );
@@ -56,7 +62,10 @@ router.put("/:id", async (req, res) => {
 // Delete holiday
 router.delete("/:id", async (req, res) => {
   try {
-    const holiday = await Holiday.findOneAndDelete({ id: req.params.id });
+    const holiday = await Holiday.findOneAndDelete({
+      id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!holiday) {
       return res.status(404).json({ message: "Holiday not found" });
     }
@@ -69,7 +78,10 @@ router.delete("/:id", async (req, res) => {
 // Get holidays by type
 router.get("/type/:type", async (req, res) => {
   try {
-    const holidays = await Holiday.find({ type: req.params.type });
+    const holidays = await Holiday.find({
+      type: req.params.type,
+      hospitalId: req.hospitalId,
+    });
     res.json(holidays);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -85,6 +97,7 @@ router.get("/date-range", async (req, res) => {
         $gte: new Date(startDate),
         $lte: new Date(endDate),
       },
+      hospitalId: req.hospitalId,
     });
     res.json(holidays);
   } catch (error) {

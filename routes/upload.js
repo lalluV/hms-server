@@ -8,6 +8,9 @@ const FileMerger = require("../utils/fileMerger");
 dotenv.config();
 
 const router = express.Router();
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 // Configure multer for memory storage with multiple files
 const upload = multer({
@@ -67,7 +70,9 @@ router.post("/signature", upload.single("signature"), async (req, res) => {
 
     // Generate a unique filename for the signature
     const fileExtension = req.file.originalname.split(".").pop();
-    const fileName = `signatures/${employeeId}/${uuidv4()}.${fileExtension}`;
+    const fileName = `${
+      req.hospitalId
+    }/signatures/${employeeId}/${uuidv4()}.${fileExtension}`;
 
     // Upload to R2
     const command = new PutObjectCommand({
@@ -126,7 +131,9 @@ router.post("/photo", upload.single("photo"), async (req, res) => {
     }
 
     const fileExtension = req.file.originalname.split(".").pop();
-    const fileName = `employees/${employeeId}/${uuidv4()}.${fileExtension}`;
+    const fileName = `${
+      req.hospitalId
+    }/employees/${employeeId}/${uuidv4()}.${fileExtension}`;
 
     const command = new PutObjectCommand({
       Bucket: process.env.R2_BUCKET_NAME,
@@ -188,7 +195,9 @@ router.post("/stamp", upload.single("stamp"), async (req, res) => {
 
     // Generate a unique filename for the stamp
     const fileExtension = req.file.originalname.split(".").pop();
-    const fileName = `stamps/${department}/${category}/${uuidv4()}.${fileExtension}`;
+    const fileName = `${
+      req.hospitalId
+    }/stamps/${department}/${category}/${uuidv4()}.${fileExtension}`;
 
     // Upload to R2
     const command = new PutObjectCommand({
@@ -257,7 +266,9 @@ router.post("/upload-report", upload.array("files", 10), async (req, res) => {
     );
 
     // Generate a unique filename for the merged PDF
-    const fileName = `${receiptId}/${testId}/merged_${uuidv4()}.pdf`;
+    const fileName = `${
+      req.hospitalId
+    }/${receiptId}/${testId}/merged_${uuidv4()}.pdf`;
 
     // Upload merged PDF to R2
     const command = new PutObjectCommand({
@@ -318,7 +329,9 @@ router.post("/upload-single", upload.single("file"), async (req, res) => {
 
     // Generate a unique filename
     const fileExtension = req.file.originalname.split(".").pop();
-    const fileName = `${receiptId}/${testId}/${uuidv4()}.${fileExtension}`;
+    const fileName = `${
+      req.hospitalId
+    }/${receiptId}/${testId}/${uuidv4()}.${fileExtension}`;
 
     // Upload to R2
     const command = new PutObjectCommand({
@@ -375,9 +388,9 @@ router.post(
       }
 
       // Generate a unique filename for consent
-      const fileName = `consents/${patientId}/${consentType}_${
-        consentId || uuidv4()
-      }.pdf`;
+      const fileName = `${
+        req.hospitalId
+      }/consents/${patientId}/${consentType}_${consentId || uuidv4()}.pdf`;
 
       // Upload to R2
       const command = new PutObjectCommand({

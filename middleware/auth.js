@@ -15,6 +15,12 @@ module.exports = function (req, res, next) {
 
     // Add user from payload
     req.user = decoded.user;
+
+    // Ensure hospitalId is available for easy access
+    if (decoded.user.hospitalId) {
+      req.hospitalId = decoded.user.hospitalId;
+    }
+
     next();
   } catch (err) {
     res.status(401).json({ message: "Token is not valid" });

@@ -1,11 +1,14 @@
 const express = require("express");
 const router = express.Router();
 const InsuranceTariff = require("../models/InsuranceTariff");
+const auth = require("../middleware/auth");
+
+router.use(auth);
 
 // Get all insurance tariffs
 router.get("/", async (req, res) => {
   try {
-    const tariffs = await InsuranceTariff.find();
+    const tariffs = await InsuranceTariff.find({ hospitalId: req.hospitalId });
     res.json(tariffs);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -15,7 +18,10 @@ router.get("/", async (req, res) => {
 // Get insurance tariff by ID
 router.get("/:id", async (req, res) => {
   try {
-    const tariff = await InsuranceTariff.findById(req.params.id);
+    const tariff = await InsuranceTariff.findOne({
+      _id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!tariff) return res.status(404).json({ message: "Tariff not found" });
     res.json(tariff);
   } catch (error) {
@@ -25,7 +31,10 @@ router.get("/:id", async (req, res) => {
 
 // Create insurance tariff
 router.post("/", async (req, res) => {
-  const tariff = new InsuranceTariff(req.body);
+  const tariff = new InsuranceTariff({
+    ...req.body,
+    hospitalId: req.hospitalId,
+  });
   try {
     const newTariff = await tariff.save();
     res.status(201).json(newTariff);
@@ -37,8 +46,8 @@ router.post("/", async (req, res) => {
 // Update insurance tariff
 router.put("/:id", async (req, res) => {
   try {
-    const tariff = await InsuranceTariff.findByIdAndUpdate(
-      req.params.id,
+    const tariff = await InsuranceTariff.findOneAndUpdate(
+      { _id: req.params.id, hospitalId: req.hospitalId },
       req.body,
       { new: true }
     );
@@ -52,7 +61,10 @@ router.put("/:id", async (req, res) => {
 // Delete insurance tariff
 router.delete("/:id", async (req, res) => {
   try {
-    const tariff = await InsuranceTariff.findByIdAndDelete(req.params.id);
+    const tariff = await InsuranceTariff.findOneAndDelete({
+      _id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
     if (!tariff) return res.status(404).json({ message: "Tariff not found" });
     res.json({ message: "Tariff deleted" });
   } catch (error) {
@@ -65,6 +77,7 @@ router.get("/company/:companyId", async (req, res) => {
   try {
     const tariffs = await InsuranceTariff.find({
       companyId: req.params.companyId,
+      hospitalId: req.hospitalId,
     });
     res.json(tariffs);
   } catch (error) {
