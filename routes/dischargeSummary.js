@@ -196,4 +196,145 @@ router.post("/rewrite-section", async (req, res) => {
   }
 });
 
+/**
+ * POST /parse-clinical-note
+ * Body: { clinicalNote: string, age?: number, gender?: string, allergies?: string }
+ * Returns: { symptoms, pastMedicalHistory, provisionalDiagnosis, medicines: [], labTests: [], doctorNotes }
+ */
+router.post("/parse-clinical-note", async (req, res) => {
+  try {
+    const { clinicalNote, age, gender, allergies } = req.body;
+
+    if (
+      !clinicalNote ||
+      typeof clinicalNote !== "string" ||
+      !clinicalNote.trim()
+    ) {
+      return res.status(400).json({
+        error: "clinicalNote is required and must be a non-empty string",
+      });
+    }
+
+    // Build context
+    let context = "";
+    if (age) context += `Patient age: ${age}. `;
+    if (gender) context += `Gender: ${gender}. `;
+    if (allergies) context += `Known allergies: ${allergies}. `;
+
+    const prompt = `${context}
+
+Parse the following clinical note from a doctor and extract structured information. Return ONLY a valid JSON object with the following structure:
+{
+  "symptoms": "extracted symptoms description",
+  "pastMedicalHistory": "extracted past medical history or empty string if not mentioned",
+  "provisionalDiagnosis": "extracted diagnosis",
+  "medicines": [
+    {
+      "name": "medicine name",
+      "dosage": "dosage (e.g., 500mg)",
+      "frequency": "frequency (e.g., BD, TDS, OD, twice daily)",
+      "duration": "duration (e.g., 5 days, 1 week)",
+      "instructions": "any special instructions or empty string"
+    }
+  ],
+  "labTests": ["test name 1", "test name 2"],
+  "doctorNotes": "structured clinical notes summary"
+}
+
+Instructions:
+- Extract symptoms, diagnosis, medications, and lab tests from the note
+- For medicines, extract name, dosage, frequency, and duration
+- Use common medical abbreviations (BD = twice daily, TDS = three times daily, OD = once daily, HS = at night, QID = four times daily)
+- If information is not mentioned, use empty string or empty array
+- Keep doctorNotes as a concise summary of the clinical encounter
+- Return ONLY the JSON object, no additional text or markdown
+
+Clinical Note:
+${clinicalNote}
+
+Return only the JSON object:`;
+
+    let response;
+    try {
+      response = await deepseekApi.post(
+        "/chat/completions",
+        {
+          model: "deepseek-chat",
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are a medical AI assistant that extracts structured clinical information from doctor's notes. Always return valid JSON only, no explanations.",
+            },
+            {
+              role: "user",
+              content: prompt,
+            },
+          ],
+          max_tokens: 2000,
+          temperature: 0.2, // Low temperature for consistent parsing
+          top_p: 0.9,
+        },
+        { timeout: 20000 } // 20s timeout
+      );
+    } catch (apiError) {
+      console.error(
+        "DeepSeek API error:",
+        apiError?.response?.data || apiError.message
+      );
+      return res.status(502).json({
+        error: "Failed to contact AI service",
+        details: apiError?.response?.data || apiError.message,
+      });
+    }
+
+    if (
+      !response?.data?.choices ||
+      !response.data.choices[0]?.message?.content
+    ) {
+      return res
+        .status(500)
+        .json({ error: "Invalid response from AI service" });
+    }
+
+    const content = response.data.choices[0].message.content.trim();
+
+    // Extract JSON from response (handle markdown code blocks if present)
+    let jsonString = content;
+    const jsonMatch = content.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+    if (jsonMatch) {
+      jsonString = jsonMatch[1];
+    }
+
+    try {
+      const parsed = JSON.parse(jsonString);
+
+      // Validate and ensure structure
+      const result = {
+        symptoms: parsed.symptoms || "",
+        pastMedicalHistory: parsed.pastMedicalHistory || "",
+        provisionalDiagnosis: parsed.provisionalDiagnosis || "",
+        medicines: Array.isArray(parsed.medicines) ? parsed.medicines : [],
+        labTests: Array.isArray(parsed.labTests) ? parsed.labTests : [],
+        doctorNotes: parsed.doctorNotes || "",
+      };
+
+      res.json(result);
+    } catch (parseError) {
+      console.error("Error parsing AI response:", parseError);
+      console.error("AI Response:", content);
+      res.status(500).json({
+        error: "Failed to parse AI response",
+        details: parseError.message,
+      });
+    }
+  } catch (error) {
+    console.error("Error parsing clinical note:", error);
+    res.status(500).json({
+      error: "Failed to parse clinical note",
+      details: error.message,
+    });
+  }
+});
+
 module.exports = router;

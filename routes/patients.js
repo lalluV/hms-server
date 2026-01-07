@@ -144,8 +144,8 @@ router.put("/:id", async (req, res) => {
   try {
     const patient = await Patient.findOneAndUpdate(
       { UMRNo: req.params.id, hospitalId: req.hospitalId },
-      req.body,
-      { new: true }
+      { $set: req.body },
+      { new: true, runValidators: true }
     );
     if (!patient) {
       return res.status(404).json({ message: "Patient not found" });

@@ -92,7 +92,7 @@ const patientSchema = new mongoose.Schema(
       {
         time: String,
         temperature: String,
-        pulseRate: String,
+        heartRate: String,
         bloodPressure: String,
         respiratoryRate: String,
         spo2: String,
@@ -119,10 +119,10 @@ const patientSchema = new mongoose.Schema(
     nurseNotes: [mongoose.Schema.Types.Mixed],
     systemicExamination: { type: String },
     personalHistory: {
-      alcohol: String,
-      smoking: String,
-      illicitDrugs: String,
-      other: String,
+      alcohol: { type: Boolean, default: false },
+      smoking: { type: Boolean, default: false },
+      illicitDrugs: { type: Boolean, default: false },
+      other: { type: String },
     },
     provisionalDiagnosis: { type: String },
     allergiesHistory: { type: String },
@@ -132,6 +132,7 @@ const patientSchema = new mongoose.Schema(
     dischargeOrders: { type: String },
     counselling: { type: String },
     symptoms: [String],
+    prescriptions: [mongoose.Schema.Types.Mixed],
     modifiedBy: [
       {
         user: String,
