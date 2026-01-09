@@ -20,6 +20,21 @@ const hospitalSchema = new mongoose.Schema(
       timezone: { type: String, default: "Asia/Kolkata" },
       dateFormat: { type: String, default: "DD-MM-YYYY" },
     },
+    // Tenant Database Fields
+    databaseName: { type: String }, // Name of the tenant database
+    databaseStatus: {
+      type: String,
+      enum: ["pending", "provisioning", "active", "error", "migrating"],
+      default: "pending",
+    },
+    databaseProvisionedAt: { type: Date },
+    databaseUrl: { type: String }, // Optional: if using separate connection strings
+    databaseStats: {
+      collections: { type: Number },
+      dataSize: { type: Number },
+      storageSize: { type: Number },
+      lastUpdated: { type: Date },
+    },
     createdBy: { type: String }, // Super Admin ID
     modifiedBy: [
       {

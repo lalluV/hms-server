@@ -1,13 +1,15 @@
 const express = require("express");
 const router = express.Router();
-const Department = require("../models/Department");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Get all departments
 router.get("/", async (req, res) => {
   try {
+    const Department = req.tenantDb.model("Department");
     const departments = await Department.find({ hospitalId: req.hospitalId });
     res.json(departments);
   } catch (error) {
@@ -18,6 +20,7 @@ router.get("/", async (req, res) => {
 // Get department by ID
 router.get("/:id", async (req, res) => {
   try {
+    const Department = req.tenantDb.model("Department");
     const department = await Department.findById(req.params.id);
     if (!department) {
       return res.status(404).json({ message: "Department not found" });
@@ -31,6 +34,7 @@ router.get("/:id", async (req, res) => {
 // Create new department
 router.post("/", async (req, res) => {
   try {
+    const Department = req.tenantDb.model("Department");
     const department = new Department({
       ...req.body,
       hospitalId: req.hospitalId,
@@ -45,6 +49,7 @@ router.post("/", async (req, res) => {
 // Update department
 router.put("/:id", async (req, res) => {
   try {
+    const Department = req.tenantDb.model("Department");
     const department = await Department.findByIdAndUpdate(
       req.params.id,
       req.body,
@@ -64,6 +69,7 @@ router.put("/:id", async (req, res) => {
 // Delete department
 router.delete("/:id", async (req, res) => {
   try {
+    const Department = req.tenantDb.model("Department");
     const department = await Department.findByIdAndDelete(req.params.id);
     if (!department) {
       return res.status(404).json({ message: "Department not found" });
@@ -77,6 +83,7 @@ router.delete("/:id", async (req, res) => {
 // Get departments by type
 router.get("/type/:type", async (req, res) => {
   try {
+    const Department = req.tenantDb.model("Department");
     const departments = await Department.find({
       type: req.params.type,
       hospitalId: req.hospitalId,
@@ -90,6 +97,7 @@ router.get("/type/:type", async (req, res) => {
 // Get departments by status
 router.get("/status/:status", async (req, res) => {
   try {
+    const Department = req.tenantDb.model("Department");
     const departments = await Department.find({
       status: req.params.status,
       hospitalId: req.hospitalId,
@@ -103,6 +111,7 @@ router.get("/status/:status", async (req, res) => {
 // Get departments by HOD
 router.get("/hod/:hodName", async (req, res) => {
   try {
+    const Department = req.tenantDb.model("Department");
     const departments = await Department.find({
       hod_name: req.params.hodName,
       hospitalId: req.hospitalId,
@@ -116,6 +125,7 @@ router.get("/hod/:hodName", async (req, res) => {
 // Update department status
 router.put("/:id/status", async (req, res) => {
   try {
+    const Department = req.tenantDb.model("Department");
     const department = await Department.findByIdAndUpdate(
       req.params.id,
       { status: req.body.status },

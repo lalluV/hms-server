@@ -1,13 +1,15 @@
 const express = require("express");
 const router = express.Router();
-const Vendor = require("../models/Vendor");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Get all vendors
 router.get("/", async (req, res) => {
   try {
+    const Vendor = req.tenantDb.model("Vendor");
     const vendors = await Vendor.find({ hospitalId: req.hospitalId });
     res.json(vendors);
   } catch (error) {
@@ -18,6 +20,7 @@ router.get("/", async (req, res) => {
 // Get vendor by ID
 router.get("/:id", async (req, res) => {
   try {
+    const Vendor = req.tenantDb.model("Vendor");
     const vendor = await Vendor.findOne({
       _id: req.params.id,
       hospitalId: req.hospitalId,
@@ -33,8 +36,9 @@ router.get("/:id", async (req, res) => {
 
 // Create vendor
 router.post("/", async (req, res) => {
-  const vendor = new Vendor({ ...req.body, hospitalId: req.hospitalId });
   try {
+    const Vendor = req.tenantDb.model("Vendor");
+    const vendor = new Vendor({ ...req.body, hospitalId: req.hospitalId });
     const newVendor = await vendor.save();
     res.status(201).json(newVendor);
   } catch (error) {
@@ -45,6 +49,7 @@ router.post("/", async (req, res) => {
 // Update vendor
 router.put("/:id", async (req, res) => {
   try {
+    const Vendor = req.tenantDb.model("Vendor");
     const vendor = await Vendor.findOneAndUpdate(
       { _id: req.params.id, hospitalId: req.hospitalId },
       req.body,
@@ -64,6 +69,7 @@ router.put("/:id", async (req, res) => {
 // Delete vendor
 router.delete("/:id", async (req, res) => {
   try {
+    const Vendor = req.tenantDb.model("Vendor");
     const vendor = await Vendor.findOneAndDelete({
       _id: req.params.id,
       hospitalId: req.hospitalId,
@@ -80,6 +86,7 @@ router.delete("/:id", async (req, res) => {
 // Get vendors by type
 router.get("/type/:type", async (req, res) => {
   try {
+    const Vendor = req.tenantDb.model("Vendor");
     const vendors = await Vendor.find({
       type: req.params.type,
       hospitalId: req.hospitalId,
@@ -93,6 +100,7 @@ router.get("/type/:type", async (req, res) => {
 // Get vendors by status
 router.get("/status/:status", async (req, res) => {
   try {
+    const Vendor = req.tenantDb.model("Vendor");
     const vendors = await Vendor.find({
       status: req.params.status,
       hospitalId: req.hospitalId,

@@ -4,6 +4,11 @@ const router = express.Router();
 const MasterDiagnostic = require("../models/MasterDiagnostic");
 const Diagnostic = require("../models/Diagnostic");
 const adminAuth = require("../middleware/adminAuth");
+const {
+  indexMasterDiagnostic,
+  deleteMasterDiagnostic,
+  searchMasterDiagnostics,
+} = require("../utils/meilisearch");
 
 // Apply admin auth to all routes except search
 router.use((req, res, next) => {
@@ -121,6 +126,14 @@ router.post("/", async (req, res) => {
     const populated = await MasterDiagnostic.findById(savedDiagnostic._id)
       .populate("suggested_parameters.parameterId", "name units category");
     
+    // Index in Meilisearch
+    try {
+      await indexMasterDiagnostic(savedDiagnostic);
+    } catch (error) {
+      console.error("⚠️  Failed to index master diagnostic in Meilisearch:", error.message);
+      // Don't fail the request if indexing fails
+    }
+    
     res.status(201).json(populated);
   } catch (error) {
     console.error("Error creating master diagnostic:", error);
@@ -169,6 +182,14 @@ router.put("/:id", async (req, res) => {
     )
       .populate("suggested_parameters.parameterId", "name units category");
 
+    // Update in Meilisearch
+    try {
+      await indexMasterDiagnostic(updatedDiagnostic);
+    } catch (error) {
+      console.error("⚠️  Failed to update master diagnostic in Meilisearch:", error.message);
+      // Don't fail the request if indexing fails
+    }
+
     res.json(updatedDiagnostic);
   } catch (error) {
     console.error("Error updating master diagnostic:", error);
@@ -211,6 +232,13 @@ router.delete("/:id", async (req, res) => {
         { new: true }
       );
 
+      // Update in Meilisearch (mark as inactive)
+      try {
+        await indexMasterDiagnostic(updatedDiagnostic);
+      } catch (error) {
+        console.error("⚠️  Failed to update master diagnostic in Meilisearch:", error.message);
+      }
+
       return res.json({
         message: "Master diagnostic deactivated (soft delete)",
         diagnostic: updatedDiagnostic,
@@ -219,7 +247,16 @@ router.delete("/:id", async (req, res) => {
     }
 
     // Hard delete if no hospitals are using it
+    const diagnosticId = diagnostic._id.toString();
     await MasterDiagnostic.findByIdAndDelete(req.params.id);
+    
+    // Delete from Meilisearch
+    try {
+      await deleteMasterDiagnostic(diagnosticId);
+    } catch (error) {
+      console.error("⚠️  Failed to delete master diagnostic from Meilisearch:", error.message);
+    }
+    
     res.json({ message: "Master diagnostic deleted successfully" });
   } catch (error) {
     console.error("Error deleting master diagnostic:", error);
@@ -252,31 +289,77 @@ router.get("/stats/overview", async (req, res) => {
 
 // Search master diagnostics (for autocomplete/search)
 // This endpoint is public for hospitals to search diagnostics
+// Uses Meilisearch with MongoDB fallback
 router.get("/search/autocomplete", async (req, res) => {
   try {
-    const { q, limit = 20 } = req.query;
+    const { q, limit = 20, deptname, active = true } = req.query;
 
     if (!q || q.length < 2) {
       return res.json({ results: [] });
     }
 
+    try {
+      // Try Meilisearch first
+      const searchResults = await searchMasterDiagnostics(q, parseInt(limit), {
+        active: active === "true" || active === true,
+        deptname: deptname,
+        subdeptname: req.query.subdeptname,
+      });
+
+      if (searchResults.length > 0) {
+        // Fetch full documents from MongoDB with populated fields
+        const ids = searchResults.map((hit) => hit.id);
+        const diagnostics = await MasterDiagnostic.find({
+          _id: { $in: ids },
+          active: active === "true" || active === true,
+        })
+          .populate("suggested_parameters.parameterId", "name units category default_normal_range")
+          .select("test_code name deptname subdeptname description default_fasting default_reportsIn suggested_parameters _id")
+          .lean();
+
+        // Map back to search order
+        const idToDoc = {};
+        diagnostics.forEach((doc) => {
+          idToDoc[doc._id.toString()] = doc;
+        });
+
+        const orderedResults = searchResults
+          .map((hit) => {
+            const doc = idToDoc[hit.id];
+            return doc ? { ...doc, _id: doc._id.toString() } : null;
+          })
+          .filter(Boolean);
+
+        return res.json({ results: orderedResults });
+      }
+    } catch (meilisearchError) {
+      console.warn("⚠️  Meilisearch error, falling back to MongoDB:", meilisearchError.message);
+    }
+
+    // Fallback to MongoDB if Meilisearch fails or returns no results
     const query = {
-      active: true,
+      active: active === "true" || active === true,
       $or: [
         { test_code: { $regex: q, $options: "i" } },
         { name: { $regex: q, $options: "i" } },
         { description: { $regex: q, $options: "i" } },
         { deptname: { $regex: q, $options: "i" } },
+        { subdeptname: { $regex: q, $options: "i" } },
       ],
     };
+
+    if (deptname) {
+      query.deptname = { $regex: deptname, $options: "i" };
+    }
 
     const diagnostics = await MasterDiagnostic.find(query)
       .populate("suggested_parameters.parameterId", "name units category")
       .limit(parseInt(limit))
       .select("test_code name deptname subdeptname description default_fasting default_reportsIn suggested_parameters _id")
-      .sort({ name: 1 });
+      .sort({ name: 1 })
+      .lean();
 
-    res.json({ results: diagnostics });
+    res.json({ results: diagnostics.map((d) => ({ ...d, _id: d._id.toString() })) });
   } catch (error) {
     console.error("Error searching master diagnostics:", error);
     res.status(500).json({ error: "Failed to search master diagnostics" });

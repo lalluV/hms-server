@@ -2,26 +2,22 @@
 const express = require("express");
 const router = express.Router();
 const mongoose = require("mongoose");
-const PharmacyInventory = require("../models/PharmacyInventory");
 const MasterMedicine = require("../models/MasterMedicine");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 const multer = require("multer");
 const path = require("path");
 const axios = require("axios");
-const {
-  searchMedicines,
-  initializeMeilisearch,
-  indexAllData,
-  indexDocument,
-  deleteDocument,
-  getIndexStats,
-} = require("../utils/meilisearch");
+// Meilisearch removed - using MongoDB search for tenant data
 
 // Get popular medicines
 router.get("/popular", async (req, res) => {
   try {
+    const PharmacyInventory = req.tenantDb.model("PharmacyInventory");
+
     const popularMedicines = await PharmacyInventory.find({
       hospitalId: req.hospitalId,
       active: true,
@@ -38,7 +34,7 @@ router.get("/popular", async (req, res) => {
   }
 });
 
-// Search medicines (Meilisearch) - Optimized for speed
+// Search medicines (MongoDB search for tenant data)
 router.get("/search", async (req, res) => {
   const { q, limit = 10 } = req.query;
 
@@ -50,17 +46,44 @@ router.get("/search", async (req, res) => {
 
   try {
     const startTime = Date.now();
-    const results = await searchMedicines(q, req.hospitalId, parseInt(limit));
+    const PharmacyInventory = req.tenantDb.model("PharmacyInventory");
+
+    // Search in tenant database using MongoDB
+    const searchQuery = {
+      hospitalId: req.hospitalId,
+      active: true,
+      $or: [
+        { item_code: { $regex: q, $options: "i" } },
+        { generic_name: { $regex: q, $options: "i" } },
+        { generic_name2: { $regex: q, $options: "i" } },
+        { description: { $regex: q, $options: "i" } },
+        { manufacturer: { $regex: q, $options: "i" } },
+      ],
+    };
+
+    const results = await PharmacyInventory.find(searchQuery)
+      .populate(
+        "medicineId",
+        "item_code generic_name generic_name2 manufacturer pack type description hsn_code"
+      )
+      .limit(parseInt(limit))
+      .sort({ orderingNumber: -1 })
+      .lean();
+
     const searchTime = Date.now() - startTime;
 
     res.json({
-      results,
+      results: results.map((item) => ({
+        ...item,
+        _id: item._id.toString(),
+      })),
       searchTime: `${searchTime}ms`,
       totalResults: results.length,
       query: q,
       success: true,
     });
   } catch (err) {
+    console.error("Search error:", err);
     res.json({
       results: [],
       searchTime: "0ms",
@@ -75,6 +98,7 @@ router.get("/search", async (req, res) => {
 // Get all pharmacy inventory items
 router.get("/", async (req, res) => {
   try {
+    const PharmacyInventory = req.tenantDb.model("PharmacyInventory");
     const items = await PharmacyInventory.find({
       hospitalId: req.hospitalId,
       active: true,
@@ -93,6 +117,7 @@ router.get("/", async (req, res) => {
 // Get pharmacy inventory item by ID
 router.get("/:id", async (req, res) => {
   try {
+    const PharmacyInventory = req.tenantDb.model("PharmacyInventory");
     // Check if id is a valid ObjectId
     const isValidObjectId = mongoose.Types.ObjectId.isValid(req.params.id);
 
@@ -125,6 +150,7 @@ router.get("/:id", async (req, res) => {
 // Create new pharmacy inventory item
 router.post("/", async (req, res) => {
   try {
+    const PharmacyInventory = req.tenantDb.model("PharmacyInventory");
     let medicineId = req.body.medicineId;
     let masterMedicine = null;
 
@@ -195,9 +221,6 @@ router.post("/", async (req, res) => {
       "item_code generic_name generic_name2 manufacturer pack type description hsn_code"
     );
 
-    // Index the new item in Meilisearch
-    await indexDocument(savedItem);
-
     res.status(201).json(savedItem);
   } catch (error) {
     console.error("Error creating pharmacy inventory:", error);
@@ -210,6 +233,7 @@ router.post("/", async (req, res) => {
 // Update pharmacy inventory item
 router.put("/:id", async (req, res) => {
   try {
+    const PharmacyInventory = req.tenantDb.model("PharmacyInventory");
     // Check if id is a valid ObjectId
     const isValidObjectId = mongoose.Types.ObjectId.isValid(req.params.id);
 
@@ -243,9 +267,6 @@ router.put("/:id", async (req, res) => {
       return res.status(404).json({ error: "Item not found" });
     }
 
-    // Update the item in Meilisearch
-    await indexDocument(updatedItem);
-
     res.json(updatedItem);
   } catch (error) {
     console.error("Update error:", error);
@@ -258,6 +279,7 @@ router.put("/:id", async (req, res) => {
 // Delete pharmacy inventory item
 router.delete("/:id", async (req, res) => {
   try {
+    const PharmacyInventory = req.tenantDb.model("PharmacyInventory");
     const deletedItem = await PharmacyInventory.findByIdAndDelete({
       _id: req.params.id,
       hospitalId: req.hospitalId,
@@ -265,9 +287,6 @@ router.delete("/:id", async (req, res) => {
     if (!deletedItem) {
       return res.status(404).json({ error: "Item not found" });
     }
-
-    // Remove from Meilisearch
-    await deleteDocument(deletedItem._id.toString());
 
     res.json({ message: "Item deleted successfully" });
   } catch (error) {
@@ -278,6 +297,7 @@ router.delete("/:id", async (req, res) => {
 // Get items by category
 router.get("/category/:category", async (req, res) => {
   try {
+    const PharmacyInventory = req.tenantDb.model("PharmacyInventory");
     const items = await PharmacyInventory.find({
       category: req.params.category,
       hospitalId: req.hospitalId,
@@ -295,6 +315,7 @@ router.get("/category/:category", async (req, res) => {
 // Get items by status
 router.get("/status/:status", async (req, res) => {
   try {
+    const PharmacyInventory = req.tenantDb.model("PharmacyInventory");
     const items = await PharmacyInventory.find({
       status: req.params.status,
       hospitalId: req.hospitalId,
@@ -312,6 +333,7 @@ router.get("/status/:status", async (req, res) => {
 // Get low stock items
 router.get("/low-stock", async (req, res) => {
   try {
+    const PharmacyInventory = req.tenantDb.model("PharmacyInventory");
     const lowStockItems = await PharmacyInventory.find({
       hospitalId: req.hospitalId,
       active: true,
@@ -340,6 +362,7 @@ router.get("/low-stock", async (req, res) => {
 // Update item quantity
 router.put("/:id/quantity", async (req, res) => {
   try {
+    const PharmacyInventory = req.tenantDb.model("PharmacyInventory");
     const { quantity } = req.body;
     const updatedItem = await PharmacyInventory.findByIdAndUpdate(
       { _id: req.params.id, hospitalId: req.hospitalId },
@@ -434,61 +457,18 @@ router.post("/process-invoice", upload.single("invoice"), async (req, res) => {
   }
 });
 
-// Index all data to Meilisearch
-router.post("/index-all", async (req, res) => {
-  try {
-    const result = await indexAllData();
-    res.json({
-      success: result.success,
-      message: result.success ? "Data indexed successfully" : "Indexing failed",
-      indexed: result.indexed || 0,
-      errors: result.errors || 0,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: "Failed to index data",
-      details: error.message,
-    });
-  }
-});
-
-// Test Meilisearch connection
-router.get("/test-meilisearch", async (req, res) => {
-  try {
-    const { client } = require("../utils/meilisearch");
-
-    // Test basic connection
-    const health = await client.health();
-
-    res.json({
-      success: true,
-      message: "Meilisearch connection successful",
-      health: health,
-    });
-  } catch (error) {
-    res.json({
-      success: false,
-      message: "Meilisearch connection failed",
-      error: error.message,
-    });
-  }
-});
-
-// Get search health
+// Get search health (MongoDB only - no Meilisearch for tenant data)
 router.get("/search/health", async (req, res) => {
   try {
-    const { client, getIndexStats } = require("../utils/meilisearch");
-    const health = await client.health();
-    const indexStats = await getIndexStats();
+    const PharmacyInventory = req.tenantDb.model("PharmacyInventory");
     const mongoCount = await PharmacyInventory.countDocuments({
       hospitalId: req.hospitalId,
+      active: true,
     });
 
     res.json({
       status: "healthy",
-      meilisearch: health,
-      index: indexStats,
+      searchEngine: "mongodb",
       mongodb: {
         totalDocuments: mongoCount,
         hasData: mongoCount > 0,

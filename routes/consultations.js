@@ -1,13 +1,16 @@
 const express = require("express");
 const router = express.Router();
-const Consultation = require("../models/Consultation");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Get all consultations with pagination support
 router.get("/", async (req, res) => {
   try {
+    const Consultation = req.tenantDb.model("Consultation");
+    
     const {
       page = 1,
       limit = 20,
@@ -92,6 +95,7 @@ router.get("/", async (req, res) => {
 // Get consultation by ID
 router.get("/:id", async (req, res) => {
   try {
+    const Consultation = req.tenantDb.model("Consultation");
     const consultation = await Consultation.findOne({
       id: req.params.id,
       hospitalId: req.hospitalId,
@@ -108,6 +112,7 @@ router.get("/:id", async (req, res) => {
 // Create new consultation
 router.post("/", async (req, res) => {
   try {
+    const Consultation = req.tenantDb.model("Consultation");
     const consultation = new Consultation({
       ...req.body,
       hospitalId: req.hospitalId,
@@ -122,6 +127,7 @@ router.post("/", async (req, res) => {
 // Update consultation
 router.put("/:id", async (req, res) => {
   try {
+    const Consultation = req.tenantDb.model("Consultation");
     const consultation = await Consultation.findOneAndUpdate(
       { id: req.params.id, hospitalId: req.hospitalId },
       req.body,
@@ -139,6 +145,7 @@ router.put("/:id", async (req, res) => {
 // Delete consultation
 router.delete("/:id", async (req, res) => {
   try {
+    const Consultation = req.tenantDb.model("Consultation");
     const consultation = await Consultation.findOneAndDelete({
       id: req.params.id,
       hospitalId: req.hospitalId,
@@ -155,6 +162,7 @@ router.delete("/:id", async (req, res) => {
 // Get consultations by patient ID
 router.get("/patient/:patientId", async (req, res) => {
   try {
+    const Consultation = req.tenantDb.model("Consultation");
     const consultations = await Consultation.find({
       patientId: req.params.patientId,
       hospitalId: req.hospitalId,
@@ -168,6 +176,7 @@ router.get("/patient/:patientId", async (req, res) => {
 // Get consultations by doctor ID
 router.get("/doctor/:doctorId", async (req, res) => {
   try {
+    const Consultation = req.tenantDb.model("Consultation");
     const consultations = await Consultation.find({
       doctorId: req.params.doctorId,
       hospitalId: req.hospitalId,
@@ -181,6 +190,7 @@ router.get("/doctor/:doctorId", async (req, res) => {
 // Get consultations by status
 router.get("/status/:status", async (req, res) => {
   try {
+    const Consultation = req.tenantDb.model("Consultation");
     const consultations = await Consultation.find({
       status: req.params.status,
       hospitalId: req.hospitalId,
@@ -194,6 +204,7 @@ router.get("/status/:status", async (req, res) => {
 // Get consultations by date range
 router.get("/date-range", async (req, res) => {
   try {
+    const Consultation = req.tenantDb.model("Consultation");
     const { startDate, endDate } = req.query;
     const consultations = await Consultation.find({
       date: {

@@ -1,13 +1,15 @@
 const express = require("express");
 const router = express.Router();
-const InsuranceTariff = require("../models/InsuranceTariff");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Get all insurance tariffs
 router.get("/", async (req, res) => {
   try {
+    const InsuranceTariff = req.tenantDb.model("InsuranceTariff");
     const tariffs = await InsuranceTariff.find({ hospitalId: req.hospitalId });
     res.json(tariffs);
   } catch (error) {
@@ -18,6 +20,7 @@ router.get("/", async (req, res) => {
 // Get insurance tariff by ID
 router.get("/:id", async (req, res) => {
   try {
+    const InsuranceTariff = req.tenantDb.model("InsuranceTariff");
     const tariff = await InsuranceTariff.findOne({
       _id: req.params.id,
       hospitalId: req.hospitalId,
@@ -31,11 +34,12 @@ router.get("/:id", async (req, res) => {
 
 // Create insurance tariff
 router.post("/", async (req, res) => {
-  const tariff = new InsuranceTariff({
-    ...req.body,
-    hospitalId: req.hospitalId,
-  });
   try {
+    const InsuranceTariff = req.tenantDb.model("InsuranceTariff");
+    const tariff = new InsuranceTariff({
+      ...req.body,
+      hospitalId: req.hospitalId,
+    });
     const newTariff = await tariff.save();
     res.status(201).json(newTariff);
   } catch (error) {
@@ -46,6 +50,7 @@ router.post("/", async (req, res) => {
 // Update insurance tariff
 router.put("/:id", async (req, res) => {
   try {
+    const InsuranceTariff = req.tenantDb.model("InsuranceTariff");
     const tariff = await InsuranceTariff.findOneAndUpdate(
       { _id: req.params.id, hospitalId: req.hospitalId },
       req.body,
@@ -61,6 +66,7 @@ router.put("/:id", async (req, res) => {
 // Delete insurance tariff
 router.delete("/:id", async (req, res) => {
   try {
+    const InsuranceTariff = req.tenantDb.model("InsuranceTariff");
     const tariff = await InsuranceTariff.findOneAndDelete({
       _id: req.params.id,
       hospitalId: req.hospitalId,
@@ -75,6 +81,7 @@ router.delete("/:id", async (req, res) => {
 // Get tariffs by companyId
 router.get("/company/:companyId", async (req, res) => {
   try {
+    const InsuranceTariff = req.tenantDb.model("InsuranceTariff");
     const tariffs = await InsuranceTariff.find({
       companyId: req.params.companyId,
       hospitalId: req.hospitalId,

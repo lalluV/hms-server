@@ -4,13 +4,18 @@ const router = express.Router();
 const MasterMedicine = require("../models/MasterMedicine");
 const PharmacyInventory = require("../models/PharmacyInventory");
 const adminAuth = require("../middleware/adminAuth");
+const {
+  indexMasterMedicine,
+  deleteMasterMedicine,
+  searchMasterMedicines,
+} = require("../utils/meilisearch");
 
 // Search endpoint is public for hospitals (no auth required)
 // All other routes require admin authentication
 
 // Apply admin auth to all routes except search
 router.use((req, res, next) => {
-  if (req.path === '/search/autocomplete') {
+  if (req.path === "/search/autocomplete") {
     return next(); // Public endpoint - no auth required
   }
   adminAuth(req, res, next);
@@ -124,6 +129,18 @@ router.post("/", async (req, res) => {
     });
 
     const savedMedicine = await newMedicine.save();
+
+    // Index in Meilisearch
+    try {
+      await indexMasterMedicine(savedMedicine);
+    } catch (error) {
+      console.error(
+        "⚠️  Failed to index master medicine in Meilisearch:",
+        error.message
+      );
+      // Don't fail the request if indexing fails
+    }
+
     res.status(201).json(savedMedicine);
   } catch (error) {
     console.error("Error creating master medicine:", error);
@@ -171,6 +188,17 @@ router.put("/:id", async (req, res) => {
       { new: true, runValidators: true }
     );
 
+    // Update in Meilisearch
+    try {
+      await indexMasterMedicine(updatedMedicine);
+    } catch (error) {
+      console.error(
+        "⚠️  Failed to update master medicine in Meilisearch:",
+        error.message
+      );
+      // Don't fail the request if indexing fails
+    }
+
     res.json(updatedMedicine);
   } catch (error) {
     console.error("Error updating master medicine:", error);
@@ -213,6 +241,16 @@ router.delete("/:id", async (req, res) => {
         { new: true }
       );
 
+      // Update in Meilisearch (mark as inactive)
+      try {
+        await indexMasterMedicine(updatedMedicine);
+      } catch (error) {
+        console.error(
+          "⚠️  Failed to update master medicine in Meilisearch:",
+          error.message
+        );
+      }
+
       return res.json({
         message: "Master medicine deactivated (soft delete)",
         medicine: updatedMedicine,
@@ -221,7 +259,19 @@ router.delete("/:id", async (req, res) => {
     }
 
     // Hard delete if no hospitals are using it
+    const medicineId = medicine._id.toString();
     await MasterMedicine.findByIdAndDelete(req.params.id);
+
+    // Delete from Meilisearch
+    try {
+      await deleteMasterMedicine(medicineId);
+    } catch (error) {
+      console.error(
+        "⚠️  Failed to delete master medicine from Meilisearch:",
+        error.message
+      );
+    }
+
     res.json({ message: "Master medicine deleted successfully" });
   } catch (error) {
     console.error("Error deleting master medicine:", error);
@@ -254,16 +304,59 @@ router.get("/stats/overview", async (req, res) => {
 
 // Search master medicines (for autocomplete/search)
 // This endpoint is public for hospitals to search medicines
+// Uses Meilisearch with MongoDB fallback
 router.get("/search/autocomplete", async (req, res) => {
   try {
-    const { q, limit = 20 } = req.query;
+    const { q, limit = 20, type, active = true } = req.query;
 
     if (!q || q.length < 2) {
       return res.json({ results: [] });
     }
 
+    try {
+      // Try Meilisearch first
+      const searchResults = await searchMasterMedicines(q, parseInt(limit), {
+        active: active === "true" || active === true,
+        type: type,
+      });
+
+      if (searchResults.length > 0) {
+        // Fetch full documents from MongoDB to maintain consistency
+        const ids = searchResults.map((hit) => hit.id);
+        const medicines = await MasterMedicine.find({
+          _id: { $in: ids },
+          active: active === "true" || active === true,
+        })
+          .select(
+            "item_code generic_name generic_name2 manufacturer pack type description hsn_code _id"
+          )
+          .lean();
+
+        // Map back to search order
+        const idToDoc = {};
+        medicines.forEach((doc) => {
+          idToDoc[doc._id.toString()] = doc;
+        });
+
+        const orderedResults = searchResults
+          .map((hit) => {
+            const doc = idToDoc[hit.id];
+            return doc ? { ...doc, _id: doc._id.toString() } : null;
+          })
+          .filter(Boolean);
+
+        return res.json({ results: orderedResults });
+      }
+    } catch (meilisearchError) {
+      console.warn(
+        "⚠️  Meilisearch error, falling back to MongoDB:",
+        meilisearchError.message
+      );
+    }
+
+    // Fallback to MongoDB if Meilisearch fails or returns no results
     const query = {
-      active: true,
+      active: active === "true" || active === true,
       $or: [
         { item_code: { $regex: q, $options: "i" } },
         { generic_name: { $regex: q, $options: "i" } },
@@ -273,12 +366,21 @@ router.get("/search/autocomplete", async (req, res) => {
       ],
     };
 
+    if (type) {
+      query.type = type;
+    }
+
     const medicines = await MasterMedicine.find(query)
       .limit(parseInt(limit))
-      .select("item_code generic_name generic_name2 manufacturer pack type description _id")
-      .sort({ generic_name: 1 });
+      .select(
+        "item_code generic_name generic_name2 manufacturer pack type description hsn_code _id"
+      )
+      .sort({ generic_name: 1 })
+      .lean();
 
-    res.json({ results: medicines });
+    res.json({
+      results: medicines.map((m) => ({ ...m, _id: m._id.toString() })),
+    });
   } catch (error) {
     console.error("Error searching master medicines:", error);
     res.status(500).json({ error: "Failed to search master medicines" });
@@ -286,4 +388,3 @@ router.get("/search/autocomplete", async (req, res) => {
 });
 
 module.exports = router;
-

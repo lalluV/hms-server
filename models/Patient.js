@@ -129,6 +129,7 @@ const patientSchema = new mongoose.Schema(
     investigations: [mongoose.Schema.Types.Mixed],
     treatment: [mongoose.Schema.Types.Mixed],
     casualtyTreatment: [mongoose.Schema.Types.Mixed],
+    insulinChart: [mongoose.Schema.Types.Mixed],
     dischargeOrders: { type: String },
     counselling: { type: String },
     symptoms: [String],

@@ -1,13 +1,15 @@
 const express = require("express");
 const router = express.Router();
-const Ward = require("../models/Ward");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Get all wards
 router.get("/", async (req, res) => {
   try {
+    const Ward = req.tenantDb.model("Ward");
     const wards = await Ward.find({ hospitalId: req.hospitalId });
     res.json(wards);
   } catch (error) {
@@ -18,6 +20,7 @@ router.get("/", async (req, res) => {
 // Get ward by ID
 router.get("/:id", async (req, res) => {
   try {
+    const Ward = req.tenantDb.model("Ward");
     const ward = await Ward.findOne({
       wardId: req.params.id,
       hospitalId: req.hospitalId,
@@ -34,6 +37,7 @@ router.get("/:id", async (req, res) => {
 // Create new ward
 router.post("/", async (req, res) => {
   try {
+    const Ward = req.tenantDb.model("Ward");
     const ward = new Ward({
       ...req.body,
       hospitalId: req.hospitalId,
@@ -48,6 +52,7 @@ router.post("/", async (req, res) => {
 // Update ward
 router.put("/:id", async (req, res) => {
   try {
+    const Ward = req.tenantDb.model("Ward");
     const ward = await Ward.findOneAndUpdate(
       { wardId: req.params.id, hospitalId: req.hospitalId },
       req.body,
@@ -67,6 +72,7 @@ router.put("/:id", async (req, res) => {
 // Delete ward
 router.delete("/:id", async (req, res) => {
   try {
+    const Ward = req.tenantDb.model("Ward");
     const ward = await Ward.findOneAndDelete({
       wardId: req.params.id,
       hospitalId: req.hospitalId,
@@ -83,6 +89,7 @@ router.delete("/:id", async (req, res) => {
 // Get ward by type
 router.get("/type/:type", async (req, res) => {
   try {
+    const Ward = req.tenantDb.model("Ward");
     const wards = await Ward.find({
       type: req.params.type,
       hospitalId: req.hospitalId,
@@ -96,6 +103,7 @@ router.get("/type/:type", async (req, res) => {
 // Get ward by status
 router.get("/status/:status", async (req, res) => {
   try {
+    const Ward = req.tenantDb.model("Ward");
     const wards = await Ward.find({
       status: req.params.status,
       hospitalId: req.hospitalId,

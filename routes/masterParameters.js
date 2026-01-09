@@ -4,10 +4,15 @@ const router = express.Router();
 const MasterParameter = require("../models/MasterParameter");
 const Parameter = require("../models/Parameter");
 const adminAuth = require("../middleware/adminAuth");
+const {
+  indexMasterParameter,
+  deleteMasterParameter,
+  searchMasterParameters,
+} = require("../utils/meilisearch");
 
 // Apply admin auth to all routes except search
 router.use((req, res, next) => {
-  if (req.path === '/search/autocomplete') {
+  if (req.path === "/search/autocomplete") {
     return next(); // Public endpoint - no auth required
   }
   adminAuth(req, res, next);
@@ -16,13 +21,7 @@ router.use((req, res, next) => {
 // Get all master parameters with pagination and search
 router.get("/", async (req, res) => {
   try {
-    const {
-      page = 1,
-      limit = 50,
-      search = "",
-      active,
-      category,
-    } = req.query;
+    const { page = 1, limit = 50, search = "", active, category } = req.query;
 
     const query = {};
 
@@ -114,6 +113,18 @@ router.post("/", async (req, res) => {
     });
 
     const savedParameter = await newParameter.save();
+
+    // Index in Meilisearch
+    try {
+      await indexMasterParameter(savedParameter);
+    } catch (error) {
+      console.error(
+        "⚠️  Failed to index master parameter in Meilisearch:",
+        error.message
+      );
+      // Don't fail the request if indexing fails
+    }
+
     res.status(201).json(savedParameter);
   } catch (error) {
     console.error("Error creating master parameter:", error);
@@ -133,7 +144,10 @@ router.put("/:id", async (req, res) => {
     }
 
     // Prevent updating parameter_code if it's being changed and already exists
-    if (req.body.parameter_code && req.body.parameter_code !== parameter.parameter_code) {
+    if (
+      req.body.parameter_code &&
+      req.body.parameter_code !== parameter.parameter_code
+    ) {
       const existing = await MasterParameter.findOne({
         parameter_code: req.body.parameter_code,
       });
@@ -160,6 +174,17 @@ router.put("/:id", async (req, res) => {
       },
       { new: true, runValidators: true }
     );
+
+    // Update in Meilisearch
+    try {
+      await indexMasterParameter(updatedParameter);
+    } catch (error) {
+      console.error(
+        "⚠️  Failed to update master parameter in Meilisearch:",
+        error.message
+      );
+      // Don't fail the request if indexing fails
+    }
 
     res.json(updatedParameter);
   } catch (error) {
@@ -203,6 +228,16 @@ router.delete("/:id", async (req, res) => {
         { new: true }
       );
 
+      // Update in Meilisearch (mark as inactive)
+      try {
+        await indexMasterParameter(updatedParameter);
+      } catch (error) {
+        console.error(
+          "⚠️  Failed to update master parameter in Meilisearch:",
+          error.message
+        );
+      }
+
       return res.json({
         message: "Master parameter deactivated (soft delete)",
         parameter: updatedParameter,
@@ -211,7 +246,19 @@ router.delete("/:id", async (req, res) => {
     }
 
     // Hard delete if no hospitals are using it
+    const parameterId = parameter._id.toString();
     await MasterParameter.findByIdAndDelete(req.params.id);
+
+    // Delete from Meilisearch
+    try {
+      await deleteMasterParameter(parameterId);
+    } catch (error) {
+      console.error(
+        "⚠️  Failed to delete master parameter from Meilisearch:",
+        error.message
+      );
+    }
+
     res.json({ message: "Master parameter deleted successfully" });
   } catch (error) {
     console.error("Error deleting master parameter:", error);
@@ -244,16 +291,59 @@ router.get("/stats/overview", async (req, res) => {
 
 // Search master parameters (for autocomplete/search)
 // This endpoint is public for hospitals to search parameters
+// Uses Meilisearch with MongoDB fallback
 router.get("/search/autocomplete", async (req, res) => {
   try {
-    const { q, limit = 20 } = req.query;
+    const { q, limit = 20, category, active = true } = req.query;
 
     if (!q || q.length < 2) {
       return res.json({ results: [] });
     }
 
+    try {
+      // Try Meilisearch first
+      const searchResults = await searchMasterParameters(q, parseInt(limit), {
+        active: active === "true" || active === true,
+        category: category,
+      });
+
+      if (searchResults.length > 0) {
+        // Fetch full documents from MongoDB
+        const ids = searchResults.map((hit) => hit.id);
+        const parameters = await MasterParameter.find({
+          _id: { $in: ids },
+          active: active === "true" || active === true,
+        })
+          .select(
+            "parameter_code name units category default_normal_range default_critical_values _id"
+          )
+          .lean();
+
+        // Map back to search order
+        const idToDoc = {};
+        parameters.forEach((doc) => {
+          idToDoc[doc._id.toString()] = doc;
+        });
+
+        const orderedResults = searchResults
+          .map((hit) => {
+            const doc = idToDoc[hit.id];
+            return doc ? { ...doc, _id: doc._id.toString() } : null;
+          })
+          .filter(Boolean);
+
+        return res.json({ results: orderedResults });
+      }
+    } catch (meilisearchError) {
+      console.warn(
+        "⚠️  Meilisearch error, falling back to MongoDB:",
+        meilisearchError.message
+      );
+    }
+
+    // Fallback to MongoDB if Meilisearch fails or returns no results
     const query = {
-      active: true,
+      active: active === "true" || active === true,
       $or: [
         { parameter_code: { $regex: q, $options: "i" } },
         { name: { $regex: q, $options: "i" } },
@@ -262,12 +352,21 @@ router.get("/search/autocomplete", async (req, res) => {
       ],
     };
 
+    if (category) {
+      query.category = { $regex: category, $options: "i" };
+    }
+
     const parameters = await MasterParameter.find(query)
       .limit(parseInt(limit))
-      .select("parameter_code name units category default_normal_range default_critical_values _id")
-      .sort({ name: 1 });
+      .select(
+        "parameter_code name units category default_normal_range default_critical_values _id"
+      )
+      .sort({ name: 1 })
+      .lean();
 
-    res.json({ results: parameters });
+    res.json({
+      results: parameters.map((p) => ({ ...p, _id: p._id.toString() })),
+    });
   } catch (error) {
     console.error("Error searching master parameters:", error);
     res.status(500).json({ error: "Failed to search master parameters" });
@@ -275,4 +374,3 @@ router.get("/search/autocomplete", async (req, res) => {
 });
 
 module.exports = router;
-

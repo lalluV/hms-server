@@ -1,13 +1,15 @@
 const express = require("express");
 const router = express.Router();
-const Holiday = require("../models/Holiday");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Get all holidays
 router.get("/", async (req, res) => {
   try {
+    const Holiday = req.tenantDb.model("Holiday");
     const holidays = await Holiday.find({ hospitalId: req.hospitalId });
     res.json(holidays);
   } catch (error) {
@@ -18,6 +20,7 @@ router.get("/", async (req, res) => {
 // Get holiday by ID
 router.get("/:id", async (req, res) => {
   try {
+    const Holiday = req.tenantDb.model("Holiday");
     const holiday = await Holiday.findOne({
       id: req.params.id,
       hospitalId: req.hospitalId,
@@ -34,6 +37,7 @@ router.get("/:id", async (req, res) => {
 // Create new holiday
 router.post("/", async (req, res) => {
   try {
+    const Holiday = req.tenantDb.model("Holiday");
     const holiday = new Holiday({ ...req.body, hospitalId: req.hospitalId });
     const newHoliday = await holiday.save();
     res.status(201).json(newHoliday);
@@ -45,6 +49,7 @@ router.post("/", async (req, res) => {
 // Update holiday
 router.put("/:id", async (req, res) => {
   try {
+    const Holiday = req.tenantDb.model("Holiday");
     const holiday = await Holiday.findOneAndUpdate(
       { id: req.params.id, hospitalId: req.hospitalId },
       req.body,
@@ -62,6 +67,7 @@ router.put("/:id", async (req, res) => {
 // Delete holiday
 router.delete("/:id", async (req, res) => {
   try {
+    const Holiday = req.tenantDb.model("Holiday");
     const holiday = await Holiday.findOneAndDelete({
       id: req.params.id,
       hospitalId: req.hospitalId,
@@ -78,6 +84,7 @@ router.delete("/:id", async (req, res) => {
 // Get holidays by type
 router.get("/type/:type", async (req, res) => {
   try {
+    const Holiday = req.tenantDb.model("Holiday");
     const holidays = await Holiday.find({
       type: req.params.type,
       hospitalId: req.hospitalId,
@@ -91,6 +98,7 @@ router.get("/type/:type", async (req, res) => {
 // Get holidays by date range
 router.get("/date-range", async (req, res) => {
   try {
+    const Holiday = req.tenantDb.model("Holiday");
     const { startDate, endDate } = req.query;
     const holidays = await Holiday.find({
       date: {

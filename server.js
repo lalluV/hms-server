@@ -4,9 +4,10 @@ const cors = require("cors"); // <--- import cors
 require("dotenv").config();
 const {
   initializeMeilisearch,
-  indexAllData,
-  getIndexStats,
+  indexAllMasterData,
+  getAllIndexStats,
 } = require("./utils/meilisearch");
+const { initializeMasterDatabase } = require("./utils/tenantDb");
 
 const app = express();
 
@@ -25,13 +26,17 @@ app.use(
 
 app.use(express.json());
 
+// Initialize master database connection (for shared data)
 mongoose
-  .connect(process.env.MONGO_URI, {
+  .connect(process.env.MONGO_URI_SHARED || process.env.MONGO_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
   })
-  .then(() => console.log("✅ Connected to MongoDB"))
-  .catch((err) => console.error("❌ MongoDB connection error:", err));
+  .then(() => {
+    console.log("✅ Connected to Master MongoDB Database");
+    initializeMasterDatabase();
+  })
+  .catch((err) => console.error("❌ Master MongoDB connection error:", err));
 
 // Your existing routes here...
 app.use("/api/pharmacy", require("./routes/pharmacy"));
@@ -75,7 +80,11 @@ app.use("/api/master-parameters", require("./routes/masterParameters"));
 app.use("/api/master-diagnostics", require("./routes/masterDiagnostics"));
 app.use("/api/master-lab-items", require("./routes/masterLabItems"));
 
-// Error handling middleware
+// Database error handling middleware
+const { dbErrorHandler } = require("./middleware/dbErrorHandler");
+app.use(dbErrorHandler);
+
+// General error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ message: "Something went wrong!" });
@@ -85,37 +94,72 @@ const PORT = process.env.PORT || 3001;
 app.listen(PORT, "0.0.0.0", async () => {
   console.log(`🚀 Server running on port ${PORT}`);
 
-  // Initialize Meilisearch and index data after server starts
+  // Initialize Meilisearch and index master data after server starts
   setTimeout(async () => {
     try {
       const success = await initializeMeilisearch();
       if (success) {
-        console.log("✅ Meilisearch initialized successfully");
+        console.log("✅ Meilisearch initialized successfully for master data");
 
-        // Check if data needs to be indexed
-        const indexStats = await getIndexStats();
-        if (!indexStats || indexStats.documents === 0) {
-          console.log("📝 No data indexed, starting automatic indexing...");
-          const result = await indexAllData();
-          if (result.success) {
+        // Check if master data needs to be indexed
+        const indexStats = await getAllIndexStats();
+        if (indexStats) {
+          const totalIndexed =
+            indexStats.master_medicines.documents +
+            indexStats.master_diagnostics.documents +
+            indexStats.master_parameters.documents +
+            indexStats.master_lab_items.documents;
+
+          if (totalIndexed === 0) {
             console.log(
-              `✅ Automatic indexing completed: ${result.indexed} documents indexed`
+              "📝 No master data indexed, starting automatic indexing..."
             );
+            const result = await indexAllMasterData();
+            if (result.success) {
+              console.log(
+                `✅ Automatic master data indexing completed: ${result.totalIndexed} documents indexed`
+              );
+              console.log(
+                `   - Medicines: ${result.results.medicines.indexed}`
+              );
+              console.log(
+                `   - Diagnostics: ${result.results.diagnostics.indexed}`
+              );
+              console.log(
+                `   - Parameters: ${result.results.parameters.indexed}`
+              );
+              console.log(`   - Lab Items: ${result.results.labItems.indexed}`);
+            } else {
+              console.log(
+                "❌ Automatic master data indexing failed:",
+                result.error
+              );
+            }
           } else {
-            console.log("❌ Automatic indexing failed:", result.error);
+            console.log("✅ Meilisearch master data indices status:");
+            console.log(
+              `   - Medicines: ${indexStats.master_medicines.documents} documents`
+            );
+            console.log(
+              `   - Diagnostics: ${indexStats.master_diagnostics.documents} documents`
+            );
+            console.log(
+              `   - Parameters: ${indexStats.master_parameters.documents} documents`
+            );
+            console.log(
+              `   - Lab Items: ${indexStats.master_lab_items.documents} documents`
+            );
+            console.log(`   - Total: ${totalIndexed} documents indexed`);
           }
-        } else {
-          console.log(
-            `✅ Meilisearch already has ${indexStats.documents} documents indexed`
-          );
         }
       } else {
         console.log(
-          "⚠️  Meilisearch initialization failed - search will be disabled"
+          "⚠️  Meilisearch initialization failed - master data search will use MongoDB fallback"
         );
       }
     } catch (error) {
       console.error("❌ Meilisearch initialization error:", error);
+      console.log("⚠️  Master data search will use MongoDB fallback");
     }
   }, 2000);
 });

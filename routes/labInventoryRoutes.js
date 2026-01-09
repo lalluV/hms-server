@@ -1,14 +1,17 @@
 const express = require("express");
 const router = express.Router();
-const LabInventory = require("../models/LabInventory");
 const MasterLabItem = require("../models/MasterLabItem");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Get lab inventory items (supports optional pagination & search)
 router.get("/", async (req, res) => {
   try {
+    const LabInventory = req.tenantDb.model("LabInventory");
+
     const { search, page, limit } = req.query;
 
     // If no pagination/search params, preserve legacy behaviour (return all items as array)
@@ -76,6 +79,7 @@ router.get("/", async (req, res) => {
 // Get lab inventory item by ID (supports both _id and item_code)
 router.get("/:id", async (req, res) => {
   try {
+    const LabInventory = req.tenantDb.model("LabInventory");
     const mongoose = require("mongoose");
     let query = { hospitalId: req.hospitalId };
 
@@ -105,6 +109,7 @@ router.get("/:id", async (req, res) => {
 // Create lab inventory item from master lab item
 router.post("/from-master/:masterId", async (req, res) => {
   try {
+    const LabInventory = req.tenantDb.model("LabInventory");
     const masterLabItem = await MasterLabItem.findById(req.params.masterId);
     if (!masterLabItem) {
       return res.status(404).json({ message: "Master lab item not found" });
@@ -159,6 +164,7 @@ router.post("/from-master/:masterId", async (req, res) => {
 // Create lab inventory item (supports both custom and from master)
 router.post("/", async (req, res) => {
   try {
+    const LabInventory = req.tenantDb.model("LabInventory");
     // If labItemId is provided, verify it exists and populate legacy fields
     let inventoryData = { ...req.body, hospitalId: req.hospitalId };
 
@@ -201,6 +207,7 @@ router.post("/", async (req, res) => {
 // Update lab inventory item (supports both _id and item_code)
 router.put("/:id", async (req, res) => {
   try {
+    const LabInventory = req.tenantDb.model("LabInventory");
     const mongoose = require("mongoose");
     let query = { hospitalId: req.hospitalId };
 
@@ -232,6 +239,7 @@ router.put("/:id", async (req, res) => {
 // Delete lab inventory item (supports both _id and item_code)
 router.delete("/:id", async (req, res) => {
   try {
+    const LabInventory = req.tenantDb.model("LabInventory");
     const mongoose = require("mongoose");
     let query = { hospitalId: req.hospitalId };
 
@@ -257,6 +265,7 @@ router.delete("/:id", async (req, res) => {
 // Get lab inventory items by category
 router.get("/category/:category", async (req, res) => {
   try {
+    const LabInventory = req.tenantDb.model("LabInventory");
     const items = await LabInventory.find({
       category: req.params.category,
       hospitalId: req.hospitalId,
@@ -270,6 +279,7 @@ router.get("/category/:category", async (req, res) => {
 // Get lab inventory items by status
 router.get("/status/:status", async (req, res) => {
   try {
+    const LabInventory = req.tenantDb.model("LabInventory");
     const items = await LabInventory.find({
       status: req.params.status,
       hospitalId: req.hospitalId,
@@ -283,6 +293,7 @@ router.get("/status/:status", async (req, res) => {
 // Get low stock items
 router.get("/stock/low", async (req, res) => {
   try {
+    const LabInventory = req.tenantDb.model("LabInventory");
     const items = await LabInventory.find({
       stock: { $lt: 10 },
       hospitalId: req.hospitalId,

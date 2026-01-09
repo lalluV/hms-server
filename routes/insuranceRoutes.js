@@ -1,13 +1,15 @@
 const express = require("express");
 const router = express.Router();
-const InsuranceCompany = require("../models/InsuranceCompany");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Get all insurance companies
 router.get("/", async (req, res) => {
   try {
+    const InsuranceCompany = req.tenantDb.model("InsuranceCompany");
     const companies = await InsuranceCompany.find({
       hospitalId: req.hospitalId,
     });
@@ -20,6 +22,7 @@ router.get("/", async (req, res) => {
 // Get insurance company by ID
 router.get("/:id", async (req, res) => {
   try {
+    const InsuranceCompany = req.tenantDb.model("InsuranceCompany");
     const company = await InsuranceCompany.findOne({
       _id: req.params.id,
       hospitalId: req.hospitalId,
@@ -35,11 +38,12 @@ router.get("/:id", async (req, res) => {
 
 // Create insurance company
 router.post("/", async (req, res) => {
-  const company = new InsuranceCompany({
-    ...req.body,
-    hospitalId: req.hospitalId,
-  });
   try {
+    const InsuranceCompany = req.tenantDb.model("InsuranceCompany");
+    const company = new InsuranceCompany({
+      ...req.body,
+      hospitalId: req.hospitalId,
+    });
     const newCompany = await company.save();
     res.status(201).json(newCompany);
   } catch (error) {
@@ -50,6 +54,7 @@ router.post("/", async (req, res) => {
 // Update insurance company
 router.put("/:id", async (req, res) => {
   try {
+    const InsuranceCompany = req.tenantDb.model("InsuranceCompany");
     const company = await InsuranceCompany.findOneAndUpdate(
       { _id: req.params.id, hospitalId: req.hospitalId },
       req.body,
@@ -67,6 +72,7 @@ router.put("/:id", async (req, res) => {
 // Delete insurance company
 router.delete("/:id", async (req, res) => {
   try {
+    const InsuranceCompany = req.tenantDb.model("InsuranceCompany");
     const company = await InsuranceCompany.findOneAndDelete({
       _id: req.params.id,
       hospitalId: req.hospitalId,
@@ -83,6 +89,7 @@ router.delete("/:id", async (req, res) => {
 // Get insurance companies by status
 router.get("/status/:status", async (req, res) => {
   try {
+    const InsuranceCompany = req.tenantDb.model("InsuranceCompany");
     const companies = await InsuranceCompany.find({
       status: req.params.status,
       hospitalId: req.hospitalId,
@@ -96,6 +103,7 @@ router.get("/status/:status", async (req, res) => {
 // Get insurance companies by type
 router.get("/type/:type", async (req, res) => {
   try {
+    const InsuranceCompany = req.tenantDb.model("InsuranceCompany");
     const companies = await InsuranceCompany.find({
       type: req.params.type,
       hospitalId: req.hospitalId,

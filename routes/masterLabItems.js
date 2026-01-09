@@ -4,10 +4,15 @@ const router = express.Router();
 const MasterLabItem = require("../models/MasterLabItem");
 const LabInventory = require("../models/LabInventory");
 const adminAuth = require("../middleware/adminAuth");
+const {
+  indexMasterLabItem,
+  deleteMasterLabItem,
+  searchMasterLabItems,
+} = require("../utils/meilisearch");
 
 // Apply admin auth to all routes except search
 router.use((req, res, next) => {
-  if (req.path === '/search/autocomplete') {
+  if (req.path === "/search/autocomplete") {
     return next(); // Public endpoint - no auth required
   }
   adminAuth(req, res, next);
@@ -127,6 +132,18 @@ router.post("/", async (req, res) => {
     });
 
     const savedItem = await newItem.save();
+
+    // Index in Meilisearch
+    try {
+      await indexMasterLabItem(savedItem);
+    } catch (error) {
+      console.error(
+        "⚠️  Failed to index master lab item in Meilisearch:",
+        error.message
+      );
+      // Don't fail the request if indexing fails
+    }
+
     res.status(201).json(savedItem);
   } catch (error) {
     console.error("Error creating master lab item:", error);
@@ -174,6 +191,17 @@ router.put("/:id", async (req, res) => {
       { new: true, runValidators: true }
     );
 
+    // Update in Meilisearch
+    try {
+      await indexMasterLabItem(updatedItem);
+    } catch (error) {
+      console.error(
+        "⚠️  Failed to update master lab item in Meilisearch:",
+        error.message
+      );
+      // Don't fail the request if indexing fails
+    }
+
     res.json(updatedItem);
   } catch (error) {
     console.error("Error updating master lab item:", error);
@@ -216,6 +244,16 @@ router.delete("/:id", async (req, res) => {
         { new: true }
       );
 
+      // Update in Meilisearch (mark as inactive)
+      try {
+        await indexMasterLabItem(updatedItem);
+      } catch (error) {
+        console.error(
+          "⚠️  Failed to update master lab item in Meilisearch:",
+          error.message
+        );
+      }
+
       return res.json({
         message: "Master lab item deactivated (soft delete)",
         item: updatedItem,
@@ -224,7 +262,19 @@ router.delete("/:id", async (req, res) => {
     }
 
     // Hard delete if no hospitals are using it
+    const itemId = item._id.toString();
     await MasterLabItem.findByIdAndDelete(req.params.id);
+
+    // Delete from Meilisearch
+    try {
+      await deleteMasterLabItem(itemId);
+    } catch (error) {
+      console.error(
+        "⚠️  Failed to delete master lab item from Meilisearch:",
+        error.message
+      );
+    }
+
     res.json({ message: "Master lab item deleted successfully" });
   } catch (error) {
     console.error("Error deleting master lab item:", error);
@@ -257,16 +307,68 @@ router.get("/stats/overview", async (req, res) => {
 
 // Search master lab items (for autocomplete/search)
 // This endpoint is public for hospitals to search items
+// Uses Meilisearch with MongoDB fallback
 router.get("/search/autocomplete", async (req, res) => {
   try {
-    const { q, limit = 20 } = req.query;
+    const {
+      q,
+      limit = 20,
+      type,
+      category,
+      manufacturer,
+      active = true,
+    } = req.query;
 
     if (!q || q.length < 2) {
       return res.json({ results: [] });
     }
 
+    try {
+      // Try Meilisearch first
+      const searchResults = await searchMasterLabItems(q, parseInt(limit), {
+        active: active === "true" || active === true,
+        type: type,
+        category: category,
+        manufacturer: manufacturer,
+      });
+
+      if (searchResults.length > 0) {
+        // Fetch full documents from MongoDB
+        const ids = searchResults.map((hit) => hit.id);
+        const items = await MasterLabItem.find({
+          _id: { $in: ids },
+          active: active === "true" || active === true,
+        })
+          .select(
+            "item_code name category manufacturer type unit description hsn_code _id"
+          )
+          .lean();
+
+        // Map back to search order
+        const idToDoc = {};
+        items.forEach((doc) => {
+          idToDoc[doc._id.toString()] = doc;
+        });
+
+        const orderedResults = searchResults
+          .map((hit) => {
+            const doc = idToDoc[hit.id];
+            return doc ? { ...doc, _id: doc._id.toString() } : null;
+          })
+          .filter(Boolean);
+
+        return res.json({ results: orderedResults });
+      }
+    } catch (meilisearchError) {
+      console.warn(
+        "⚠️  Meilisearch error, falling back to MongoDB:",
+        meilisearchError.message
+      );
+    }
+
+    // Fallback to MongoDB if Meilisearch fails or returns no results
     const query = {
-      active: true,
+      active: active === "true" || active === true,
       $or: [
         { item_code: { $regex: q, $options: "i" } },
         { name: { $regex: q, $options: "i" } },
@@ -276,12 +378,27 @@ router.get("/search/autocomplete", async (req, res) => {
       ],
     };
 
+    if (type) {
+      query.type = type;
+    }
+    if (category) {
+      query.category = { $regex: category, $options: "i" };
+    }
+    if (manufacturer) {
+      query.manufacturer = { $regex: manufacturer, $options: "i" };
+    }
+
     const items = await MasterLabItem.find(query)
       .limit(parseInt(limit))
-      .select("item_code name category manufacturer type unit description hsn_code _id")
-      .sort({ name: 1 });
+      .select(
+        "item_code name category manufacturer type unit description hsn_code _id"
+      )
+      .sort({ name: 1 })
+      .lean();
 
-    res.json({ results: items });
+    res.json({
+      results: items.map((item) => ({ ...item, _id: item._id.toString() })),
+    });
   } catch (error) {
     console.error("Error searching master lab items:", error);
     res.status(500).json({ error: "Failed to search master lab items" });
@@ -289,4 +406,3 @@ router.get("/search/autocomplete", async (req, res) => {
 });
 
 module.exports = router;
-

@@ -1,13 +1,15 @@
 const express = require("express");
 const router = express.Router();
-const ConsentTemplate = require("../models/ConsentTemplate");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Consent Template routes
 router.post("/", async (req, res) => {
   try {
+    const ConsentTemplate = req.tenantDb.model("ConsentTemplate");
     const template = new ConsentTemplate({
       ...req.body,
       hospitalId: req.hospitalId,
@@ -21,6 +23,7 @@ router.post("/", async (req, res) => {
 
 router.get("/", async (req, res) => {
   try {
+    const ConsentTemplate = req.tenantDb.model("ConsentTemplate");
     const templates = await ConsentTemplate.find({
       hospitalId: req.hospitalId,
     });
@@ -32,6 +35,7 @@ router.get("/", async (req, res) => {
 
 router.get("/:id", async (req, res) => {
   try {
+    const ConsentTemplate = req.tenantDb.model("ConsentTemplate");
     const template = await ConsentTemplate.findOne({
       _id: req.params.id,
       hospitalId: req.hospitalId,
@@ -47,6 +51,7 @@ router.get("/:id", async (req, res) => {
 
 router.put("/:id", async (req, res) => {
   try {
+    const ConsentTemplate = req.tenantDb.model("ConsentTemplate");
     const template = await ConsentTemplate.findOneAndUpdate(
       { _id: req.params.id, hospitalId: req.hospitalId },
       { $set: req.body },
@@ -63,6 +68,7 @@ router.put("/:id", async (req, res) => {
 
 router.delete("/:id", async (req, res) => {
   try {
+    const ConsentTemplate = req.tenantDb.model("ConsentTemplate");
     const template = await ConsentTemplate.findOneAndDelete({
       _id: req.params.id,
       hospitalId: req.hospitalId,

@@ -1,13 +1,15 @@
 const express = require("express");
 const router = express.Router();
-const Shift = require("../models/Shift");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Get all shifts
 router.get("/", async (req, res) => {
   try {
+    const Shift = req.tenantDb.model("Shift");
     const shifts = await Shift.find({ hospitalId: req.hospitalId });
     res.json(shifts);
   } catch (error) {
@@ -18,6 +20,7 @@ router.get("/", async (req, res) => {
 // Get shift by ID
 router.get("/:id", async (req, res) => {
   try {
+    const Shift = req.tenantDb.model("Shift");
     const shift = await Shift.findOne({
       id: req.params.id,
       hospitalId: req.hospitalId,
@@ -34,6 +37,7 @@ router.get("/:id", async (req, res) => {
 // Create new shift
 router.post("/", async (req, res) => {
   try {
+    const Shift = req.tenantDb.model("Shift");
     const shift = new Shift({ ...req.body, hospitalId: req.hospitalId });
     const newShift = await shift.save();
     res.status(201).json(newShift);
@@ -45,6 +49,7 @@ router.post("/", async (req, res) => {
 // Update shift
 router.put("/:id", async (req, res) => {
   try {
+    const Shift = req.tenantDb.model("Shift");
     const shift = await Shift.findOneAndUpdate(
       { id: req.params.id, hospitalId: req.hospitalId },
       req.body,
@@ -62,6 +67,7 @@ router.put("/:id", async (req, res) => {
 // Delete shift
 router.delete("/:id", async (req, res) => {
   try {
+    const Shift = req.tenantDb.model("Shift");
     const shift = await Shift.findOneAndDelete({
       id: req.params.id,
       hospitalId: req.hospitalId,
@@ -78,6 +84,7 @@ router.delete("/:id", async (req, res) => {
 // Get shifts by staff ID
 router.get("/staff/:staffId", async (req, res) => {
   try {
+    const Shift = req.tenantDb.model("Shift");
     const shifts = await Shift.find({
       staffId: req.params.staffId,
       hospitalId: req.hospitalId,
@@ -91,6 +98,7 @@ router.get("/staff/:staffId", async (req, res) => {
 // Get shifts by type
 router.get("/type/:type", async (req, res) => {
   try {
+    const Shift = req.tenantDb.model("Shift");
     const shifts = await Shift.find({
       type: req.params.type,
       hospitalId: req.hospitalId,
@@ -104,6 +112,7 @@ router.get("/type/:type", async (req, res) => {
 // Get shifts by date range
 router.get("/date-range", async (req, res) => {
   try {
+    const Shift = req.tenantDb.model("Shift");
     const { startDate, endDate } = req.query;
     const shifts = await Shift.find({
       date: {
@@ -121,6 +130,7 @@ router.get("/date-range", async (req, res) => {
 // Initialize default shifts
 router.post("/initialize", async (req, res) => {
   try {
+    const Shift = req.tenantDb.model("Shift");
     // Check if shifts already exist
     const existingShifts = await Shift.find({ hospitalId: req.hospitalId });
 
@@ -170,6 +180,7 @@ router.post("/initialize", async (req, res) => {
 // Assign employee to shift
 router.post("/:shiftId/assign-employee", async (req, res) => {
   try {
+    const Shift = req.tenantDb.model("Shift");
     const { shiftId } = req.params;
     const { employee } = req.body;
 
@@ -203,6 +214,7 @@ router.post("/:shiftId/assign-employee", async (req, res) => {
 // Remove employee from shift
 router.delete("/:shiftId/remove-employee/:employeeId", async (req, res) => {
   try {
+    const Shift = req.tenantDb.model("Shift");
     const { shiftId, employeeId } = req.params;
 
     const shift = await Shift.findOneAndUpdate(
@@ -224,6 +236,7 @@ router.delete("/:shiftId/remove-employee/:employeeId", async (req, res) => {
 // Move employee between shifts
 router.post("/move-employee", async (req, res) => {
   try {
+    const Shift = req.tenantDb.model("Shift");
     const { employee, fromShiftName, toShiftName } = req.body;
 
     if (!employee || !fromShiftName || !toShiftName) {

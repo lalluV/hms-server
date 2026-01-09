@@ -1,20 +1,18 @@
 const express = require("express");
 const router = express.Router();
-const Patient = require("../models/Patient");
-const Action = require("../models/Action");
-const Consultation = require("../models/Consultation");
-const DiagnosticsReceipt = require("../models/DiagnosticsReceipt");
-const PharmacyReceipt = require("../models/PharmacyReceipt");
-const AdvanceReceipt = require("../models/AdvanceReceipt");
-const InsuranceTariff = require("../models/InsuranceTariff");
-const InsuranceExclusion = require("../models/InsuranceExclusion");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
+// Apply authentication and tenant database middleware
 router.use(auth);
+router.use(tenantDb);
 
 // Get all patients with pagination support
 router.get("/", async (req, res) => {
   try {
+    // Get Patient model from tenant database
+    const Patient = req.tenantDb.model("Patient");
+
     const {
       page = 1,
       limit = 20,
@@ -102,6 +100,7 @@ router.get("/", async (req, res) => {
 // Get patients by phone number
 router.get("/phone/:phoneNumber", async (req, res) => {
   try {
+    const Patient = req.tenantDb.model("Patient");
     const patients = await Patient.find({
       phone: req.params.phoneNumber,
       hospitalId: req.hospitalId,
@@ -115,6 +114,7 @@ router.get("/phone/:phoneNumber", async (req, res) => {
 // Get patient by ID
 router.get("/:id", async (req, res) => {
   try {
+    const Patient = req.tenantDb.model("Patient");
     const patient = await Patient.findOne({
       UMRNo: req.params.id,
       hospitalId: req.hospitalId,
@@ -131,6 +131,7 @@ router.get("/:id", async (req, res) => {
 // Create new patient
 router.post("/", async (req, res) => {
   try {
+    const Patient = req.tenantDb.model("Patient");
     const patient = new Patient({ ...req.body, hospitalId: req.hospitalId });
     const newPatient = await patient.save();
     res.status(201).json(newPatient);
@@ -142,6 +143,7 @@ router.post("/", async (req, res) => {
 // Update patient
 router.put("/:id", async (req, res) => {
   try {
+    const Patient = req.tenantDb.model("Patient");
     const patient = await Patient.findOneAndUpdate(
       { UMRNo: req.params.id, hospitalId: req.hospitalId },
       { $set: req.body },
@@ -159,6 +161,7 @@ router.put("/:id", async (req, res) => {
 // Delete patient
 router.delete("/:id", async (req, res) => {
   try {
+    const Patient = req.tenantDb.model("Patient");
     const patient = await Patient.findOneAndDelete({
       UMRNo: req.params.id,
       hospitalId: req.hospitalId,
@@ -175,6 +178,7 @@ router.delete("/:id", async (req, res) => {
 // Add medical history to patient
 router.post("/:id/medical-history", async (req, res) => {
   try {
+    const Patient = req.tenantDb.model("Patient");
     const patient = await Patient.findOne({
       UMRNo: req.params.id,
       hospitalId: req.hospitalId,
@@ -195,6 +199,7 @@ router.post("/:id/medical-history", async (req, res) => {
 // Update medical history
 router.put("/:id/medical-history/:historyId", async (req, res) => {
   try {
+    const Patient = req.tenantDb.model("Patient");
     const patient = await Patient.findOne({
       UMRNo: req.params.id,
       hospitalId: req.hospitalId,
@@ -226,6 +231,15 @@ router.put("/:id/medical-history/:historyId", async (req, res) => {
 // Calculate interim bill for a patient
 router.get("/:id/interim-bill", async (req, res) => {
   try {
+    const Patient = req.tenantDb.model("Patient");
+    const Consultation = req.tenantDb.model("Consultation");
+    const Action = req.tenantDb.model("Action");
+    const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
+    const PharmacyReceipt = req.tenantDb.model("PharmacyReceipt");
+    const AdvanceReceipt = req.tenantDb.model("AdvanceReceipt");
+    const InsuranceTariff = req.tenantDb.model("InsuranceTariff");
+    const InsuranceExclusion = req.tenantDb.model("InsuranceExclusion");
+    
     const { id } = req.params;
     const { endDate } = req.query;
 

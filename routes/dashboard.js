@@ -1,18 +1,11 @@
 const express = require("express");
 const router = express.Router();
-const Patient = require("../models/Patient");
-const Appointment = require("../models/Appointment");
-const Consultation = require("../models/Consultation");
-const Action = require("../models/Action");
-const DiagnosticsReceipt = require("../models/DiagnosticsReceipt");
-const PharmacyReceipt = require("../models/PharmacyReceipt");
-const AdvanceReceipt = require("../models/AdvanceReceipt");
-const Expense = require("../models/Expense");
-const Staff = require("../models/Staff");
 const dayjs = require("dayjs");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Helper function to calculate days between dates
 const calculateDays = (startDate, endDate) => {
@@ -24,6 +17,17 @@ const calculateDays = (startDate, endDate) => {
 // Get dashboard statistics
 router.get("/statistics", async (req, res) => {
   try {
+    // Get models from tenant database
+    const Patient = req.tenantDb.model("Patient");
+    const Appointment = req.tenantDb.model("Appointment");
+    const Consultation = req.tenantDb.model("Consultation");
+    const Action = req.tenantDb.model("Action");
+    const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
+    const PharmacyReceipt = req.tenantDb.model("PharmacyReceipt");
+    const AdvanceReceipt = req.tenantDb.model("AdvanceReceipt");
+    const Expense = req.tenantDb.model("Expense");
+    const Staff = req.tenantDb.model("Staff");
+    
     const now = new Date();
     const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);

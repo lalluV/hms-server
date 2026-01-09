@@ -2,6 +2,12 @@ const express = require("express");
 const router = express.Router();
 const Hospital = require("../models/Hospital");
 const adminAuth = require("../middleware/adminAuth");
+const {
+  provisionTenantDatabase,
+  getDatabaseStats,
+  isDatabaseProvisioned,
+} = require("../services/databaseProvisioner");
+const { getTenantDatabaseName } = require("../utils/tenantDb");
 
 router.use(adminAuth);
 
@@ -35,12 +41,11 @@ router.get("/:id", async (req, res) => {
 });
 
 // @route   POST api/hospitals
-// @desc    Create a new hospital with owner ID from logged-in SuperAdmin
+// @desc    Create a new hospital with owner ID from logged-in SuperAdmin and provision database
 // @access  SuperAdmin
-// Note: Staff creation is handled separately in the frontend after hospital creation
 router.post("/", async (req, res) => {
   try {
-    const { name, code, address, city, phone, email } = req.body;
+    const { name, code, address, city, phone, email, autoProvision = true } = req.body;
 
     // Validate required fields
     if (!name || !code) {
@@ -65,7 +70,7 @@ router.post("/", async (req, res) => {
         .json({ message: "Hospital with this code already exists" });
     }
 
-    // Create Hospital with owner ID
+    // Create Hospital with database fields
     const hospital = new Hospital({
       name,
       code,
@@ -73,11 +78,59 @@ router.post("/", async (req, res) => {
       city,
       phone,
       email,
-      createdBy: ownerId, // Set the logged-in SuperAdmin as the owner
+      createdBy: ownerId,
+      databaseStatus: "pending",
     });
+    
     await hospital.save();
 
-    // Return the created hospital (frontend will use the _id to create staff)
+    // Provision tenant database if autoProvision is enabled
+    if (autoProvision) {
+      try {
+        // Update status to provisioning
+        hospital.databaseStatus = "provisioning";
+        hospital.databaseName = getTenantDatabaseName(hospital._id.toString());
+        await hospital.save();
+
+        // Provision database SYNCHRONOUSLY (wait for completion)
+        console.log(`🔄 Starting database provisioning for hospital ${hospital._id}...`);
+        const result = await provisionTenantDatabase(hospital._id.toString());
+
+        if (result.success) {
+          hospital.databaseStatus = "active";
+          hospital.databaseProvisionedAt = new Date();
+          await hospital.save();
+          console.log(`✅ Database provisioned successfully for hospital ${hospital._id}`);
+
+          return res.status(201).json({
+            hospital,
+            message: "Hospital created and database provisioned successfully",
+          });
+        } else {
+          hospital.databaseStatus = "error";
+          await hospital.save();
+          console.error(`❌ Failed to provision database for hospital ${hospital._id}`);
+
+          return res.status(500).json({
+            hospital,
+            message: "Hospital created but database provisioning failed",
+            error: result.error,
+          });
+        }
+      } catch (error) {
+        console.error(`❌ Error provisioning database:`, error);
+        hospital.databaseStatus = "error";
+        await hospital.save();
+
+        return res.status(500).json({
+          hospital,
+          message: "Hospital created but database provisioning failed",
+          error: error.message,
+        });
+      }
+    }
+
+    // Return the created hospital without provisioning
     res.status(201).json({ hospital });
   } catch (err) {
     console.error("Error creating hospital:", err.message);
@@ -105,6 +158,91 @@ router.put("/:id", async (req, res) => {
   } catch (err) {
     console.error(err.message);
     res.status(500).send("Server error");
+  }
+});
+
+// @route   GET api/hospitals/:id/database-status
+// @desc    Get database status for a hospital
+// @access  SuperAdmin
+router.get("/:id/database-status", async (req, res) => {
+  try {
+    const hospital = await Hospital.findById(req.params.id);
+    if (!hospital) {
+      return res.status(404).json({ message: "Hospital not found" });
+    }
+
+    // Check if database is actually provisioned
+    const isProvisioned = await isDatabaseProvisioned(hospital._id.toString());
+    
+    // Get database stats if provisioned
+    let stats = null;
+    if (isProvisioned) {
+      try {
+        stats = await getDatabaseStats(hospital._id.toString());
+      } catch (error) {
+        console.error("Error getting database stats:", error);
+      }
+    }
+
+    res.json({
+      hospitalId: hospital._id,
+      hospitalName: hospital.name,
+      databaseName: hospital.databaseName,
+      databaseStatus: hospital.databaseStatus,
+      databaseProvisionedAt: hospital.databaseProvisionedAt,
+      isProvisioned,
+      stats,
+    });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// @route   POST api/hospitals/:id/provision-database
+// @desc    Manually trigger database provisioning for a hospital
+// @access  SuperAdmin
+router.post("/:id/provision-database", async (req, res) => {
+  try {
+    const hospital = await Hospital.findById(req.params.id);
+    if (!hospital) {
+      return res.status(404).json({ message: "Hospital not found" });
+    }
+
+    if (hospital.databaseStatus === "active") {
+      return res.status(400).json({ message: "Database already provisioned" });
+    }
+
+    // Update status to provisioning
+    hospital.databaseStatus = "provisioning";
+    hospital.databaseName = getTenantDatabaseName(hospital._id.toString());
+    await hospital.save();
+
+    // Provision database
+    const result = await provisionTenantDatabase(hospital._id.toString());
+
+    if (result.success) {
+      hospital.databaseStatus = "active";
+      hospital.databaseProvisionedAt = new Date();
+      await hospital.save();
+
+      res.json({
+        message: "Database provisioned successfully",
+        hospital,
+        result,
+      });
+    } else {
+      hospital.databaseStatus = "error";
+      await hospital.save();
+
+      res.status(500).json({
+        message: "Database provisioning failed",
+        error: result.error,
+      });
+    }
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 });
 

@@ -1,14 +1,17 @@
 const express = require("express");
 const router = express.Router();
 const bcrypt = require("bcryptjs");
-const Staff = require("../models/Staff");
-const auth = require("../middleware/auth");
+const flexibleAuth = require("../middleware/flexibleAuth");
+const tenantDb = require("../middleware/tenantDb");
 
-router.use(auth);
+// Apply flexible authentication (accepts both admin and user tokens) and tenant database middleware
+router.use(flexibleAuth);
+router.use(tenantDb);
 
 // Get all staff members
 router.get("/", async (req, res) => {
   try {
+    const Staff = req.tenantDb.model("Staff");
     const staff = await Staff.find({ hospitalId: req.hospitalId });
     res.json(staff);
   } catch (error) {
@@ -19,6 +22,7 @@ router.get("/", async (req, res) => {
 // Get staff member by ID (userId)
 router.get("/:id", async (req, res) => {
   try {
+    const Staff = req.tenantDb.model("Staff");
     const staff = await Staff.findOne({
       userId: req.params.id,
       hospitalId: req.hospitalId,
@@ -35,6 +39,7 @@ router.get("/:id", async (req, res) => {
 // Get staff member by employee ID
 router.get("/employee/:employeeId", async (req, res) => {
   try {
+    const Staff = req.tenantDb.model("Staff");
     const staff = await Staff.findOne({
       id: req.params.employeeId,
       hospitalId: req.hospitalId,
@@ -51,6 +56,7 @@ router.get("/employee/:employeeId", async (req, res) => {
 // Create new staff member
 router.post("/", async (req, res) => {
   try {
+    const Staff = req.tenantDb.model("Staff");
     const { password, ...staffData } = req.body;
 
     // Check if staff member with userId already exists
@@ -81,6 +87,7 @@ router.post("/", async (req, res) => {
 // Update staff member by userId (must come before /:id route)
 router.put("/user/:userId", async (req, res) => {
   try {
+    const Staff = req.tenantDb.model("Staff");
     const { password, ...updateData } = req.body;
 
     // Hash password if provided
@@ -106,6 +113,7 @@ router.put("/user/:userId", async (req, res) => {
 // Update staff member
 router.put("/:id", async (req, res) => {
   try {
+    const Staff = req.tenantDb.model("Staff");
     const { password, ...updateData } = req.body;
 
     // Hash password if provided
@@ -131,6 +139,7 @@ router.put("/:id", async (req, res) => {
 // Delete staff member
 router.delete("/:id", async (req, res) => {
   try {
+    const Staff = req.tenantDb.model("Staff");
     const staff = await Staff.findOneAndDelete({
       id: req.params.id,
       hospitalId: req.hospitalId,
@@ -147,6 +156,7 @@ router.delete("/:id", async (req, res) => {
 // Get staff by department
 router.get("/department/:department", async (req, res) => {
   try {
+    const Staff = req.tenantDb.model("Staff");
     const staff = await Staff.find({
       department: req.params.department,
       hospitalId: req.hospitalId,
@@ -160,6 +170,7 @@ router.get("/department/:department", async (req, res) => {
 // Get staff by type
 router.get("/type/:type", async (req, res) => {
   try {
+    const Staff = req.tenantDb.model("Staff");
     const staff = await Staff.find({
       type: req.params.type,
       hospitalId: req.hospitalId,
@@ -173,6 +184,7 @@ router.get("/type/:type", async (req, res) => {
 // Get staff by status
 router.get("/status/:status", async (req, res) => {
   try {
+    const Staff = req.tenantDb.model("Staff");
     const staff = await Staff.find({
       status: req.params.status,
       hospitalId: req.hospitalId,
@@ -186,6 +198,7 @@ router.get("/status/:status", async (req, res) => {
 // Update staff status
 router.put("/:id/status", async (req, res) => {
   try {
+    const Staff = req.tenantDb.model("Staff");
     const { status } = req.body;
     const staff = await Staff.findOneAndUpdate(
       { id: req.params.id, hospitalId: req.hospitalId },

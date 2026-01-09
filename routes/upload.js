@@ -8,9 +8,10 @@ const FileMerger = require("../utils/fileMerger");
 dotenv.config();
 
 const router = express.Router();
-const auth = require("../middleware/auth");
+const flexibleAuth = require("../middleware/flexibleAuth");
 
-router.use(auth);
+// Use flexible auth that accepts both admin and user tokens
+router.use(flexibleAuth);
 
 // Configure multer for memory storage with multiple files
 const upload = multer({

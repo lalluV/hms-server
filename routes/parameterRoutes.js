@@ -1,14 +1,17 @@
 const express = require("express");
 const router = express.Router();
-const Parameter = require("../models/Parameter");
 const MasterParameter = require("../models/MasterParameter");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Get all parameters with pagination and search
 router.get("/", async (req, res) => {
   try {
+    const Parameter = req.tenantDb.model("Parameter");
+    
     const { search, page = 1, limit } = req.query;
 
     // Use different limits based on whether search is active
@@ -70,6 +73,7 @@ router.get("/", async (req, res) => {
 // Get parameter by ID
 router.get("/:id", async (req, res) => {
   try {
+    const Parameter = req.tenantDb.model("Parameter");
     const parameter = await Parameter.findOne({
       _id: req.params.id,
       hospitalId: req.hospitalId,
@@ -86,6 +90,8 @@ router.get("/:id", async (req, res) => {
 // Create parameter from master parameter
 router.post("/from-master/:masterId", async (req, res) => {
   try {
+    const Parameter = req.tenantDb.model("Parameter");
+    
     const masterParameter = await MasterParameter.findById(req.params.masterId);
     if (!masterParameter) {
       return res.status(404).json({ message: "Master parameter not found" });
@@ -139,6 +145,8 @@ router.post("/from-master/:masterId", async (req, res) => {
 // Create parameter (supports both custom and from master)
 router.post("/", async (req, res) => {
   try {
+    const Parameter = req.tenantDb.model("Parameter");
+    
     // If parameterId is provided, verify it exists
     if (req.body.parameterId) {
       const masterParam = await MasterParameter.findById(req.body.parameterId);
@@ -163,6 +171,7 @@ router.post("/", async (req, res) => {
 // Update parameter
 router.put("/:id", async (req, res) => {
   try {
+    const Parameter = req.tenantDb.model("Parameter");
     const parameter = await Parameter.findOneAndUpdate(
       { _id: req.params.id, hospitalId: req.hospitalId },
       req.body,
@@ -180,6 +189,7 @@ router.put("/:id", async (req, res) => {
 // Delete parameter
 router.delete("/:id", async (req, res) => {
   try {
+    const Parameter = req.tenantDb.model("Parameter");
     const parameter = await Parameter.findOneAndDelete({
       _id: req.params.id,
       hospitalId: req.hospitalId,
@@ -196,6 +206,7 @@ router.delete("/:id", async (req, res) => {
 // Get parameters by category
 router.get("/category/:category", async (req, res) => {
   try {
+    const Parameter = req.tenantDb.model("Parameter");
     const parameters = await Parameter.find({
       category: req.params.category,
       hospitalId: req.hospitalId,

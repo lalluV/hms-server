@@ -1,13 +1,15 @@
 const express = require("express");
 const router = express.Router();
-const Expense = require("../models/Expense");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Get all expenses
 router.get("/", async (req, res) => {
   try {
+    const Expense = req.tenantDb.model("Expense");
     const expenses = await Expense.find({ hospitalId: req.hospitalId });
     res.json(expenses);
   } catch (error) {
@@ -18,6 +20,7 @@ router.get("/", async (req, res) => {
 // Get expense by ID
 router.get("/:id", async (req, res) => {
   try {
+    const Expense = req.tenantDb.model("Expense");
     const expense = await Expense.findOne({
       id: req.params.id,
       hospitalId: req.hospitalId,
@@ -34,6 +37,7 @@ router.get("/:id", async (req, res) => {
 // Create new expense
 router.post("/", async (req, res) => {
   try {
+    const Expense = req.tenantDb.model("Expense");
     const expense = new Expense({ ...req.body, hospitalId: req.hospitalId });
     const newExpense = await expense.save();
     res.status(201).json(newExpense);
@@ -45,6 +49,7 @@ router.post("/", async (req, res) => {
 // Update expense
 router.put("/:id", async (req, res) => {
   try {
+    const Expense = req.tenantDb.model("Expense");
     const expense = await Expense.findOneAndUpdate(
       { id: req.params.id, hospitalId: req.hospitalId },
       req.body,
@@ -62,6 +67,7 @@ router.put("/:id", async (req, res) => {
 // Delete expense
 router.delete("/:id", async (req, res) => {
   try {
+    const Expense = req.tenantDb.model("Expense");
     const expense = await Expense.findOneAndDelete({
       id: req.params.id,
       hospitalId: req.hospitalId,
@@ -78,6 +84,7 @@ router.delete("/:id", async (req, res) => {
 // Get expenses by category
 router.get("/category/:category", async (req, res) => {
   try {
+    const Expense = req.tenantDb.model("Expense");
     const expenses = await Expense.find({
       category: req.params.category,
       hospitalId: req.hospitalId,
@@ -91,6 +98,7 @@ router.get("/category/:category", async (req, res) => {
 // Get expenses by date range
 router.get("/date-range", async (req, res) => {
   try {
+    const Expense = req.tenantDb.model("Expense");
     const { startDate, endDate } = req.query;
     const expenses = await Expense.find({
       date: {

@@ -1,13 +1,15 @@
 const express = require("express");
 const router = express.Router();
-const IndentStore = require("../models/IndentStore");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Get all indents
 router.get("/", async (req, res) => {
   try {
+    const IndentStore = req.tenantDb.model("IndentStore");
     const indents = await IndentStore.find({ hospitalId: req.hospitalId });
     res.json(indents);
   } catch (error) {
@@ -18,6 +20,7 @@ router.get("/", async (req, res) => {
 // Get indent by ID
 router.get("/:id", async (req, res) => {
   try {
+    const IndentStore = req.tenantDb.model("IndentStore");
     const indent = await IndentStore.findOne({
       _id: req.params.id,
       hospitalId: req.hospitalId,
@@ -33,8 +36,9 @@ router.get("/:id", async (req, res) => {
 
 // Create indent
 router.post("/", async (req, res) => {
-  const indent = new IndentStore({ ...req.body, hospitalId: req.hospitalId });
   try {
+    const IndentStore = req.tenantDb.model("IndentStore");
+    const indent = new IndentStore({ ...req.body, hospitalId: req.hospitalId });
     const newIndent = await indent.save();
     res.status(201).json(newIndent);
   } catch (error) {
@@ -45,6 +49,7 @@ router.post("/", async (req, res) => {
 // Update indent
 router.put("/:id", async (req, res) => {
   try {
+    const IndentStore = req.tenantDb.model("IndentStore");
     const indent = await IndentStore.findOneAndUpdate(
       { indentId: req.params.id, hospitalId: req.hospitalId },
       req.body,
@@ -63,6 +68,7 @@ router.put("/:id", async (req, res) => {
 // Delete indent
 router.delete("/:id", async (req, res) => {
   try {
+    const IndentStore = req.tenantDb.model("IndentStore");
     const indent = await IndentStore.findOneAndDelete({
       _id: req.params.id,
       hospitalId: req.hospitalId,
@@ -79,6 +85,7 @@ router.delete("/:id", async (req, res) => {
 // Get indents by status
 router.get("/status/:status", async (req, res) => {
   try {
+    const IndentStore = req.tenantDb.model("IndentStore");
     const indents = await IndentStore.find({
       status: req.params.status,
       hospitalId: req.hospitalId,
@@ -92,6 +99,7 @@ router.get("/status/:status", async (req, res) => {
 // Get indents by department
 router.get("/department/:department", async (req, res) => {
   try {
+    const IndentStore = req.tenantDb.model("IndentStore");
     const indents = await IndentStore.find({
       department: req.params.department,
       hospitalId: req.hospitalId,
@@ -105,6 +113,7 @@ router.get("/department/:department", async (req, res) => {
 // Get indents by date range
 router.get("/date-range", async (req, res) => {
   try {
+    const IndentStore = req.tenantDb.model("IndentStore");
     const { startDate, endDate } = req.query;
     const indents = await IndentStore.find({
       createdAt: {

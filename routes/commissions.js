@@ -1,14 +1,10 @@
 const express = require("express");
 const router = express.Router();
-const Patient = require("../models/Patient");
-const Consultation = require("../models/Consultation");
-const Action = require("../models/Action");
-const DiagnosticsReceipt = require("../models/DiagnosticsReceipt");
-const PharmacyReceipt = require("../models/PharmacyReceipt");
-const AdvanceReceipt = require("../models/AdvanceReceipt");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Helper functions (same logic as frontend commissionService)
 const getReceiptType = (receipt) => {
@@ -381,6 +377,14 @@ const calculateIPCommission = (receipt, patient, monthlyTotals) => {
 // Get all commissions
 router.get("/", async (req, res) => {
   try {
+    // Get models from tenant database
+    const Patient = req.tenantDb.model("Patient");
+    const Consultation = req.tenantDb.model("Consultation");
+    const Action = req.tenantDb.model("Action");
+    const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
+    const PharmacyReceipt = req.tenantDb.model("PharmacyReceipt");
+    const AdvanceReceipt = req.tenantDb.model("AdvanceReceipt");
+    
     const [
       patients,
       consultationReceipts,
@@ -504,6 +508,14 @@ router.get("/", async (req, res) => {
 // Get commission summary report
 router.get("/summary", async (req, res) => {
   try {
+    // Get models from tenant database
+    const Patient = req.tenantDb.model("Patient");
+    const Consultation = req.tenantDb.model("Consultation");
+    const Action = req.tenantDb.model("Action");
+    const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
+    const PharmacyReceipt = req.tenantDb.model("PharmacyReceipt");
+    const AdvanceReceipt = req.tenantDb.model("AdvanceReceipt");
+    
     const { startDate, endDate } = req.query;
     const start = startDate
       ? new Date(startDate)

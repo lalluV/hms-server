@@ -5,6 +5,7 @@ const jwt = require("jsonwebtoken");
 const Staff = require("../models/Staff");
 const Hospital = require("../models/Hospital");
 const auth = require("../middleware/auth");
+const { getTenantConnection } = require("../utils/tenantDb");
 
 // @route   POST api/auth/register-hospital
 // @desc    Register a new hospital and SuperAdmin Staff user
@@ -259,31 +260,71 @@ router.post("/login", async (req, res) => {
   try {
     const { userId, password } = req.body;
 
-    // Check if staff member exists (include password field for comparison)
-    const staff = await Staff.findOne({ userId })
-      .select("+password")
-      .populate("hospitalId");
+    // STEP 1: Find all hospitals and search for staff in each tenant database
+    const hospitals = await Hospital.find({ databaseStatus: "active" });
+
+    if (!hospitals || hospitals.length === 0) {
+      return res
+        .status(400)
+        .json({
+          message: "No active hospitals found. Please contact administrator.",
+        });
+    }
+
+    let staff = null;
+    let staffHospital = null;
+
+    // STEP 2: Search for staff in each hospital's tenant database
+    for (const hospital of hospitals) {
+      try {
+        const tenantConnection = await getTenantConnection(
+          hospital._id.toString()
+        );
+        const StaffModel = tenantConnection.model("Staff");
+
+        const foundStaff = await StaffModel.findOne({ userId }).select(
+          "+password"
+        );
+
+        if (foundStaff) {
+          staff = foundStaff;
+          staffHospital = hospital;
+          break; // Found the staff, stop searching
+        }
+      } catch (error) {
+        console.error(
+          `Error searching in hospital ${hospital._id}:`,
+          error.message
+        );
+        // Continue to next hospital
+      }
+    }
+
+    // STEP 3: Validate staff exists
     if (!staff) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    // Validate password
+    // STEP 4: Validate password exists
     if (!staff.password) {
-      return res.status(400).json({ message: "Account not properly set up" });
+      return res
+        .status(400)
+        .json({ message: "Account not properly set up. Password not found." });
     }
 
+    // STEP 5: Compare password
     const isMatch = await bcrypt.compare(password, staff.password);
     if (!isMatch) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    // Create JWT token
+    // STEP 6: Create JWT token with hospitalId
     const payload = {
       user: {
         id: staff._id,
         userId: staff.userId,
         type: staff.type,
-        hospitalId: staff.hospitalId ? staff.hospitalId._id : null,
+        hospitalId: staffHospital._id.toString(),
       },
     };
 
@@ -300,14 +341,14 @@ router.post("/login", async (req, res) => {
             userId: staff.userId,
             email: staff.email,
             type: staff.type,
-            hospitalId: staff.hospitalId ? staff.hospitalId._id : null,
-            hospitalName: staff.hospitalId ? staff.hospitalId.name : null,
+            hospitalId: staffHospital._id.toString(),
+            hospitalName: staffHospital.name,
           },
         });
       }
     );
   } catch (err) {
-    console.error(err.message);
+    console.error("Login error:", err.message);
     res.status(500).send("Server error");
   }
 });

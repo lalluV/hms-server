@@ -1,13 +1,15 @@
 const express = require("express");
 const router = express.Router();
-const InsuranceExclusion = require("../models/InsuranceExclusion");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Get all insurance exclusions
 router.get("/", async (req, res) => {
   try {
+    const InsuranceExclusion = req.tenantDb.model("InsuranceExclusion");
     const exclusions = await InsuranceExclusion.find({
       hospitalId: req.hospitalId,
     });
@@ -20,6 +22,7 @@ router.get("/", async (req, res) => {
 // Get insurance exclusion by ID
 router.get("/:id", async (req, res) => {
   try {
+    const InsuranceExclusion = req.tenantDb.model("InsuranceExclusion");
     const exclusion = await InsuranceExclusion.findOne({
       _id: req.params.id,
       hospitalId: req.hospitalId,
@@ -34,11 +37,12 @@ router.get("/:id", async (req, res) => {
 
 // Create insurance exclusion
 router.post("/", async (req, res) => {
-  const exclusion = new InsuranceExclusion({
-    ...req.body,
-    hospitalId: req.hospitalId,
-  });
   try {
+    const InsuranceExclusion = req.tenantDb.model("InsuranceExclusion");
+    const exclusion = new InsuranceExclusion({
+      ...req.body,
+      hospitalId: req.hospitalId,
+    });
     const newExclusion = await exclusion.save();
     res.status(201).json(newExclusion);
   } catch (error) {
@@ -49,6 +53,7 @@ router.post("/", async (req, res) => {
 // Update insurance exclusion
 router.put("/:id", async (req, res) => {
   try {
+    const InsuranceExclusion = req.tenantDb.model("InsuranceExclusion");
     const exclusion = await InsuranceExclusion.findOneAndUpdate(
       { _id: req.params.id, hospitalId: req.hospitalId },
       req.body,
@@ -65,6 +70,7 @@ router.put("/:id", async (req, res) => {
 // Delete insurance exclusion
 router.delete("/:id", async (req, res) => {
   try {
+    const InsuranceExclusion = req.tenantDb.model("InsuranceExclusion");
     const exclusion = await InsuranceExclusion.findOneAndDelete({
       _id: req.params.id,
       hospitalId: req.hospitalId,
@@ -80,6 +86,7 @@ router.delete("/:id", async (req, res) => {
 // Get exclusions by companyId
 router.get("/company/:companyId", async (req, res) => {
   try {
+    const InsuranceExclusion = req.tenantDb.model("InsuranceExclusion");
     const exclusions = await InsuranceExclusion.find({
       companyId: req.params.companyId,
       hospitalId: req.hospitalId,

@@ -1,13 +1,17 @@
 const express = require("express");
 const router = express.Router();
-const DiagnosticsReceipt = require("../models/DiagnosticsReceipt");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Get all diagnostics receipts with pagination support
 router.get("/", async (req, res) => {
   try {
+    // Get DiagnosticsReceipt model from tenant database
+    const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
+
     const {
       page = 1,
       limit = 20,
@@ -98,6 +102,7 @@ router.get("/", async (req, res) => {
 // Get diagnostics receipt by ID
 router.get("/:id", async (req, res) => {
   try {
+    const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
     const receipt = await DiagnosticsReceipt.findOne({
       _id: req.params.id,
       hospitalId: req.hospitalId,
@@ -113,11 +118,12 @@ router.get("/:id", async (req, res) => {
 
 // Create new diagnostics receipt
 router.post("/", async (req, res) => {
-  const receipt = new DiagnosticsReceipt({
-    ...req.body,
-    hospitalId: req.hospitalId,
-  });
   try {
+    const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
+    const receipt = new DiagnosticsReceipt({
+      ...req.body,
+      hospitalId: req.hospitalId,
+    });
     const newReceipt = await receipt.save();
     res.status(201).json(newReceipt);
   } catch (error) {
@@ -128,6 +134,7 @@ router.post("/", async (req, res) => {
 // Update diagnostics receipt
 router.put("/:id", async (req, res) => {
   try {
+    const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
     const receipt = await DiagnosticsReceipt.findOneAndUpdate(
       { _id: req.params.id, hospitalId: req.hospitalId },
       req.body,
@@ -145,6 +152,7 @@ router.put("/:id", async (req, res) => {
 // Delete diagnostics receipt
 router.delete("/:id", async (req, res) => {
   try {
+    const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
     const receipt = await DiagnosticsReceipt.findOneAndDelete({
       _id: req.params.id,
       hospitalId: req.hospitalId,
@@ -161,6 +169,7 @@ router.delete("/:id", async (req, res) => {
 // Get diagnostics receipts by patient
 router.get("/patient/:patientId", async (req, res) => {
   try {
+    const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
     const receipts = await DiagnosticsReceipt.find({
       patientId: req.params.patientId,
       hospitalId: req.hospitalId,
@@ -174,6 +183,7 @@ router.get("/patient/:patientId", async (req, res) => {
 // Get diagnostics receipts by type
 router.get("/type/:type", async (req, res) => {
   try {
+    const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
     const receipts = await DiagnosticsReceipt.find({
       type: req.params.type,
       hospitalId: req.hospitalId,
@@ -187,6 +197,7 @@ router.get("/type/:type", async (req, res) => {
 // Get diagnostics receipts by status
 router.get("/status/:status", async (req, res) => {
   try {
+    const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
     const receipts = await DiagnosticsReceipt.find({
       status: req.params.status,
       hospitalId: req.hospitalId,
@@ -200,6 +211,7 @@ router.get("/status/:status", async (req, res) => {
 // Get diagnostics receipts by account phone (for mobile app)
 router.get("/account/:accountPhone", async (req, res) => {
   try {
+    const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
     const receipts = await DiagnosticsReceipt.find({
       accountPhone: req.params.accountPhone,
       hospitalId: req.hospitalId,

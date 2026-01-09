@@ -1,13 +1,15 @@
 const express = require("express");
 const router = express.Router();
-const Leave = require("../models/Leave");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Get all leaves
 router.get("/", async (req, res) => {
   try {
+    const Leave = req.tenantDb.model("Leave");
     const leaves = await Leave.find({ hospitalId: req.hospitalId });
     res.json(leaves);
   } catch (error) {
@@ -18,6 +20,7 @@ router.get("/", async (req, res) => {
 // Get leave by ID
 router.get("/:id", async (req, res) => {
   try {
+    const Leave = req.tenantDb.model("Leave");
     // Try to find by id first, then by _id
     let leave = await Leave.findOne({
       id: req.params.id,
@@ -44,6 +47,7 @@ router.get("/:id", async (req, res) => {
 // Create new leave request
 router.post("/", async (req, res) => {
   try {
+    const Leave = req.tenantDb.model("Leave");
     const leave = new Leave({ ...req.body, hospitalId: req.hospitalId });
     const newLeave = await leave.save();
     res.status(201).json(newLeave);
@@ -55,6 +59,7 @@ router.post("/", async (req, res) => {
 // Update leave request
 router.put("/:id", async (req, res) => {
   try {
+    const Leave = req.tenantDb.model("Leave");
     // Try to find by id first, then by _id
     let leave = await Leave.findOneAndUpdate(
       { id: req.params.id, hospitalId: req.hospitalId },
@@ -87,6 +92,7 @@ router.put("/:id", async (req, res) => {
 // Delete leave request
 router.delete("/:id", async (req, res) => {
   try {
+    const Leave = req.tenantDb.model("Leave");
     // Try to find by id first, then by _id
     let leave = await Leave.findOneAndDelete({
       id: req.params.id,
@@ -113,6 +119,7 @@ router.delete("/:id", async (req, res) => {
 // Get leaves by staff ID
 router.get("/staff/:staffId", async (req, res) => {
   try {
+    const Leave = req.tenantDb.model("Leave");
     const leaves = await Leave.find({
       employeeId: req.params.staffId,
       hospitalId: req.hospitalId,
@@ -126,6 +133,7 @@ router.get("/staff/:staffId", async (req, res) => {
 // Get leaves by status
 router.get("/status/:status", async (req, res) => {
   try {
+    const Leave = req.tenantDb.model("Leave");
     const leaves = await Leave.find({
       status: req.params.status,
       hospitalId: req.hospitalId,
@@ -139,6 +147,7 @@ router.get("/status/:status", async (req, res) => {
 // Get leaves by date range
 router.get("/date-range", async (req, res) => {
   try {
+    const Leave = req.tenantDb.model("Leave");
     const { startDate, endDate } = req.query;
     const leaves = await Leave.find({
       startDate: { $lte: new Date(endDate) },

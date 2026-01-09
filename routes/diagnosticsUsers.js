@@ -1,14 +1,18 @@
 const express = require("express");
 const router = express.Router();
-const DiagnosticsUser = require("../models/DiagnosticsUser");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 const jwt = require("jsonwebtoken");
+
+router.use(auth);
+router.use(tenantDb);
 
 // @route   GET api/diagnostics-users
 // @desc    Get all diagnostics users
 // @access  Private
-router.get("/", auth, async (req, res) => {
+router.get("/", async (req, res) => {
   try {
+    const DiagnosticsUser = req.tenantDb.model("DiagnosticsUser");
     const users = await DiagnosticsUser.find({ hospitalId: req.hospitalId });
     res.json(users);
   } catch (err) {
@@ -22,6 +26,7 @@ router.get("/", auth, async (req, res) => {
 // @access  Private
 router.get("/:id", auth, async (req, res) => {
   try {
+    const DiagnosticsUser = req.tenantDb.model("DiagnosticsUser");
     const user = await DiagnosticsUser.findOne({
       _id: req.params.id,
       hospitalId: req.hospitalId,
@@ -41,6 +46,7 @@ router.get("/:id", auth, async (req, res) => {
 // @access  Private
 router.post("/", auth, async (req, res) => {
   try {
+    const DiagnosticsUser = req.tenantDb.model("DiagnosticsUser");
     const user = new DiagnosticsUser({
       ...req.body,
       hospitalId: req.hospitalId,
@@ -58,6 +64,7 @@ router.post("/", auth, async (req, res) => {
 // @access  Private
 router.put("/:id", auth, async (req, res) => {
   try {
+    const DiagnosticsUser = req.tenantDb.model("DiagnosticsUser");
     const user = await DiagnosticsUser.findOneAndUpdate(
       { _id: req.params.id, hospitalId: req.hospitalId },
       req.body,
@@ -78,6 +85,7 @@ router.put("/:id", auth, async (req, res) => {
 // @access  Private
 router.delete("/:id", auth, async (req, res) => {
   try {
+    const DiagnosticsUser = req.tenantDb.model("DiagnosticsUser");
     const user = await DiagnosticsUser.findOneAndDelete({
       _id: req.params.id,
       hospitalId: req.hospitalId,
@@ -97,6 +105,7 @@ router.delete("/:id", auth, async (req, res) => {
 // @access  Public (for mobile app)
 router.get("/phone/:phoneNumber", async (req, res) => {
   try {
+    const DiagnosticsUser = req.tenantDb.model("DiagnosticsUser");
     const query = { phone: req.params.phoneNumber };
     if (req.query.hospitalId) query.hospitalId = req.query.hospitalId;
     const user = await DiagnosticsUser.findOne(query);
@@ -115,6 +124,7 @@ router.get("/phone/:phoneNumber", async (req, res) => {
 // @access  Public (for mobile app)
 router.post("/phone", async (req, res) => {
   try {
+    const DiagnosticsUser = req.tenantDb.model("DiagnosticsUser");
     const { phone, ...userData } = req.body;
 
     if (!phone) {
@@ -149,6 +159,7 @@ router.post("/phone", async (req, res) => {
 // @access  Public (for mobile app)
 router.put("/phone/:phoneNumber", async (req, res) => {
   try {
+    const DiagnosticsUser = req.tenantDb.model("DiagnosticsUser");
     const query = { phone: req.params.phoneNumber };
     if (req.body.hospitalId) query.hospitalId = req.body.hospitalId;
 
@@ -208,6 +219,7 @@ router.post("/verify-otp", async (req, res) => {
 
     // In real app, verify OTP here
     // For now, just proceed with user creation/lookup
+    const DiagnosticsUser = req.tenantDb.model("DiagnosticsUser");
     const query = { phone: phoneNumber };
     if (req.body.hospitalId) query.hospitalId = req.body.hospitalId;
 

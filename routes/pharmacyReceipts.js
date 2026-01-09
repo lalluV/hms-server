@@ -1,13 +1,16 @@
 const express = require("express");
 const router = express.Router();
-const PharmacyReceipt = require("../models/PharmacyReceipt");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Get all pharmacy receipts with pagination support
 router.get("/", async (req, res) => {
   try {
+    const PharmacyReceipt = req.tenantDb.model("PharmacyReceipt");
+    
     const {
       page = 1,
       limit = 20,
@@ -103,6 +106,7 @@ router.get("/", async (req, res) => {
 // Get pharmacy receipt by ID
 router.get("/:id", async (req, res) => {
   try {
+    const PharmacyReceipt = req.tenantDb.model("PharmacyReceipt");
     const receipt = await PharmacyReceipt.findById({
       receiptId: req.params.id,
       hospitalId: req.hospitalId,
@@ -118,11 +122,12 @@ router.get("/:id", async (req, res) => {
 
 // Create new pharmacy receipt
 router.post("/", async (req, res) => {
-  const receipt = new PharmacyReceipt({
-    ...req.body,
-    hospitalId: req.hospitalId,
-  });
   try {
+    const PharmacyReceipt = req.tenantDb.model("PharmacyReceipt");
+    const receipt = new PharmacyReceipt({
+      ...req.body,
+      hospitalId: req.hospitalId,
+    });
     const newReceipt = await receipt.save();
     res.status(201).json(newReceipt);
   } catch (error) {
@@ -133,6 +138,7 @@ router.post("/", async (req, res) => {
 // Update pharmacy receipt
 router.put("/:id", async (req, res) => {
   try {
+    const PharmacyReceipt = req.tenantDb.model("PharmacyReceipt");
     const receipt = await PharmacyReceipt.findByIdAndUpdate(
       { receiptId: req.params.id, hospitalId: req.hospitalId },
       req.body,
@@ -150,6 +156,7 @@ router.put("/:id", async (req, res) => {
 // Delete pharmacy receipt
 router.delete("/:id", async (req, res) => {
   try {
+    const PharmacyReceipt = req.tenantDb.model("PharmacyReceipt");
     const receipt = await PharmacyReceipt.findByIdAndDelete({
       receiptId: req.params.id,
       hospitalId: req.hospitalId,
@@ -166,6 +173,7 @@ router.delete("/:id", async (req, res) => {
 // Get pharmacy receipts by type
 router.get("/type/:type", async (req, res) => {
   try {
+    const PharmacyReceipt = req.tenantDb.model("PharmacyReceipt");
     const receipts = await PharmacyReceipt.find({
       type: req.params.type,
       hospitalId: req.hospitalId,
@@ -179,6 +187,7 @@ router.get("/type/:type", async (req, res) => {
 // Get pharmacy receipts by patient
 router.get("/patient/:patientId", async (req, res) => {
   try {
+    const PharmacyReceipt = req.tenantDb.model("PharmacyReceipt");
     const receipts = await PharmacyReceipt.find({
       patientId: req.params.patientId,
       hospitalId: req.hospitalId,
@@ -192,6 +201,7 @@ router.get("/patient/:patientId", async (req, res) => {
 // Get pharmacy receipts by date range
 router.get("/date-range", async (req, res) => {
   try {
+    const PharmacyReceipt = req.tenantDb.model("PharmacyReceipt");
     const { startDate, endDate } = req.query;
     const receipts = await PharmacyReceipt.find({
       createdAt: {
@@ -209,6 +219,7 @@ router.get("/date-range", async (req, res) => {
 // Get pharmacy receipts by status
 router.get("/status/:status", async (req, res) => {
   try {
+    const PharmacyReceipt = req.tenantDb.model("PharmacyReceipt");
     const receipts = await PharmacyReceipt.find({
       status: req.params.status,
       hospitalId: req.hospitalId,
@@ -222,6 +233,7 @@ router.get("/status/:status", async (req, res) => {
 // Update pharmacy receipt status
 router.patch("/:id/status", async (req, res) => {
   try {
+    const PharmacyReceipt = req.tenantDb.model("PharmacyReceipt");
     const receipt = await PharmacyReceipt.findByIdAndUpdate(
       { _id: req.params.id, hospitalId: req.hospitalId },
       { status: req.body.status },

@@ -1,13 +1,16 @@
 const express = require("express");
 const router = express.Router();
-const Action = require("../models/Action");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Get all actions with pagination support
 router.get("/", async (req, res) => {
   try {
+    const Action = req.tenantDb.model("Action");
+    
     const {
       page = 1,
       limit = 20,
@@ -97,6 +100,7 @@ router.get("/", async (req, res) => {
 // Get action by ID
 router.get("/:id", async (req, res) => {
   try {
+    const Action = req.tenantDb.model("Action");
     const action = await Action.findOne({
       id: req.params.id,
       hospitalId: req.hospitalId,
@@ -113,6 +117,7 @@ router.get("/:id", async (req, res) => {
 // Create new action
 router.post("/", async (req, res) => {
   try {
+    const Action = req.tenantDb.model("Action");
     const action = new Action({ ...req.body, hospitalId: req.hospitalId });
     const newAction = await action.save();
     res.status(201).json(newAction);
@@ -124,6 +129,7 @@ router.post("/", async (req, res) => {
 // Update action
 router.put("/:id", async (req, res) => {
   try {
+    const Action = req.tenantDb.model("Action");
     const action = await Action.findOneAndUpdate(
       { id: req.params.id, hospitalId: req.hospitalId },
       req.body,
@@ -141,6 +147,7 @@ router.put("/:id", async (req, res) => {
 // Delete action
 router.delete("/:id", async (req, res) => {
   try {
+    const Action = req.tenantDb.model("Action");
     const action = await Action.findOneAndDelete({
       id: req.params.id,
       hospitalId: req.hospitalId,
@@ -157,6 +164,7 @@ router.delete("/:id", async (req, res) => {
 // Get actions by patient ID
 router.get("/patient/:patientId", async (req, res) => {
   try {
+    const Action = req.tenantDb.model("Action");
     const actions = await Action.find({
       patientId: req.params.patientId,
       hospitalId: req.hospitalId,
@@ -170,6 +178,7 @@ router.get("/patient/:patientId", async (req, res) => {
 // Get actions by doctor ID
 router.get("/doctor/:doctorId", async (req, res) => {
   try {
+    const Action = req.tenantDb.model("Action");
     const actions = await Action.find({
       doctorId: req.params.doctorId,
       hospitalId: req.hospitalId,
@@ -183,6 +192,7 @@ router.get("/doctor/:doctorId", async (req, res) => {
 // Get actions by type
 router.get("/type/:type", async (req, res) => {
   try {
+    const Action = req.tenantDb.model("Action");
     const actions = await Action.find({
       type: req.params.type,
       hospitalId: req.hospitalId,
@@ -196,6 +206,7 @@ router.get("/type/:type", async (req, res) => {
 // Get actions by status
 router.get("/status/:status", async (req, res) => {
   try {
+    const Action = req.tenantDb.model("Action");
     const actions = await Action.find({
       status: req.params.status,
       hospitalId: req.hospitalId,
@@ -209,6 +220,7 @@ router.get("/status/:status", async (req, res) => {
 // Get actions by date range
 router.get("/date-range", async (req, res) => {
   try {
+    const Action = req.tenantDb.model("Action");
     const { startDate, endDate } = req.query;
     const actions = await Action.find({
       date: {

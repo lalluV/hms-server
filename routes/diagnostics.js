@@ -1,14 +1,17 @@
 const express = require("express");
 const router = express.Router();
-const Diagnostic = require("../models/Diagnostic");
 const MasterDiagnostic = require("../models/MasterDiagnostic");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Get all diagnostics with pagination and search
 router.get("/", async (req, res) => {
   try {
+    const Diagnostic = req.tenantDb.model("Diagnostic");
+
     const { search, page = 1, limit } = req.query;
 
     // Use different limits based on whether search is active
@@ -73,6 +76,7 @@ router.get("/", async (req, res) => {
 // Get diagnostic by ID
 router.get("/:id", async (req, res) => {
   try {
+    const Diagnostic = req.tenantDb.model("Diagnostic");
     const diagnostic = await Diagnostic.findOne({
       _id: req.params.id,
       hospitalId: req.hospitalId,
@@ -89,6 +93,8 @@ router.get("/:id", async (req, res) => {
 // Create diagnostic from master diagnostic
 router.post("/from-master/:masterId", async (req, res) => {
   try {
+    const Diagnostic = req.tenantDb.model("Diagnostic");
+
     const masterDiagnostic = await MasterDiagnostic.findById(
       req.params.masterId
     ).populate("suggested_parameters.parameterId");
@@ -157,6 +163,8 @@ router.post("/from-master/:masterId", async (req, res) => {
 // Create new diagnostic (supports both custom and from master)
 router.post("/", async (req, res) => {
   try {
+    const Diagnostic = req.tenantDb.model("Diagnostic");
+
     // If diagnosticId is provided, verify it exists
     if (req.body.diagnosticId) {
       const masterDiag = await MasterDiagnostic.findById(req.body.diagnosticId);
@@ -180,6 +188,7 @@ router.post("/", async (req, res) => {
 // Update diagnostic
 router.put("/:id", async (req, res) => {
   try {
+    const Diagnostic = req.tenantDb.model("Diagnostic");
     const diagnostic = await Diagnostic.findOneAndUpdate(
       { _id: req.params.id, hospitalId: req.hospitalId },
       req.body,
@@ -197,6 +206,7 @@ router.put("/:id", async (req, res) => {
 // Delete diagnostic
 router.delete("/:id", async (req, res) => {
   try {
+    const Diagnostic = req.tenantDb.model("Diagnostic");
     const diagnostic = await Diagnostic.findOneAndDelete({
       _id: req.params.id,
       hospitalId: req.hospitalId,
@@ -213,6 +223,7 @@ router.delete("/:id", async (req, res) => {
 // Get diagnostics by patient ID
 router.get("/patient/:patientId", async (req, res) => {
   try {
+    const Diagnostic = req.tenantDb.model("Diagnostic");
     const diagnostics = await Diagnostic.find({
       patientId: req.params.patientId,
       hospitalId: req.hospitalId,
@@ -226,6 +237,7 @@ router.get("/patient/:patientId", async (req, res) => {
 // Get diagnostics by doctor ID
 router.get("/doctor/:doctorId", async (req, res) => {
   try {
+    const Diagnostic = req.tenantDb.model("Diagnostic");
     const diagnostics = await Diagnostic.find({
       doctorId: req.params.doctorId,
       hospitalId: req.hospitalId,

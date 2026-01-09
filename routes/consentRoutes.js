@@ -1,13 +1,15 @@
 const express = require("express");
 const router = express.Router();
-const Consent = require("../models/Consent");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Consent routes
 router.post("/", async (req, res) => {
   try {
+    const Consent = req.tenantDb.model("Consent");
     const consent = new Consent({ ...req.body, hospitalId: req.hospitalId });
     await consent.save();
     res.status(201).json(consent);
@@ -18,6 +20,7 @@ router.post("/", async (req, res) => {
 
 router.get("/", async (req, res) => {
   try {
+    const Consent = req.tenantDb.model("Consent");
     const consents = await Consent.find({ hospitalId: req.hospitalId });
     res.json(consents);
   } catch (error) {
@@ -27,6 +30,7 @@ router.get("/", async (req, res) => {
 
 router.get("/:id", async (req, res) => {
   try {
+    const Consent = req.tenantDb.model("Consent");
     const consent = await Consent.findOne({
       _id: req.params.id,
       hospitalId: req.hospitalId,
@@ -42,6 +46,7 @@ router.get("/:id", async (req, res) => {
 
 router.get("/patient/:patientId", async (req, res) => {
   try {
+    const Consent = req.tenantDb.model("Consent");
     const consents = await Consent.find({
       patientId: req.params.patientId,
       hospitalId: req.hospitalId,
@@ -54,6 +59,7 @@ router.get("/patient/:patientId", async (req, res) => {
 
 router.put("/:id", async (req, res) => {
   try {
+    const Consent = req.tenantDb.model("Consent");
     const consent = await Consent.findOneAndUpdate(
       { _id: req.params.id, hospitalId: req.hospitalId },
       { $set: req.body },
@@ -70,6 +76,7 @@ router.put("/:id", async (req, res) => {
 
 router.delete("/:id", async (req, res) => {
   try {
+    const Consent = req.tenantDb.model("Consent");
     const consent = await Consent.findOneAndDelete({
       _id: req.params.id,
       hospitalId: req.hospitalId,

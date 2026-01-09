@@ -1,13 +1,16 @@
 const express = require("express");
 const router = express.Router();
-const AdvanceReceipt = require("../models/AdvanceReceipt");
 const auth = require("../middleware/auth");
+const tenantDb = require("../middleware/tenantDb");
 
 router.use(auth);
+router.use(tenantDb);
 
 // Get all advance receipts with pagination support
 router.get("/", async (req, res) => {
   try {
+    const AdvanceReceipt = req.tenantDb.model("AdvanceReceipt");
+    
     const {
       page = 1,
       limit = 20,
@@ -85,6 +88,7 @@ router.get("/", async (req, res) => {
 // Get advance receipt by ID
 router.get("/:id", async (req, res) => {
   try {
+    const AdvanceReceipt = req.tenantDb.model("AdvanceReceipt");
     const receipt = await AdvanceReceipt.findOne({
       id: req.params.id,
       hospitalId: req.hospitalId,
@@ -101,6 +105,7 @@ router.get("/:id", async (req, res) => {
 // Create new advance receipt
 router.post("/", async (req, res) => {
   try {
+    const AdvanceReceipt = req.tenantDb.model("AdvanceReceipt");
     const receipt = new AdvanceReceipt({
       ...req.body,
       hospitalId: req.hospitalId,
@@ -115,6 +120,7 @@ router.post("/", async (req, res) => {
 // Update advance receipt
 router.put("/:id", async (req, res) => {
   try {
+    const AdvanceReceipt = req.tenantDb.model("AdvanceReceipt");
     const receipt = await AdvanceReceipt.findOneAndUpdate(
       { id: req.params.id, hospitalId: req.hospitalId },
       req.body,
@@ -132,6 +138,7 @@ router.put("/:id", async (req, res) => {
 // Delete advance receipt
 router.delete("/:id", async (req, res) => {
   try {
+    const AdvanceReceipt = req.tenantDb.model("AdvanceReceipt");
     const receipt = await AdvanceReceipt.findOneAndDelete({
       id: req.params.id,
       hospitalId: req.hospitalId,
@@ -148,6 +155,7 @@ router.delete("/:id", async (req, res) => {
 // Get advance receipts by patient ID
 router.get("/patient/:patientId", async (req, res) => {
   try {
+    const AdvanceReceipt = req.tenantDb.model("AdvanceReceipt");
     const receipts = await AdvanceReceipt.find({
       patientId: req.params.patientId,
       hospitalId: req.hospitalId,
@@ -161,6 +169,7 @@ router.get("/patient/:patientId", async (req, res) => {
 // Get advance receipts by status
 router.get("/status/:status", async (req, res) => {
   try {
+    const AdvanceReceipt = req.tenantDb.model("AdvanceReceipt");
     const receipts = await AdvanceReceipt.find({
       status: req.params.status,
       hospitalId: req.hospitalId,
@@ -174,6 +183,7 @@ router.get("/status/:status", async (req, res) => {
 // Get advance receipts by date range
 router.get("/date-range", async (req, res) => {
   try {
+    const AdvanceReceipt = req.tenantDb.model("AdvanceReceipt");
     const { startDate, endDate } = req.query;
     const receipts = await AdvanceReceipt.find({
       date: {
