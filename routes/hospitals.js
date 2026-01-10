@@ -54,6 +54,17 @@ router.post("/", async (req, res) => {
         .json({ message: "Hospital name and code are required" });
     }
 
+    // Normalize hospital code for subdomain use (lowercase, trimmed)
+    const normalizedCode = code.toLowerCase().trim();
+    
+    // Validate hospital code format (alphanumeric, hyphens, underscores only - URL-safe for subdomains)
+    const codePattern = /^[a-z0-9_-]+$/;
+    if (!codePattern.test(normalizedCode)) {
+      return res.status(400).json({
+        message: "Hospital code must contain only lowercase letters, numbers, hyphens, and underscores (used as subdomain identifier)",
+      });
+    }
+
     // Get the logged-in SuperAdmin ID from the token (set by adminAuth middleware)
     const ownerId = req.adminUser?.id;
     if (!ownerId) {
@@ -63,7 +74,7 @@ router.post("/", async (req, res) => {
     }
 
     // Check if Hospital with same code already exists
-    const existingHospital = await Hospital.findOne({ code });
+    const existingHospital = await Hospital.findOne({ code: normalizedCode });
     if (existingHospital) {
       return res
         .status(400)
@@ -73,7 +84,7 @@ router.post("/", async (req, res) => {
     // Create Hospital with database fields
     const hospital = new Hospital({
       name,
-      code,
+      code: normalizedCode, // Use normalized code for subdomain compatibility
       address,
       city,
       phone,

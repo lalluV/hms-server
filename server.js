@@ -11,15 +11,45 @@ const { initializeMasterDatabase } = require("./utils/tenantDb");
 
 const app = express();
 
-// Enable CORS for all routes (you can restrict origins if needed)
+// Enable CORS for all routes
+// Note: Subdomain-based tenant authentication is implemented
+// Login routes require subdomain identification (via Host header, query param, or header)
+// For production, configure wildcard subdomain support: *.yourdomain.com
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://localhost:5174",
-      "http://localhost:5175",
-      "https://srichakrahms.web.app",
-    ],
+    origin: function (origin, callback) {
+      // Allow requests with no origin (mobile apps, Postman, etc.)
+      if (!origin) return callback(null, true);
+
+      // Allow localhost origins (development)
+      const allowedOrigins = [
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5175",
+        "https://srichakrahms.web.app",
+        "https://lalluvemula.cloud", // Root domain
+      ];
+
+      // Check if origin is in allowed list
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        return callback(null, true);
+      }
+
+      // Allow localhost subdomains (development): *.localhost:PORT
+      // Pattern matches: http://subdomain.localhost:PORT or http://subdomain.localhost
+      // Examples: http://hs-6619038603.localhost:5173, http://hospitalcode.localhost
+      if (origin.match(/^http:\/\/[a-zA-Z0-9_-]+\.localhost(:\d+)?$/)) {
+        return callback(null, true);
+      }
+
+      // Allow production subdomains: *.lalluvemula.cloud
+      // Examples: https://hs-6619038603.lalluvemula.cloud, https://hospitalcode.lalluvemula.cloud
+      if (origin.match(/^https:\/\/[a-zA-Z0-9_-]+\.lalluvemula\.cloud$/)) {
+        return callback(null, true);
+      }
+
+      callback(new Error(`Not allowed by CORS: ${origin}`));
+    },
     credentials: true,
   })
 );
