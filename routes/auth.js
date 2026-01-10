@@ -272,9 +272,9 @@ router.post("/register", async (req, res) => {
 // @route   POST api/auth/login
 // @desc    Authenticate staff member & get token (subdomain-based tenant login)
 // @access  Public
-// @note    Can login without subdomain for testing (searches all hospitals)
-// @note    If subdomain is provided, it uses the specific hospital (preferred method)
-router.post("/login", extractSubdomain, async (req, res) => {
+// @note    This route REQUIRES subdomain identification via Origin/Referer/Host headers
+// @note    Only subdomain-based authentication is supported (no query params or custom headers)
+router.post("/login", extractSubdomain, requireSubdomain, async (req, res) => {
   try {
     const { userId, password } = req.body;
 
@@ -286,117 +286,65 @@ router.post("/login", extractSubdomain, async (req, res) => {
     }
 
     // Hospital is already identified by subdomain middleware and attached to req.hospital
-    let hospital = req.hospital;
-    let staff = null;
+    const hospital = req.hospital;
 
-    // If hospital is identified via subdomain, use that (preferred method)
-    if (hospital) {
-      // Validate hospital is active and database is ready
-      if (!hospital.active) {
-        return res.status(403).json({
-          message:
-            "Hospital account is inactive. Please contact administrator.",
-        });
-      }
-
-      if (hospital.databaseStatus !== "active") {
-        return res.status(503).json({
-          message: `Hospital database is not yet ready. Status: ${hospital.databaseStatus}. Please contact administrator.`,
-          databaseStatus: hospital.databaseStatus,
-        });
-      }
-
-      // STEP 1: Connect to the specific tenant database (already identified by subdomain)
-      let tenantConnection;
-      try {
-        tenantConnection = await getTenantConnection(hospital._id.toString());
-      } catch (error) {
-        console.error(
-          `Error connecting to tenant database for hospital ${hospital._id}:`,
-          error
-        );
-        return res.status(503).json({
-          message:
-            "Unable to connect to tenant database. Please contact administrator.",
-          error: error.message,
-        });
-      }
-
-      // STEP 2: Search for staff in this specific tenant database only
-      try {
-        const StaffModel = tenantConnection.model("Staff");
-        staff = await StaffModel.findOne({ userId }).select("+password");
-      } catch (error) {
-        console.error(
-          `Error searching for staff in hospital ${hospital._id}:`,
-          error
-        );
-        return res.status(500).json({
-          message: "Error searching for user. Please try again.",
-          error: error.message,
-        });
-      }
-    } else {
-      // FALLBACK: No subdomain provided - search all active hospitals (for testing)
-      // Note: For production, you may want to require subdomain by checking process.env.NODE_ENV
-      console.log(
-        "[Login] No subdomain detected - searching all active hospitals (testing mode)"
-      );
-
-      // Get all active hospitals with active databases
-      const activeHospitals = await Hospital.find({
-        active: true,
-        databaseStatus: "active",
+    if (!hospital) {
+      return res.status(400).json({
+        message:
+          "Tenant hospital not identified. Please access via your tenant subdomain.",
       });
+    }
 
-      if (!activeHospitals || activeHospitals.length === 0) {
-        return res.status(404).json({
-          message: "No active hospitals found in the system.",
-        });
-      }
+    // Validate hospital is active and database is ready
+    if (!hospital.active) {
+      return res.status(403).json({
+        message: "Hospital account is inactive. Please contact administrator.",
+      });
+    }
 
-      // Search through all active hospitals to find the user
-      for (const testHospital of activeHospitals) {
-        try {
-          const tenantConnection = await getTenantConnection(
-            testHospital._id.toString()
-          );
-          const StaffModel = tenantConnection.model("Staff");
-          const foundStaff = await StaffModel.findOne({ userId }).select(
-            "+password"
-          );
+    if (hospital.databaseStatus !== "active") {
+      return res.status(503).json({
+        message: `Hospital database is not yet ready. Status: ${hospital.databaseStatus}. Please contact administrator.`,
+        databaseStatus: hospital.databaseStatus,
+      });
+    }
 
-          if (foundStaff) {
-            // Found the user! Use this hospital
-            hospital = testHospital;
-            staff = foundStaff;
-            console.log(
-              `[Login] Found user in hospital: ${testHospital.name} (${testHospital.code})`
-            );
-            break;
-          }
-        } catch (error) {
-          // Skip hospitals with connection errors and continue searching
-          console.warn(
-            `[Login] Error checking hospital ${testHospital.name}:`,
-            error.message
-          );
-          continue;
-        }
-      }
+    // STEP 1: Connect to the specific tenant database (already identified by subdomain)
+    let tenantConnection;
+    try {
+      tenantConnection = await getTenantConnection(hospital._id.toString());
+    } catch (error) {
+      console.error(
+        `Error connecting to tenant database for hospital ${hospital._id}:`,
+        error
+      );
+      return res.status(503).json({
+        message:
+          "Unable to connect to tenant database. Please contact administrator.",
+        error: error.message,
+      });
+    }
+
+    // STEP 2: Search for staff in this specific tenant database only
+    let staff = null;
+    try {
+      const StaffModel = tenantConnection.model("Staff");
+      staff = await StaffModel.findOne({ userId }).select("+password");
+    } catch (error) {
+      console.error(
+        `Error searching for staff in hospital ${hospital._id}:`,
+        error
+      );
+      return res.status(500).json({
+        message: "Error searching for user. Please try again.",
+        error: error.message,
+      });
     }
 
     // STEP 3: Validate staff exists
     if (!staff) {
       return res.status(400).json({
         message: "Invalid credentials",
-      });
-    }
-
-    // Validate hospital was found (should always be true if staff is found)
-    if (!hospital) {
-      return res.status(500).json({
-        message: "Error identifying hospital. Please try again.",
       });
     }
 
@@ -506,13 +454,7 @@ router.get("/tenant-info", extractSubdomain, (req, res) => {
       fromHost: !!(req.headers.host && req.hospitalCode),
       fromOrigin: !!(req.headers.origin && req.hospitalCode),
       fromReferer: !!(req.headers.referer && req.hospitalCode),
-      fromQueryParam: !!req.query.tenant,
-      fromHeader: !!req.headers["x-tenant-code"],
     },
-    hasQueryParam: !!req.query.tenant,
-    queryParamValue: req.query.tenant || null,
-    hasHeader: !!req.headers["x-tenant-code"],
-    headerValue: req.headers["x-tenant-code"] || null,
   });
 });
 

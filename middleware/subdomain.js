@@ -2,81 +2,75 @@ const Hospital = require("../models/Hospital");
 
 /**
  * Middleware to extract subdomain from request and identify tenant hospital
- * Supports:
- * - Production: subdomain from Host header (e.g., hospitalcode.example.com)
- * - Development: query parameter or header fallback (e.g., ?tenant=hospitalcode)
+ * Uses ONLY subdomain-based authentication (no fallbacks):
+ * Priority order (checks in this sequence):
+ * 1. Origin header (where request came from - frontend subdomain)
+ * 2. Referer header (fallback to identify frontend subdomain)
+ * 3. Host header (only as last resort, filters out backend subdomains like "hms-server")
+ *
+ * This ensures we always use the frontend/hospital subdomain (e.g., hs-6619038603)
+ * and never the backend server subdomain (e.g., hms-server)
  */
 async function extractSubdomain(req, res, next) {
   try {
     let hospitalCode = null;
     let hospital = null;
 
-    // Method 1: Extract from Host header (subdomain)
-    const host = req.headers.host || req.headers["x-forwarded-host"];
-    if (host) {
-      // Extract subdomain from host (format: subdomain.domain.com)
-      // Handle both localhost:port and domain.com formats
-      const hostParts = host.split(":");
-      const hostname = hostParts[0];
-      const domainParts = hostname.split(".");
+    // List of backend/infrastructure subdomains to ignore
+    // These should never be treated as hospital codes
+    const backendSubdomains = [
+      "hms-server",
+      "api",
+      "backend",
+      "www",
+      "admin",
+      "localhost",
+    ];
+
+    // Helper function to extract subdomain from hostname
+    const extractSubdomainFromHostname = (hostname) => {
+      if (!hostname) return null;
 
       // Handle localhost subdomains (e.g., hs-6619038603.localhost)
-      // localhost subdomains have pattern: subdomain.localhost
       if (hostname.includes(".localhost")) {
-        // Extract everything before .localhost
         const parts = hostname.split(".localhost");
-        if (parts[0] && parts[0] !== "www" && parts[0] !== "localhost") {
-          hospitalCode = parts[0];
-          // Debug logging for development
-          if (process.env.NODE_ENV === "development") {
-            console.log(
-              `[Subdomain] Extracted code from Host header localhost subdomain: ${hospitalCode}`
-            );
+        if (parts[0] && !backendSubdomains.includes(parts[0].toLowerCase())) {
+          return parts[0];
+        }
+      } else {
+        // Handle regular domain subdomains (e.g., hospitalcode.example.com)
+        const domainParts = hostname.split(".");
+        if (domainParts.length > 2) {
+          const subdomain = domainParts[0];
+          if (
+            subdomain &&
+            !backendSubdomains.includes(subdomain.toLowerCase())
+          ) {
+            return subdomain;
           }
+        } else if (
+          domainParts.length === 2 &&
+          !backendSubdomains.includes(domainParts[0].toLowerCase())
+        ) {
+          return domainParts[0];
         }
       }
-      // Handle regular domain subdomains (e.g., hospitalcode.example.com)
-      else if (domainParts.length > 2) {
-        // Extract the first part as subdomain
-        hospitalCode = domainParts[0];
-      } else if (
-        domainParts.length === 2 &&
-        domainParts[0] !== "www" &&
-        domainParts[0] !== "localhost"
-      ) {
-        // For domains like subdomain.example.com (2 parts after split)
-        hospitalCode = domainParts[0];
-      }
-    }
+      return null;
+    };
 
-    // Method 1b: Extract from Origin header (when frontend is on different host/port)
-    // This handles cases where frontend is on hs-6619038603.localhost:5173
-    // but makes API requests to localhost:3001
+    // PRIORITY 1: Extract from Origin header FIRST (when frontend is on different host/port)
+    // This handles cases where frontend is on hs-6619038603.lalluvemula.cloud
+    // but makes API requests to hms-server.lalluvemula.cloud
+    // Origin header represents where the request came from (the frontend)
     if (!hospitalCode && req.headers.origin) {
       try {
         const originUrl = new URL(req.headers.origin);
         const originHostname = originUrl.hostname;
-
-        if (originHostname.includes(".localhost")) {
-          const parts = originHostname.split(".localhost");
-          if (parts[0] && parts[0] !== "www" && parts[0] !== "localhost") {
-            hospitalCode = parts[0];
-            if (process.env.NODE_ENV === "development") {
-              console.log(
-                `[Subdomain] Extracted code from Origin header: ${hospitalCode}`
-              );
-            }
-          }
-        } else {
-          const domainParts = originHostname.split(".");
-          if (domainParts.length > 2) {
-            hospitalCode = domainParts[0];
-            if (process.env.NODE_ENV === "development") {
-              console.log(
-                `[Subdomain] Extracted code from Origin header: ${hospitalCode}`
-              );
-            }
-          }
+        hospitalCode = extractSubdomainFromHostname(originHostname);
+        if (hospitalCode && process.env.NODE_ENV === "development") {
+          console.log(
+            `[Subdomain] Extracted code from Origin header: ${hospitalCode}`
+          );
         }
       } catch (error) {
         // Invalid Origin header, skip
@@ -88,59 +82,40 @@ async function extractSubdomain(req, res, next) {
       }
     }
 
-    // Method 1c: Extract from Referer header (fallback when Origin is not available)
+    // PRIORITY 2: Extract from Referer header (fallback when Origin is not available)
+    // Referer also represents where the request came from (the frontend)
     if (!hospitalCode && req.headers.referer) {
       try {
         const refererUrl = new URL(req.headers.referer);
         const refererHostname = refererUrl.hostname;
-
-        if (refererHostname.includes(".localhost")) {
-          const parts = refererHostname.split(".localhost");
-          if (parts[0] && parts[0] !== "www" && parts[0] !== "localhost") {
-            hospitalCode = parts[0];
-            if (process.env.NODE_ENV === "development") {
-              console.log(
-                `[Subdomain] Extracted code from Referer header: ${hospitalCode}`
-              );
-            }
-          }
-        } else {
-          const domainParts = refererHostname.split(".");
-          if (domainParts.length > 2) {
-            hospitalCode = domainParts[0];
-            if (process.env.NODE_ENV === "development") {
-              console.log(
-                `[Subdomain] Extracted code from Referer header: ${hospitalCode}`
-              );
-            }
-          }
+        hospitalCode = extractSubdomainFromHostname(refererHostname);
+        if (hospitalCode && process.env.NODE_ENV === "development") {
+          console.log(
+            `[Subdomain] Extracted code from Referer header: ${hospitalCode}`
+          );
         }
       } catch (error) {
         // Invalid Referer header, skip
       }
     }
 
-    // Method 2: Fallback to query parameter (for development/testing only)
-    // Only allow in development environment or when explicitly enabled
-    if (!hospitalCode && req.query.tenant) {
-      // Validate that query param is not empty
-      const tenantParam = req.query.tenant.trim();
-      if (tenantParam && tenantParam.length > 0) {
-        hospitalCode = tenantParam;
+    // PRIORITY 3: Extract from Host header LAST (only if Origin/Referer didn't provide a subdomain)
+    // Host header is the backend server, so we only use it as a last resort
+    // and we filter out known backend subdomains
+    let host = null;
+    if (!hospitalCode) {
+      host = req.headers.host || req.headers["x-forwarded-host"];
+      if (host) {
+        const hostParts = host.split(":");
+        const hostname = hostParts[0];
+        hospitalCode = extractSubdomainFromHostname(hostname);
+        if (hospitalCode && process.env.NODE_ENV === "development") {
+          console.log(
+            `[Subdomain] Extracted code from Host header: ${hospitalCode}`
+          );
+        }
       }
     }
-
-    // Method 3: Fallback to custom header (for API clients - development/testing only)
-    // Only allow in development environment or when explicitly enabled
-    if (!hospitalCode && req.headers["x-tenant-code"]) {
-      const tenantHeader = req.headers["x-tenant-code"].trim();
-      if (tenantHeader && tenantHeader.length > 0) {
-        hospitalCode = tenantHeader;
-      }
-    }
-
-    // Method 4: Fallback to request body (for POST requests during login)
-    // This is handled in the login route itself for security reasons
 
     // If we found a hospital code, look up the hospital
     if (hospitalCode) {
@@ -269,14 +244,10 @@ function requireSubdomain(req, res, next) {
     return res.status(400).json({
       message:
         "Tenant subdomain is required. Access the application via your tenant subdomain (e.g., yourcode.example.com or yourcode.localhost:PORT)",
-      hint: "For development with separate frontend/backend ports, include the subdomain in requests using: ?tenant=yourcode query parameter, x-tenant-code header, or ensure Origin/Referer headers are sent",
+      hint: "Ensure you are accessing the application through the correct hospital subdomain. The subdomain must match your hospital code in the database.",
       detectedHost: host,
       detectedOrigin: origin !== "unknown" ? origin : null,
       detectedReferer: referer !== "unknown" ? referer : null,
-      hasQueryParam: !!req.query.tenant,
-      queryParamValue: req.query.tenant || null,
-      hasHeader: !!req.headers["x-tenant-code"],
-      headerValue: req.headers["x-tenant-code"] || null,
     });
   }
   next();
