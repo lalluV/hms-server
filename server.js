@@ -40,9 +40,9 @@ app.use(
         return callback(null, true);
       }
 
-      // Allow production subdomains: *.lalluvemula.cloud
-      // Examples: https://hs-6619038603.lalluvemula.cloud, https://hospitalcode.lalluvemula.cloud
-      if (origin.match(/^https:\/\/[a-zA-Z0-9_-]+\.lalluvemula\.cloud$/)) {
+      // Allow production subdomains: *.healeka.com
+      // Examples: https://hs-6619038603.healeka.com, https://hospitalcode.healeka.com
+      if (origin.match(/^https:\/\/[a-zA-Z0-9_-]+\.healeka\.com$/)) {
         return callback(null, true);
       }
 
