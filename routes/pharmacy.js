@@ -13,6 +13,57 @@ const path = require("path");
 const axios = require("axios");
 // Meilisearch removed - using MongoDB search for tenant data
 
+/**
+ * Helper function to manually populate master medicine data
+ * (Can't use Mongoose populate because MasterMedicine is on default connection, not tenant)
+ */
+async function populateMasterMedicine(items) {
+  if (!items) return items;
+  
+  const isArray = Array.isArray(items);
+  const itemsArray = isArray ? items : [items];
+  
+  // Get all unique medicineIds
+  const medicineIds = itemsArray
+    .map(item => {
+      const medId = item.medicineId || (item.toObject ? item.toObject().medicineId : null);
+      return medId && mongoose.Types.ObjectId.isValid(medId) ? medId : null;
+    })
+    .filter(id => id !== null);
+  
+  if (medicineIds.length === 0) {
+    return items;
+  }
+  
+  // Fetch all master medicines at once
+  const masterMedicines = await MasterMedicine.find({
+    _id: { $in: medicineIds }
+  }).select("item_code generic_name generic_name2 manufacturer pack type description hsn_code").lean();
+  
+  // Create a map for quick lookup
+  const masterMedMap = new Map();
+  masterMedicines.forEach(med => {
+    masterMedMap.set(med._id.toString(), med);
+  });
+  
+  // Attach master medicine data to each item
+  const populatedItems = itemsArray.map(item => {
+    const itemObj = item.toObject ? item.toObject() : item;
+    const medId = itemObj.medicineId;
+    
+    if (medId && mongoose.Types.ObjectId.isValid(medId)) {
+      const masterMed = masterMedMap.get(medId.toString());
+      if (masterMed) {
+        itemObj.medicineId = masterMed;
+      }
+    }
+    
+    return itemObj;
+  });
+  
+  return isArray ? populatedItems : populatedItems[0];
+}
+
 // Get popular medicines
 router.get("/popular", async (req, res) => {
   try {
@@ -22,15 +73,54 @@ router.get("/popular", async (req, res) => {
       hospitalId: req.hospitalId,
       active: true,
     })
-      .populate(
-        "medicineId",
-        "item_code generic_name generic_name2 manufacturer pack type description hsn_code"
-      )
       .sort({ orderingNumber: -1 })
-      .limit(5);
-    res.json(popularMedicines);
+      .limit(5)
+      .lean();
+    const populatedMedicines = await populateMasterMedicine(popularMedicines);
+    res.json(populatedMedicines);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch popular medicines" });
+  }
+});
+
+// Get pharmacy inventory items by medicineIds
+router.get("/by-medicine-ids", async (req, res) => {
+  try {
+    const { medicineIds } = req.query;
+    
+    if (!medicineIds) {
+      return res.status(400).json({ error: "medicineIds query parameter is required" });
+    }
+
+    // Parse medicineIds - can be comma-separated string or array
+    let idsArray;
+    if (Array.isArray(medicineIds)) {
+      idsArray = medicineIds;
+    } else if (typeof medicineIds === "string") {
+      idsArray = medicineIds.split(",").map(id => id.trim());
+    } else {
+      return res.status(400).json({ error: "medicineIds must be a string or array" });
+    }
+
+    // Validate all IDs are valid ObjectIds
+    const validIds = idsArray.filter(id => mongoose.Types.ObjectId.isValid(id));
+    if (validIds.length === 0) {
+      return res.json([]);
+    }
+
+    const PharmacyInventory = req.tenantDb.model("PharmacyInventory");
+    
+    const inventoryItems = await PharmacyInventory.find({
+      hospitalId: req.hospitalId,
+      medicineId: { $in: validIds },
+      active: true,
+    }).lean();
+
+    const populatedItems = await populateMasterMedicine(inventoryItems);
+    res.json(populatedItems);
+  } catch (error) {
+    console.error("Error fetching inventory by medicineIds:", error);
+    res.status(500).json({ error: "Failed to fetch inventory items" });
   }
 });
 
@@ -62,23 +152,20 @@ router.get("/search", async (req, res) => {
     };
 
     const results = await PharmacyInventory.find(searchQuery)
-      .populate(
-        "medicineId",
-        "item_code generic_name generic_name2 manufacturer pack type description hsn_code"
-      )
       .limit(parseInt(limit))
       .sort({ orderingNumber: -1 })
       .lean();
+    const populatedResults = await populateMasterMedicine(results);
 
     const searchTime = Date.now() - startTime;
 
     res.json({
-      results: results.map((item) => ({
+      results: populatedResults.map((item) => ({
         ...item,
         _id: item._id.toString(),
       })),
       searchTime: `${searchTime}ms`,
-      totalResults: results.length,
+      totalResults: populatedResults.length,
       query: q,
       success: true,
     });
@@ -103,12 +190,10 @@ router.get("/", async (req, res) => {
       hospitalId: req.hospitalId,
       active: true,
     })
-      .populate(
-        "medicineId",
-        "item_code generic_name generic_name2 manufacturer pack type description hsn_code"
-      )
-      .sort({ orderingNumber: -1 });
-    res.json(items);
+      .sort({ orderingNumber: -1 })
+      .lean();
+    const populatedItems = await populateMasterMedicine(items);
+    res.json(populatedItems);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch pharmacy inventory" });
   }
@@ -134,14 +219,12 @@ router.get("/:id", async (req, res) => {
       query.item_code = req.params.id;
     }
 
-    const item = await PharmacyInventory.findOne(query).populate(
-      "medicineId",
-      "item_code generic_name generic_name2 manufacturer pack type description hsn_code"
-    );
+    const item = await PharmacyInventory.findOne(query).lean();
     if (!item) {
       return res.status(404).json({ error: "Item not found" });
     }
-    res.json(item);
+    const populatedItem = await populateMasterMedicine(item);
+    res.json(populatedItem);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch item" });
   }
@@ -186,6 +269,18 @@ router.post("/", async (req, res) => {
           existingItem: existing,
         });
       }
+    } else if (req.body.item_code) {
+      // Also check by item_code if medicineId is not available
+      const existing = await PharmacyInventory.findOne({
+        hospitalId: req.hospitalId,
+        item_code: req.body.item_code,
+      });
+      if (existing) {
+        return res.status(400).json({
+          error: "Inventory already exists for this item_code",
+          existingItem: existing,
+        });
+      }
     }
 
     // Create inventory item
@@ -215,13 +310,11 @@ router.post("/", async (req, res) => {
     const newItem = new PharmacyInventory(inventoryData);
     const savedItem = await newItem.save();
 
-    // Populate master medicine before returning
-    await savedItem.populate(
-      "medicineId",
-      "item_code generic_name generic_name2 manufacturer pack type description hsn_code"
-    );
+    // Manually populate master medicine data
+    // (Can't use Mongoose populate because MasterMedicine is on default connection, not tenant)
+    const populatedItem = await populateMasterMedicine(savedItem);
 
-    res.status(201).json(savedItem);
+    res.status(201).json(populatedItem);
   } catch (error) {
     console.error("Error creating pharmacy inventory:", error);
     res
@@ -258,16 +351,14 @@ router.put("/:id", async (req, res) => {
       query,
       updateData,
       { new: true }
-    ).populate(
-      "medicineId",
-      "item_code generic_name generic_name2 manufacturer pack type description hsn_code"
-    );
+    ).lean();
 
     if (!updatedItem) {
       return res.status(404).json({ error: "Item not found" });
     }
 
-    res.json(updatedItem);
+    const populatedItem = await populateMasterMedicine(updatedItem);
+    res.json(populatedItem);
   } catch (error) {
     console.error("Update error:", error);
     res
@@ -302,11 +393,9 @@ router.get("/category/:category", async (req, res) => {
       category: req.params.category,
       hospitalId: req.hospitalId,
       active: true,
-    }).populate(
-      "medicineId",
-      "item_code generic_name generic_name2 manufacturer pack type description hsn_code"
-    );
-    res.json(items);
+    }).lean();
+    const populatedItems = await populateMasterMedicine(items);
+    res.json(populatedItems);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch items by category" });
   }
@@ -320,11 +409,9 @@ router.get("/status/:status", async (req, res) => {
       status: req.params.status,
       hospitalId: req.hospitalId,
       active: true,
-    }).populate(
-      "medicineId",
-      "item_code generic_name generic_name2 manufacturer pack type description hsn_code"
-    );
-    res.json(items);
+    }).lean();
+    const populatedItems = await populateMasterMedicine(items);
+    res.json(populatedItems);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch items by status" });
   }
@@ -349,11 +436,9 @@ router.get("/low-stock", async (req, res) => {
           10,
         ],
       },
-    }).populate(
-      "medicineId",
-      "item_code generic_name generic_name2 manufacturer pack type description hsn_code"
-    );
-    res.json(lowStockItems);
+    }).lean();
+    const populatedItems = await populateMasterMedicine(lowStockItems);
+    res.json(populatedItems);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch low stock items" });
   }
