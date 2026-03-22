@@ -209,12 +209,32 @@ router.get("/status/:status", async (req, res) => {
 });
 
 // Get diagnostics receipts by account phone (for mobile app)
+// Receipts use patientPhone (same as account phone) or patientId (UMR from Patient)
+// DiagnosticsReceipt schema has patientPhone, patientId - NOT accountPhone
 router.get("/account/:accountPhone", async (req, res) => {
   try {
     const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
-    const receipts = await DiagnosticsReceipt.find({
-      accountPhone: req.params.accountPhone,
+    const Patient = req.tenantDb.model("Patient");
+    const accountPhone = req.params.accountPhone;
+
+    // Get all patients linked to this account phone (OP/IP with same phone)
+    const patients = await Patient.find({
+      phone: accountPhone,
       hospitalId: req.hospitalId,
+    });
+    const patientIds = patients.map((p) => p.UMRNo || p.patientId).filter(Boolean);
+
+    // Find receipts: by patientPhone (mobile app) OR by patientId (HMS lab)
+    const query = {
+      hospitalId: req.hospitalId,
+      $or: [{ patientPhone: accountPhone }],
+    };
+    if (patientIds.length > 0) {
+      query.$or.push({ patientId: { $in: patientIds } });
+    }
+
+    const receipts = await DiagnosticsReceipt.find(query).sort({
+      createdAt: -1,
     });
     res.json(receipts);
   } catch (error) {

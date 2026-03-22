@@ -13,12 +13,14 @@ async function tenantDbMiddleware(req, res, next) {
 
     // If not set by auth middleware (e.g., admin user), try body and params
     if (!hospitalId && req.isAdmin) {
-      hospitalId = req.body?.hospitalId || req.params?.hospitalId || req.query?.hospitalId;
+      hospitalId =
+        req.body?.hospitalId || req.params?.hospitalId || req.query?.hospitalId;
     }
 
     if (!hospitalId) {
       return res.status(400).json({
-        message: "Hospital ID not found in request. Please provide hospitalId in body, params, or query.",
+        message:
+          "Hospital ID not found in request. Please provide hospitalId in body, params, or query.",
       });
     }
 
@@ -53,4 +55,3 @@ async function tenantDbMiddleware(req, res, next) {
 }
 
 module.exports = tenantDbMiddleware;
-

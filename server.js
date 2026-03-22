@@ -49,7 +49,7 @@ app.use(
       callback(new Error(`Not allowed by CORS: ${origin}`));
     },
     credentials: true,
-  })
+  }),
 );
 
 app.use(express.json());
@@ -140,49 +140,49 @@ app.listen(PORT, "0.0.0.0", async () => {
 
           if (totalIndexed === 0) {
             console.log(
-              "📝 No master data indexed, starting automatic indexing..."
+              "📝 No master data indexed, starting automatic indexing...",
             );
             const result = await indexAllMasterData();
             if (result.success) {
               console.log(
-                `✅ Automatic master data indexing completed: ${result.totalIndexed} documents indexed`
+                `✅ Automatic master data indexing completed: ${result.totalIndexed} documents indexed`,
               );
               console.log(
-                `   - Medicines: ${result.results.medicines.indexed}`
+                `   - Medicines: ${result.results.medicines.indexed}`,
               );
               console.log(
-                `   - Diagnostics: ${result.results.diagnostics.indexed}`
+                `   - Diagnostics: ${result.results.diagnostics.indexed}`,
               );
               console.log(
-                `   - Parameters: ${result.results.parameters.indexed}`
+                `   - Parameters: ${result.results.parameters.indexed}`,
               );
               console.log(`   - Lab Items: ${result.results.labItems.indexed}`);
             } else {
               console.log(
                 "❌ Automatic master data indexing failed:",
-                result.error
+                result.error,
               );
             }
           } else {
             console.log("✅ Meilisearch master data indices status:");
             console.log(
-              `   - Medicines: ${indexStats.master_medicines.documents} documents`
+              `   - Medicines: ${indexStats.master_medicines.documents} documents`,
             );
             console.log(
-              `   - Diagnostics: ${indexStats.master_diagnostics.documents} documents`
+              `   - Diagnostics: ${indexStats.master_diagnostics.documents} documents`,
             );
             console.log(
-              `   - Parameters: ${indexStats.master_parameters.documents} documents`
+              `   - Parameters: ${indexStats.master_parameters.documents} documents`,
             );
             console.log(
-              `   - Lab Items: ${indexStats.master_lab_items.documents} documents`
+              `   - Lab Items: ${indexStats.master_lab_items.documents} documents`,
             );
             console.log(`   - Total: ${totalIndexed} documents indexed`);
           }
         }
       } else {
         console.log(
-          "⚠️  Meilisearch initialization failed - master data search will use MongoDB fallback"
+          "⚠️  Meilisearch initialization failed - master data search will use MongoDB fallback",
         );
       }
     } catch (error) {

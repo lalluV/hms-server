@@ -2,8 +2,168 @@ const express = require("express");
 const router = express.Router();
 const auth = require("../middleware/auth");
 const tenantDb = require("../middleware/tenantDb");
+const tenantDbFromQuery = require("../middleware/tenantDbFromQuery");
 const jwt = require("jsonwebtoken");
 
+/**
+ * Helper to create JWT for diagnostics user (for mobile app login/registration)
+ */
+function createDiagnosticsToken(user) {
+  const hospitalId = user.hospitalId?.toString?.() || user.hospitalId;
+  const payload = {
+    user: {
+      id: user._id.toString(),
+      phone: user.phone,
+      hospitalId,
+      userType: "diagnostics",
+    },
+  };
+  return jwt.sign(payload, process.env.JWT_SECRET); // No expiry - valid until logout
+}
+
+// ========== PUBLIC ROUTES (no auth - for login/registration flow) ==========
+// These must be defined BEFORE router.use(auth)
+// Uses tenantDbFromQuery to get hospitalId from query param or body
+
+// @route   POST api/diagnostics-users/send-otp
+router.post("/send-otp", tenantDbFromQuery, async (req, res) => {
+  try {
+    const { phoneNumber } = req.body;
+
+    if (!phoneNumber) {
+      return res.status(400).json({ message: "Phone number is required" });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    res.json({
+      message: "OTP sent successfully",
+      otp: otp, // Remove in production
+    });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server error");
+  }
+});
+
+// @route   POST api/diagnostics-users/verify-otp
+router.post("/verify-otp", tenantDbFromQuery, async (req, res) => {
+  try {
+    const { phoneNumber, otp } = req.body;
+
+    if (!phoneNumber || !otp) {
+      return res.status(400).json({
+        message: "Phone number and OTP are required",
+      });
+    }
+
+    const DiagnosticsUser = req.tenantDb.model("DiagnosticsUser");
+    const query = { phone: phoneNumber };
+    if (req.body.hospitalId) query.hospitalId = req.body.hospitalId;
+
+    let user = await DiagnosticsUser.findOne(query);
+
+    if (!user) {
+      user = new DiagnosticsUser({
+        phone: phoneNumber,
+        userType: "Patient",
+        name: "",
+        age: "",
+        gender: "",
+        email: "",
+        addresses: [],
+        familyMembers: [],
+        hospitalId: req.body.hospitalId,
+      });
+      await user.save();
+    }
+
+    const token = createDiagnosticsToken(user);
+
+    res.json({
+      message: "OTP verified successfully",
+      token,
+      user: user,
+    });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server error");
+  }
+});
+
+// @route   GET api/diagnostics-users/phone/:phoneNumber
+router.get("/phone/:phoneNumber", tenantDbFromQuery, async (req, res) => {
+  try {
+    const DiagnosticsUser = req.tenantDb.model("DiagnosticsUser");
+    const query = { phone: req.params.phoneNumber };
+    if (req.query.hospitalId) query.hospitalId = req.query.hospitalId;
+    const user = await DiagnosticsUser.findOne(query);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    const token = createDiagnosticsToken(user);
+    res.json({ ...user.toObject(), token });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server error");
+  }
+});
+
+// @route   POST api/diagnostics-users/phone
+router.post("/phone", tenantDbFromQuery, async (req, res) => {
+  try {
+    const DiagnosticsUser = req.tenantDb.model("DiagnosticsUser");
+    const { phone, ...userData } = req.body;
+
+    if (!phone) {
+      return res.status(400).json({ message: "Phone number is required" });
+    }
+
+    const query = { phone };
+    if (req.body.hospitalId) query.hospitalId = req.body.hospitalId;
+    let user = await DiagnosticsUser.findOne(query);
+
+    if (user) {
+      const token = createDiagnosticsToken(user);
+      return res.json({ ...user.toObject(), token });
+    }
+
+    const newUser = new DiagnosticsUser({
+      phone,
+      ...userData,
+      hospitalId: req.body.hospitalId || req.hospitalId,
+    });
+    await newUser.save();
+
+    const token = createDiagnosticsToken(newUser);
+    res.json({ ...newUser.toObject(), token });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server error");
+  }
+});
+
+// @route   PUT api/diagnostics-users/phone/:phoneNumber
+router.put("/phone/:phoneNumber", tenantDbFromQuery, async (req, res) => {
+  try {
+    const DiagnosticsUser = req.tenantDb.model("DiagnosticsUser");
+    const query = { phone: req.params.phoneNumber };
+    if (req.body.hospitalId) query.hospitalId = req.body.hospitalId;
+
+    const user = await DiagnosticsUser.findOneAndUpdate(query, req.body, {
+      new: true,
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.json(user);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server error");
+  }
+});
+
+// ========== PRIVATE ROUTES (require auth) ==========
 router.use(auth);
 router.use(tenantDb);
 
@@ -68,7 +228,7 @@ router.put("/:id", auth, async (req, res) => {
     const user = await DiagnosticsUser.findOneAndUpdate(
       { _id: req.params.id, hospitalId: req.hospitalId },
       req.body,
-      { new: true }
+      { new: true },
     );
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -94,158 +254,6 @@ router.delete("/:id", auth, async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
     res.json({ message: "User deleted successfully" });
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send("Server error");
-  }
-});
-
-// @route   GET api/diagnostics-users/phone/:phoneNumber
-// @desc    Get diagnostics user by phone number
-// @access  Public (for mobile app)
-router.get("/phone/:phoneNumber", async (req, res) => {
-  try {
-    const DiagnosticsUser = req.tenantDb.model("DiagnosticsUser");
-    const query = { phone: req.params.phoneNumber };
-    if (req.query.hospitalId) query.hospitalId = req.query.hospitalId;
-    const user = await DiagnosticsUser.findOne(query);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-    res.json(user);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send("Server error");
-  }
-});
-
-// @route   POST api/diagnostics-users/phone
-// @desc    Create or get diagnostics user by phone number
-// @access  Public (for mobile app)
-router.post("/phone", async (req, res) => {
-  try {
-    const DiagnosticsUser = req.tenantDb.model("DiagnosticsUser");
-    const { phone, ...userData } = req.body;
-
-    if (!phone) {
-      return res.status(400).json({ message: "Phone number is required" });
-    }
-
-    // Check if user already exists
-    const query = { phone };
-    if (req.body.hospitalId) query.hospitalId = req.body.hospitalId;
-    let user = await DiagnosticsUser.findOne(query);
-
-    if (user) {
-      return res.json(user);
-    }
-
-    // Create new user
-    const newUser = new DiagnosticsUser({
-      phone,
-      ...userData,
-    });
-
-    await newUser.save();
-    res.json(newUser);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send("Server error");
-  }
-});
-
-// @route   PUT api/diagnostics-users/phone/:phoneNumber
-// @desc    Update diagnostics user by phone number
-// @access  Public (for mobile app)
-router.put("/phone/:phoneNumber", async (req, res) => {
-  try {
-    const DiagnosticsUser = req.tenantDb.model("DiagnosticsUser");
-    const query = { phone: req.params.phoneNumber };
-    if (req.body.hospitalId) query.hospitalId = req.body.hospitalId;
-
-    const user = await DiagnosticsUser.findOneAndUpdate(query, req.body, {
-      new: true,
-    });
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    res.json(user);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send("Server error");
-  }
-});
-
-// @route   POST api/diagnostics-users/send-otp
-// @desc    Send OTP to phone number
-// @access  Public (for mobile app)
-router.post("/send-otp", async (req, res) => {
-  try {
-    const { phoneNumber } = req.body;
-
-    if (!phoneNumber) {
-      return res.status(400).json({ message: "Phone number is required" });
-    }
-
-    // Generate OTP (in real app, send via SMS service)
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // Store OTP temporarily (in real app, use Redis or similar)
-    // For now, just return success
-    res.json({
-      message: "OTP sent successfully",
-      otp: otp, // Remove this in production
-    });
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send("Server error");
-  }
-});
-
-// @route   POST api/diagnostics-users/verify-otp
-// @desc    Verify OTP and get/create user
-// @access  Public (for mobile app)
-router.post("/verify-otp", async (req, res) => {
-  try {
-    const { phoneNumber, otp } = req.body;
-
-    if (!phoneNumber || !otp) {
-      return res.status(400).json({
-        message: "Phone number and OTP are required",
-      });
-    }
-
-    // In real app, verify OTP here
-    // For now, just proceed with user creation/lookup
-    const DiagnosticsUser = req.tenantDb.model("DiagnosticsUser");
-    const query = { phone: phoneNumber };
-    if (req.body.hospitalId) query.hospitalId = req.body.hospitalId;
-
-    let user = await DiagnosticsUser.findOne(query);
-
-    if (!user) {
-      // Create new user
-      user = new DiagnosticsUser({
-        phone: phoneNumber,
-        userType: "Patient",
-        name: "",
-        age: "",
-        gender: "",
-        email: "",
-        addresses: [],
-        familyMembers: [],
-        hospitalId: req.body.hospitalId, // Optional but good if provided
-      });
-
-      await user.save();
-    }
-
-    res.json({
-      message: "OTP verified successfully",
-      user: user,
-    });
   } catch (err) {
     console.error(err.message);
     res.status(500).send("Server error");

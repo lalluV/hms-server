@@ -120,7 +120,7 @@ router.post("/", async (req, res) => {
     } catch (error) {
       console.error(
         "⚠️  Failed to index master parameter in Meilisearch:",
-        error.message
+        error.message,
       );
       // Don't fail the request if indexing fails
     }
@@ -172,7 +172,7 @@ router.put("/:id", async (req, res) => {
         ...req.body,
         modifiedBy,
       },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
 
     // Update in Meilisearch
@@ -181,7 +181,7 @@ router.put("/:id", async (req, res) => {
     } catch (error) {
       console.error(
         "⚠️  Failed to update master parameter in Meilisearch:",
-        error.message
+        error.message,
       );
       // Don't fail the request if indexing fails
     }
@@ -225,7 +225,7 @@ router.delete("/:id", async (req, res) => {
           active: false,
           modifiedBy,
         },
-        { new: true }
+        { new: true },
       );
 
       // Update in Meilisearch (mark as inactive)
@@ -234,7 +234,7 @@ router.delete("/:id", async (req, res) => {
       } catch (error) {
         console.error(
           "⚠️  Failed to update master parameter in Meilisearch:",
-          error.message
+          error.message,
         );
       }
 
@@ -255,7 +255,7 @@ router.delete("/:id", async (req, res) => {
     } catch (error) {
       console.error(
         "⚠️  Failed to delete master parameter from Meilisearch:",
-        error.message
+        error.message,
       );
     }
 
@@ -315,7 +315,7 @@ router.get("/search/autocomplete", async (req, res) => {
           active: active === "true" || active === true,
         })
           .select(
-            "parameter_code name units category default_normal_range default_critical_values _id"
+            "parameter_code name units category default_normal_range default_critical_values _id",
           )
           .lean();
 
@@ -337,7 +337,7 @@ router.get("/search/autocomplete", async (req, res) => {
     } catch (meilisearchError) {
       console.warn(
         "⚠️  Meilisearch error, falling back to MongoDB:",
-        meilisearchError.message
+        meilisearchError.message,
       );
     }
 
@@ -359,7 +359,7 @@ router.get("/search/autocomplete", async (req, res) => {
     const parameters = await MasterParameter.find(query)
       .limit(parseInt(limit))
       .select(
-        "parameter_code name units category default_normal_range default_critical_values _id"
+        "parameter_code name units category default_normal_range default_critical_values _id",
       )
       .sort({ name: 1 })
       .lean();

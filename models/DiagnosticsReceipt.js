@@ -24,6 +24,32 @@ const diagnosticsReceiptSchema = new mongoose.Schema(
     completedTests: { type: Number },
     type: { type: String },
 
+    // Patient snapshot (used by both HMS and mobile; mobile sends for display without fetch)
+    patientGender: { type: String },
+    patientAge: { type: String },
+    patientEmail: { type: String },
+    accountPhone: { type: String }, // Link to DiagnosticsUser account (mobile)
+
+    // Mobile app booking / appointment
+    slotDate: { type: String },
+    slotTime: { type: String },
+    appointmentDate: { type: String },
+    appointmentTime: { type: String },
+    bookingType: { type: String },
+
+    // Mobile app address
+    address: { type: String },
+    area: { type: String },
+    city: { type: String },
+    flatNo: { type: String },
+    addressLabel: { type: String },
+    coordinates: { type: mongoose.Schema.Types.Mixed },
+
+    // Mobile app phlebotomist / branch
+    phlebotomist: { type: String },
+    phlebotomistId: { type: String },
+    phlebotomistNumber: { type: String },
+
     // Purchase specific
     vendorData: { type: mongoose.Schema.Types.Mixed },
     payment: { type: String },
@@ -41,12 +67,12 @@ const diagnosticsReceiptSchema = new mongoose.Schema(
       },
     ],
   },
-  { strict: true, timestamps: true }
+  { strict: true, timestamps: true },
 );
 
 const DiagnosticsReceipt = mongoose.model(
   "DiagnosticsReceipt",
-  diagnosticsReceiptSchema
+  diagnosticsReceiptSchema,
 );
 
 module.exports = DiagnosticsReceipt;

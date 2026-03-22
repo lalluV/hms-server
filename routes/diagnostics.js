@@ -44,7 +44,7 @@ router.get("/", async (req, res) => {
     const diagnostics = await Diagnostic.find(searchQuery)
       .populate(
         "diagnosticId",
-        "test_code name deptname subdeptname description"
+        "test_code name deptname subdeptname description",
       )
       .sort({ createdAt: -1 }) // Sort by newest first
       .skip(skip)
@@ -96,7 +96,7 @@ router.post("/from-master/:masterId", async (req, res) => {
     const Diagnostic = req.tenantDb.model("Diagnostic");
 
     const masterDiagnostic = await MasterDiagnostic.findById(
-      req.params.masterId
+      req.params.masterId,
     ).populate("suggested_parameters.parameterId");
 
     if (!masterDiagnostic) {
@@ -130,6 +130,7 @@ router.post("/from-master/:masterId", async (req, res) => {
       testInstructions: masterDiagnostic.default_testInstructions || [],
       type: "Test",
       visitType: "Center",
+      active: req.body.active !== false,
       isCustom: false, // Created from master
       // Pricing must be set by hospital
       mrp: req.body.mrp || 0,
@@ -192,7 +193,7 @@ router.put("/:id", async (req, res) => {
     const diagnostic = await Diagnostic.findOneAndUpdate(
       { _id: req.params.id, hospitalId: req.hospitalId },
       req.body,
-      { new: true }
+      { new: true },
     );
     if (!diagnostic) {
       return res.status(404).json({ message: "Diagnostic not found" });

@@ -27,6 +27,7 @@ const diagnosticSchema = new mongoose.Schema(
     visitType: { type: String },
     parameters: [mongoose.Schema.Types.Mixed],
     testInstructions: [String],
+    active: { type: Boolean, default: true },
     isCustom: {
       type: Boolean,
       default: false,
@@ -40,7 +41,7 @@ const diagnosticSchema = new mongoose.Schema(
       },
     ],
   },
-  { strict: true, timestamps: true }
+  { strict: true, timestamps: true },
 );
 
 // Compound index for faster queries

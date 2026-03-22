@@ -49,7 +49,7 @@ const masterDiagnosticSchema = new mongoose.Schema(
     strict: true,
     timestamps: true,
     collection: "masterdiagnostics",
-  }
+  },
 );
 
 // Compound index for faster searches
@@ -57,4 +57,3 @@ masterDiagnosticSchema.index({ name: 1, deptname: 1 });
 masterDiagnosticSchema.index({ active: 1, name: 1 });
 
 module.exports = mongoose.model("MasterDiagnostic", masterDiagnosticSchema);
-

@@ -12,7 +12,7 @@ const {
 
 // Apply admin auth to all routes except search
 router.use((req, res, next) => {
-  if (req.path === '/search/autocomplete') {
+  if (req.path === "/search/autocomplete") {
     return next(); // Public endpoint - no auth required
   }
   adminAuth(req, res, next);
@@ -21,13 +21,7 @@ router.use((req, res, next) => {
 // Get all master diagnostics with pagination and search
 router.get("/", async (req, res) => {
   try {
-    const {
-      page = 1,
-      limit = 50,
-      search = "",
-      active,
-      deptname,
-    } = req.query;
+    const { page = 1, limit = 50, search = "", active, deptname } = req.query;
 
     const query = {};
 
@@ -57,7 +51,10 @@ router.get("/", async (req, res) => {
 
     const [diagnostics, total] = await Promise.all([
       MasterDiagnostic.find(query)
-        .populate("suggested_parameters.parameterId", "name units category default_normal_range")
+        .populate(
+          "suggested_parameters.parameterId",
+          "name units category default_normal_range",
+        )
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum),
@@ -82,9 +79,11 @@ router.get("/", async (req, res) => {
 // Get master diagnostic by ID
 router.get("/:id", async (req, res) => {
   try {
-    const diagnostic = await MasterDiagnostic.findById(req.params.id)
-      .populate("suggested_parameters.parameterId", "name units category default_normal_range default_critical_values");
-    
+    const diagnostic = await MasterDiagnostic.findById(req.params.id).populate(
+      "suggested_parameters.parameterId",
+      "name units category default_normal_range default_critical_values",
+    );
+
     if (!diagnostic) {
       return res.status(404).json({ error: "Master diagnostic not found" });
     }
@@ -123,17 +122,21 @@ router.post("/", async (req, res) => {
     });
 
     const savedDiagnostic = await newDiagnostic.save();
-    const populated = await MasterDiagnostic.findById(savedDiagnostic._id)
-      .populate("suggested_parameters.parameterId", "name units category");
-    
+    const populated = await MasterDiagnostic.findById(
+      savedDiagnostic._id,
+    ).populate("suggested_parameters.parameterId", "name units category");
+
     // Index in Meilisearch
     try {
       await indexMasterDiagnostic(savedDiagnostic);
     } catch (error) {
-      console.error("⚠️  Failed to index master diagnostic in Meilisearch:", error.message);
+      console.error(
+        "⚠️  Failed to index master diagnostic in Meilisearch:",
+        error.message,
+      );
       // Don't fail the request if indexing fails
     }
-    
+
     res.status(201).json(populated);
   } catch (error) {
     console.error("Error creating master diagnostic:", error);
@@ -178,15 +181,17 @@ router.put("/:id", async (req, res) => {
         ...req.body,
         modifiedBy,
       },
-      { new: true, runValidators: true }
-    )
-      .populate("suggested_parameters.parameterId", "name units category");
+      { new: true, runValidators: true },
+    ).populate("suggested_parameters.parameterId", "name units category");
 
     // Update in Meilisearch
     try {
       await indexMasterDiagnostic(updatedDiagnostic);
     } catch (error) {
-      console.error("⚠️  Failed to update master diagnostic in Meilisearch:", error.message);
+      console.error(
+        "⚠️  Failed to update master diagnostic in Meilisearch:",
+        error.message,
+      );
       // Don't fail the request if indexing fails
     }
 
@@ -229,14 +234,17 @@ router.delete("/:id", async (req, res) => {
           active: false,
           modifiedBy,
         },
-        { new: true }
+        { new: true },
       );
 
       // Update in Meilisearch (mark as inactive)
       try {
         await indexMasterDiagnostic(updatedDiagnostic);
       } catch (error) {
-        console.error("⚠️  Failed to update master diagnostic in Meilisearch:", error.message);
+        console.error(
+          "⚠️  Failed to update master diagnostic in Meilisearch:",
+          error.message,
+        );
       }
 
       return res.json({
@@ -249,14 +257,17 @@ router.delete("/:id", async (req, res) => {
     // Hard delete if no hospitals are using it
     const diagnosticId = diagnostic._id.toString();
     await MasterDiagnostic.findByIdAndDelete(req.params.id);
-    
+
     // Delete from Meilisearch
     try {
       await deleteMasterDiagnostic(diagnosticId);
     } catch (error) {
-      console.error("⚠️  Failed to delete master diagnostic from Meilisearch:", error.message);
+      console.error(
+        "⚠️  Failed to delete master diagnostic from Meilisearch:",
+        error.message,
+      );
     }
-    
+
     res.json({ message: "Master diagnostic deleted successfully" });
   } catch (error) {
     console.error("Error deleting master diagnostic:", error);
@@ -267,12 +278,13 @@ router.delete("/:id", async (req, res) => {
 // Get statistics
 router.get("/stats/overview", async (req, res) => {
   try {
-    const [total, active, inactive, withHospitalDiagnostics] = await Promise.all([
-      MasterDiagnostic.countDocuments({}),
-      MasterDiagnostic.countDocuments({ active: true }),
-      MasterDiagnostic.countDocuments({ active: false }),
-      Diagnostic.distinct("diagnosticId").then((ids) => ids.length),
-    ]);
+    const [total, active, inactive, withHospitalDiagnostics] =
+      await Promise.all([
+        MasterDiagnostic.countDocuments({}),
+        MasterDiagnostic.countDocuments({ active: true }),
+        MasterDiagnostic.countDocuments({ active: false }),
+        Diagnostic.distinct("diagnosticId").then((ids) => ids.length),
+      ]);
 
     res.json({
       total,
@@ -313,8 +325,13 @@ router.get("/search/autocomplete", async (req, res) => {
           _id: { $in: ids },
           active: active === "true" || active === true,
         })
-          .populate("suggested_parameters.parameterId", "name units category default_normal_range")
-          .select("test_code name deptname subdeptname description default_fasting default_reportsIn suggested_parameters _id")
+          .populate(
+            "suggested_parameters.parameterId",
+            "name units category default_normal_range default_critical_values",
+          )
+          .select(
+            "test_code name deptname subdeptname description default_fasting default_reportsIn default_testInstructions suggested_parameters _id",
+          )
           .lean();
 
         // Map back to search order
@@ -333,7 +350,10 @@ router.get("/search/autocomplete", async (req, res) => {
         return res.json({ results: orderedResults });
       }
     } catch (meilisearchError) {
-      console.warn("⚠️  Meilisearch error, falling back to MongoDB:", meilisearchError.message);
+      console.warn(
+        "⚠️  Meilisearch error, falling back to MongoDB:",
+        meilisearchError.message,
+      );
     }
 
     // Fallback to MongoDB if Meilisearch fails or returns no results
@@ -353,13 +373,20 @@ router.get("/search/autocomplete", async (req, res) => {
     }
 
     const diagnostics = await MasterDiagnostic.find(query)
-      .populate("suggested_parameters.parameterId", "name units category")
+      .populate(
+        "suggested_parameters.parameterId",
+        "name units category default_normal_range default_critical_values",
+      )
       .limit(parseInt(limit))
-      .select("test_code name deptname subdeptname description default_fasting default_reportsIn suggested_parameters _id")
+      .select(
+        "test_code name deptname subdeptname description default_fasting default_reportsIn default_testInstructions suggested_parameters _id",
+      )
       .sort({ name: 1 })
       .lean();
 
-    res.json({ results: diagnostics.map((d) => ({ ...d, _id: d._id.toString() })) });
+    res.json({
+      results: diagnostics.map((d) => ({ ...d, _id: d._id.toString() })),
+    });
   } catch (error) {
     console.error("Error searching master diagnostics:", error);
     res.status(500).json({ error: "Failed to search master diagnostics" });
@@ -367,4 +394,3 @@ router.get("/search/autocomplete", async (req, res) => {
 });
 
 module.exports = router;
-
