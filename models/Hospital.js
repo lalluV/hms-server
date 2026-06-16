@@ -27,12 +27,28 @@ const hospitalSchema = new mongoose.Schema(
     website: { type: String },
     logoUrl: { type: String },
     active: { type: Boolean, default: true },
-    subscriptionPlan: { type: String, default: "basic" },
+    subscriptionPlan: { type: String, default: "pro" },
     subscriptionExpiry: { type: Date },
+    subscriptionStatus: {
+      type: String,
+      enum: ["active", "trialing", "past_due", "canceled", "expired"],
+      default: "active",
+    },
+    /** Merges with plan; support can toggle booleans to unlock modules */
+    moduleOverrides: { type: mongoose.Schema.Types.Mixed, default: {} },
     settings: {
       currency: { type: String, default: "INR" },
       timezone: { type: String, default: "Asia/Kolkata" },
       dateFormat: { type: String, default: "DD-MM-YYYY" },
+      /** Primary hospital GSTIN on printed bills */
+      gstNumber: { type: String },
+      /** Pharmacy unit GSTIN when different from hospital */
+      pharmacyGstNumber: { type: String },
+      panNumber: { type: String },
+      drugLicenseNumber: { type: String },
+      labLicenseNumber: { type: String },
+      /** Shown above footer disclaimer on receipts */
+      receiptFooterNote: { type: String },
     },
     // Tenant Database Fields
     databaseName: { type: String }, // Name of the tenant database

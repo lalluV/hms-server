@@ -1,10 +1,8 @@
 const express = require("express");
 const router = express.Router();
-const auth = require("../middleware/auth");
-const tenantDb = require("../middleware/tenantDb");
+const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
 
-router.use(auth);
-router.use(tenantDb);
+applyTenantEntitlements(router, { moduleKey: "core" });
 
 // Get all appointments with pagination support
 router.get("/", async (req, res) => {
@@ -56,8 +54,12 @@ router.get("/", async (req, res) => {
     if (search && search.length >= 2) {
       query.$or = [
         { name: { $regex: search, $options: "i" } },
+        { fullName: { $regex: search, $options: "i" } },
         { phone: { $regex: search, $options: "i" } },
+        { mobile: { $regex: search, $options: "i" } },
+        { doctor: { $regex: search, $options: "i" } },
         { doctorName: { $regex: search, $options: "i" } },
+        { treatment: { $regex: search, $options: "i" } },
       ];
     }
 

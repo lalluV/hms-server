@@ -1,16 +1,77 @@
 const express = require("express");
 const router = express.Router();
-const auth = require("../middleware/auth");
-const tenantDb = require("../middleware/tenantDb");
+const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
+const { normalizeRole } = require("../config/rolePermissions");
+const {
+  calculateBillBreakdown,
+  calculateInsuranceCoverage,
+  calculateTotalAdvance,
+} = require("../utils/insuranceCalculation");
 
-// Apply authentication and tenant database middleware
-router.use(auth);
-router.use(tenantDb);
+applyTenantEntitlements(router, { moduleKey: "core" });
+
+const INPATIENT_TYPES = new Set(["IP", "OPtoIP"]);
+
+function isInpatientPatient(patient) {
+  return INPATIENT_TYPES.has(patient?.patient_type);
+}
+
+function isDoctorWithoutIpdDoctorRecord(req) {
+  return (
+    normalizeRole(req.user?.type) === "Doctor" &&
+    req.entitlements?.modules?.ipdDoctorRecord !== true
+  );
+}
+
+function isNurseWithoutIpdPanel(req) {
+  return (
+    normalizeRole(req.user?.type) === "Nurse" &&
+    req.entitlements?.modules?.ipdNursePanel !== true
+  );
+}
+
+function sendModuleForbidden(res, moduleKey, message) {
+  return res.status(403).json({
+    code: "MODULE_NOT_IN_PLAN",
+    message,
+    module: moduleKey,
+  });
+}
+
+function blockInpatientRecordAccess(req, res, patient) {
+  if (!isInpatientPatient(patient)) return false;
+
+  if (req.entitlements?.modules?.ipd !== true) {
+    sendModuleForbidden(
+      res,
+      "ipd",
+      "IPD patient access is not included in your subscription plan.",
+    );
+    return true;
+  }
+
+  if (isDoctorWithoutIpdDoctorRecord(req)) {
+    sendModuleForbidden(
+      res,
+      "ipdDoctorRecord",
+      "Doctor IPD patient record is not included in your subscription plan.",
+    );
+    return true;
+  }
+  if (isNurseWithoutIpdPanel(req)) {
+    sendModuleForbidden(
+      res,
+      "ipdNursePanel",
+      "Nurse IPD panel is not included in your subscription plan.",
+    );
+    return true;
+  }
+  return false;
+}
 
 // Get all patients with pagination support
 router.get("/", async (req, res) => {
   try {
-    // Get Patient model from tenant database
     const Patient = req.tenantDb.model("Patient");
 
     const {
@@ -20,64 +81,136 @@ router.get("/", async (req, res) => {
       patientType = "",
       status = "",
       paymentMethod = "",
+      insuranceProviderId = "",
+      insuranceOnly = "",
+      maxDaysAdmitted = "",
+      minDaysAdmitted = "",
     } = req.query;
 
-    // Build query
-    const query = { hospitalId: req.hospitalId };
+    const dayjs = require("dayjs");
 
-    // Filter by patient type (OP, IP, OPtoIP)
-    if (patientType) {
+    const andConditions = [{ hospitalId: req.hospitalId }];
+
+    if (isDoctorWithoutIpdDoctorRecord(req)) {
+      if (patientType && patientType !== "OP") {
+        return sendModuleForbidden(
+          res,
+          "ipdDoctorRecord",
+          "Doctor IPD patient record is not included in your subscription plan.",
+        );
+      }
+      andConditions.push({ patient_type: "OP" });
+    } else if (isNurseWithoutIpdPanel(req)) {
+      if (patientType && patientType !== "OP") {
+        return sendModuleForbidden(
+          res,
+          "ipdNursePanel",
+          "Nurse IPD panel is not included in your subscription plan.",
+        );
+      }
+      andConditions.push({ patient_type: "OP" });
+    } else if (
+      req.entitlements?.modules?.ipd !== true &&
+      patientType !== "OP"
+    ) {
+      if (patientType) {
+        return sendModuleForbidden(
+          res,
+          "ipd",
+          "IPD patient access is not included in your subscription plan.",
+        );
+      }
+      andConditions.push({ patient_type: "OP" });
+    } else if (patientType) {
       if (patientType === "OP") {
-        query.patient_type = "OP";
-        query.active = true;
+        andConditions.push({ patient_type: "OP", active: true });
       } else if (patientType === "IP") {
-        query.$or = [{ patient_type: "IP" }, { patient_type: "OPtoIP" }];
-        query.active = true;
+        andConditions.push({
+          $or: [{ patient_type: "IP" }, { patient_type: "OPtoIP" }],
+          active: true,
+        });
       } else if (patientType === "discharged") {
-        query.active = false;
+        andConditions.push({ active: false });
       }
     }
 
-    // Filter by status (active/inactive)
     if (status === "active") {
-      query.active = true;
+      andConditions.push({ active: true });
     } else if (status === "inactive") {
-      query.active = false;
+      andConditions.push({ active: false });
     }
 
-    // Filter by payment method
     if (paymentMethod) {
-      query.paymentMethod = paymentMethod;
+      andConditions.push({ paymentMethod });
     }
 
-    // Search filter
+    if (insuranceOnly === "true") {
+      andConditions.push({
+        $or: [
+          { paymentMethod: "Insurance" },
+          {
+            insurance_providerId: { $exists: true, $nin: [null, ""] },
+          },
+        ],
+      });
+    }
+
+    if (insuranceProviderId) {
+      andConditions.push({ insurance_providerId: insuranceProviderId });
+    }
+
+    if (maxDaysAdmitted) {
+      const cutoff = dayjs()
+        .subtract(parseInt(maxDaysAdmitted, 10), "day")
+        .format("YYYY-MM-DD");
+      andConditions.push({
+        $or: [
+          { admissionDate: { $gte: cutoff } },
+          { registration_date: { $gte: cutoff } },
+        ],
+      });
+    }
+
+    if (minDaysAdmitted) {
+      const cutoff = dayjs()
+        .subtract(parseInt(minDaysAdmitted, 10), "day")
+        .format("YYYY-MM-DD");
+      andConditions.push({
+        $or: [
+          { admissionDate: { $lte: cutoff } },
+          { registration_date: { $lte: cutoff } },
+        ],
+      });
+    }
+
     if (search && search.length >= 2) {
-      query.$or = [
-        { UMRNo: { $regex: search, $options: "i" } },
-        { name: { $regex: search, $options: "i" } },
-        { phone: { $regex: search, $options: "i" } },
-      ];
+      andConditions.push({
+        $or: [
+          { UMRNo: { $regex: search, $options: "i" } },
+          { name: { $regex: search, $options: "i" } },
+          { phone: { $regex: search, $options: "i" } },
+        ],
+      });
     }
 
-    // Calculate pagination
+    const query =
+      andConditions.length === 1 ? andConditions[0] : { $and: andConditions };
+
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
 
-    // Get total count
     const total = await Patient.countDocuments(query);
 
-    // Get paginated patients
     const patients = await Patient.find(query)
       .sort({ registration_date: -1 })
       .skip(skip)
       .limit(limitNum);
 
-    // Format registration date
     const formattedPatients = patients.map((patient) => ({
       ...patient.toObject(),
       registration_date: new Date(
-        patient.registration_date
+        patient.registration_date,
       ).toLocaleDateString(),
     }));
 
@@ -101,10 +234,14 @@ router.get("/", async (req, res) => {
 router.get("/phone/:phoneNumber", async (req, res) => {
   try {
     const Patient = req.tenantDb.model("Patient");
-    const patients = await Patient.find({
+    const query = {
       phone: req.params.phoneNumber,
       hospitalId: req.hospitalId,
-    });
+    };
+    if (isDoctorWithoutIpdDoctorRecord(req) || isNurseWithoutIpdPanel(req)) {
+      query.patient_type = "OP";
+    }
+    const patients = await Patient.find(query);
     res.json(patients);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -122,6 +259,7 @@ router.get("/:id", async (req, res) => {
     if (!patient) {
       return res.status(404).json({ message: "Patient not found" });
     }
+    if (blockInpatientRecordAccess(req, res, patient)) return;
     res.json(patient);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -132,6 +270,36 @@ router.get("/:id", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const Patient = req.tenantDb.model("Patient");
+    if (
+      isDoctorWithoutIpdDoctorRecord(req) &&
+      INPATIENT_TYPES.has(req.body?.patient_type)
+    ) {
+      return sendModuleForbidden(
+        res,
+        "ipdDoctorRecord",
+        "Doctor IPD patient record is not included in your subscription plan.",
+      );
+    }
+    if (
+      isNurseWithoutIpdPanel(req) &&
+      INPATIENT_TYPES.has(req.body?.patient_type)
+    ) {
+      return sendModuleForbidden(
+        res,
+        "ipdNursePanel",
+        "Nurse IPD panel is not included in your subscription plan.",
+      );
+    }
+    if (
+      req.entitlements?.modules?.ipd !== true &&
+      INPATIENT_TYPES.has(req.body?.patient_type)
+    ) {
+      return sendModuleForbidden(
+        res,
+        "ipd",
+        "IPD patient registration is not included in your subscription plan.",
+      );
+    }
     const patient = new Patient({ ...req.body, hospitalId: req.hospitalId });
     const newPatient = await patient.save();
     res.status(201).json(newPatient);
@@ -144,10 +312,46 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const Patient = req.tenantDb.model("Patient");
+    const existingPatient = await Patient.findOne({
+      UMRNo: req.params.id,
+      hospitalId: req.hospitalId,
+    });
+    if (!existingPatient) {
+      return res.status(404).json({ message: "Patient not found" });
+    }
+    const requestedType =
+      req.body?.patient_type || existingPatient.patient_type;
+    if (
+      isDoctorWithoutIpdDoctorRecord(req) &&
+      INPATIENT_TYPES.has(requestedType)
+    ) {
+      return sendModuleForbidden(
+        res,
+        "ipdDoctorRecord",
+        "Doctor IPD patient record is not included in your subscription plan.",
+      );
+    }
+    if (isNurseWithoutIpdPanel(req) && INPATIENT_TYPES.has(requestedType)) {
+      return sendModuleForbidden(
+        res,
+        "ipdNursePanel",
+        "Nurse IPD panel is not included in your subscription plan.",
+      );
+    }
+    if (
+      req.entitlements?.modules?.ipd !== true &&
+      INPATIENT_TYPES.has(requestedType)
+    ) {
+      return sendModuleForbidden(
+        res,
+        "ipd",
+        "IPD patient updates are not included in your subscription plan.",
+      );
+    }
     const patient = await Patient.findOneAndUpdate(
       { UMRNo: req.params.id, hospitalId: req.hospitalId },
       { $set: req.body },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
     if (!patient) {
       return res.status(404).json({ message: "Patient not found" });
@@ -162,6 +366,14 @@ router.put("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   try {
     const Patient = req.tenantDb.model("Patient");
+    const existingPatient = await Patient.findOne({
+      UMRNo: req.params.id,
+      hospitalId: req.hospitalId,
+    });
+    if (!existingPatient) {
+      return res.status(404).json({ message: "Patient not found" });
+    }
+    if (blockInpatientRecordAccess(req, res, existingPatient)) return;
     const patient = await Patient.findOneAndDelete({
       UMRNo: req.params.id,
       hospitalId: req.hospitalId,
@@ -186,6 +398,7 @@ router.post("/:id/medical-history", async (req, res) => {
     if (!patient) {
       return res.status(404).json({ message: "Patient not found" });
     }
+    if (blockInpatientRecordAccess(req, res, patient)) return;
 
     patient.medicalHistory.push(req.body);
     await patient.save();
@@ -207,9 +420,10 @@ router.put("/:id/medical-history/:historyId", async (req, res) => {
     if (!patient) {
       return res.status(404).json({ message: "Patient not found" });
     }
+    if (blockInpatientRecordAccess(req, res, patient)) return;
 
     const historyIndex = patient.medicalHistory.findIndex(
-      (h) => h._id.toString() === req.params.historyId
+      (h) => h._id.toString() === req.params.historyId,
     );
 
     if (historyIndex === -1) {
@@ -239,9 +453,12 @@ router.get("/:id/interim-bill", async (req, res) => {
     const AdvanceReceipt = req.tenantDb.model("AdvanceReceipt");
     const InsuranceTariff = req.tenantDb.model("InsuranceTariff");
     const InsuranceExclusion = req.tenantDb.model("InsuranceExclusion");
-    
+    const InsuranceSettings = req.tenantDb.model("InsuranceSettings");
+    const InsuranceCompany = req.tenantDb.model("InsuranceCompany");
+
     const { id } = req.params;
     const { endDate } = req.query;
+    const calculateEndDate = endDate ? new Date(endDate) : new Date();
 
     const patient = await Patient.findOne({
       UMRNo: id,
@@ -250,229 +467,144 @@ router.get("/:id/interim-bill", async (req, res) => {
     if (!patient) {
       return res.status(404).json({ message: "Patient not found" });
     }
+    if (blockInpatientRecordAccess(req, res, patient)) return;
 
-    // Fetch all receipts for this patient
-    const consultationReceipts = await Consultation.find({
-      patientId: id,
-      hospitalId: req.hospitalId,
-    });
-    const actionReceipts = await Action.find({
-      patientId: id,
-      hospitalId: req.hospitalId,
-    });
-    const diagnosticsReceipts = await DiagnosticsReceipt.find({
-      patientId: id,
-      hospitalId: req.hospitalId,
-    });
-    const pharmacyReceipts = await PharmacyReceipt.find({
-      patientId: id,
-      hospitalId: req.hospitalId,
-    });
-    const advanceReceipts = await AdvanceReceipt.find({
-      patientId: id,
-      hospitalId: req.hospitalId,
-    });
+    const [
+      consultationReceipts,
+      actionReceipts,
+      diagnosticsReceipts,
+      pharmacyReceipts,
+      advanceReceipts,
+      insuranceTariffs,
+      insuranceExclusions,
+      insuranceSettingsDoc,
+      insuranceCompanies,
+    ] = await Promise.all([
+      Consultation.find({ patientId: id, hospitalId: req.hospitalId }),
+      Action.find({ patientId: id, hospitalId: req.hospitalId }),
+      DiagnosticsReceipt.find({ patientId: id, hospitalId: req.hospitalId }),
+      PharmacyReceipt.find({ patientId: id, hospitalId: req.hospitalId }),
+      AdvanceReceipt.find({ patientId: id, hospitalId: req.hospitalId }),
+      InsuranceTariff.find({ hospitalId: req.hospitalId }),
+      InsuranceExclusion.find({ hospitalId: req.hospitalId }),
+      InsuranceSettings.findOne({ hospitalId: req.hospitalId }),
+      InsuranceCompany.find({ hospitalId: req.hospitalId }),
+    ]);
 
-    // Fetch insurance data
-    const insuranceTariffs = await InsuranceTariff.find({
-      hospitalId: req.hospitalId,
-    });
-    const insuranceExclusions = await InsuranceExclusion.find({
-      hospitalId: req.hospitalId,
-    });
-
-    // Calculate bill breakdown
-    const dayjs = require("dayjs");
-    const calculateEndDate = endDate ? new Date(endDate) : new Date();
-    const isDischarged = patient?.active === false;
-    const dischargeDt = isDischarged
-      ? patient?.dischargeDate || dayjs(calculateEndDate).format("YYYY-MM-DD")
-      : dayjs(calculateEndDate).format("YYYY-MM-DD");
-
-    // Calculate ward charges
-    let wardCharges = 0;
-    const patientTransfers = patient.transfers || [];
-    for (let i = 0; i < patientTransfers.length; i++) {
-      const currentTransfer = patientTransfers[i];
-      const nextTransfer = patientTransfers[i + 1] || {
-        transferDate: dischargeDt,
-      };
-      const daysSpent =
-        dayjs(nextTransfer.transferDate).diff(
-          dayjs(currentTransfer.transferDate),
-          "day"
-        ) + 1;
-      const wardPrice = parseInt(currentTransfer.price, 10);
-      wardCharges += daysSpent * wardPrice;
-    }
-
-    // Calculate consultation charges
-    const consultationCharges = consultationReceipts.reduce(
-      (total, receipt) =>
-        total +
-        (receipt.items || []).reduce(
-          (sum, item) =>
-            sum + parseFloat(item.charges || 0) * (item.quantity || 1),
-          0
-        ),
-      0
+    const insuranceCompany = (insuranceCompanies || []).find(
+      (c) => String(c._id) === String(patient.insurance_providerId),
     );
 
-    // Calculate investigation charges
-    const investigationCharges = diagnosticsReceipts.reduce(
-      (total, receipt) =>
-        total +
-        (receipt.items || []).reduce(
-          (sum, item) => sum + parseFloat(item.price || 0),
-          0
-        ),
-      0
+    const settings = insuranceSettingsDoc?.toObject?.() || {};
+    const billBreakdown = calculateBillBreakdown(
+      patient,
+      consultationReceipts,
+      actionReceipts,
+      diagnosticsReceipts,
+      pharmacyReceipts,
+      calculateEndDate,
     );
 
-    // Calculate procedure charges
-    const procedureCharges = actionReceipts.reduce(
-      (total, receipt) =>
-        total +
-        (receipt.items || [])
-          .filter((data) => data.category === "Procedure Charges")
-          .reduce(
-            (sum, item) =>
-              sum + parseFloat(item.rate || 0) * (item.quantity || 1),
-            0
-          ),
-      0
-    );
-
-    // Calculate service charges
-    const serviceCharges = actionReceipts.reduce(
-      (total, receipt) =>
-        total +
-        (receipt.items || [])
-          .filter((data) => data.category === "Service Charges")
-          .reduce(
-            (sum, item) =>
-              sum + parseFloat(item.rate || 0) * (item.quantity || 1),
-            0
-          ),
-      0
-    );
-
-    // Calculate pharmacy charges
-    const pharmacyCharges = pharmacyReceipts.reduce(
-      (total, receipt) =>
-        total +
-        (receipt.items || []).reduce((prev, item) => {
-          const batchTotal = (item?.batches || []).reduce(
-            (batchPrev, { bill_amount }) =>
-              batchPrev + parseFloat(bill_amount || 0),
-            0
-          );
-          return prev + batchTotal;
-        }, 0),
-      0
-    );
-
-    const billBreakdown = {
-      Ward: wardCharges,
-      Consultation: consultationCharges,
-      Investigation: investigationCharges,
-      Procedure: procedureCharges,
-      Service: serviceCharges,
-      Pharmacy: pharmacyCharges,
-    };
-
-    // Calculate insurance coverage
-    const applicableTariff = insuranceTariffs.find(
-      (t) => t.companyId === patient.insurance_providerId
-    );
-    const applicableExclusions = insuranceExclusions.filter(
-      (e) => e.companyId === patient.insurance_providerId
-    );
-
-    const totalBill = Object.values(billBreakdown).reduce(
-      (sum, amount) => sum + (amount || 0),
-      0
-    );
-
-    // Apply exclusions
-    const exclusionsApplied = [];
-    const billAfterExclusions = { ...billBreakdown };
-    applicableExclusions.forEach((exclusion) => {
-      if (billAfterExclusions[exclusion.excludedService]) {
-        exclusionsApplied.push({
-          service: exclusion.excludedService,
-          amount: billAfterExclusions[exclusion.excludedService],
-          reason: exclusion.description,
-        });
-        billAfterExclusions[exclusion.excludedService] = 0;
-      }
-    });
-
-    // Calculate coverage (simplified - you may want to use the full calculation logic)
-    let insuranceCoverage = 0;
-    let patientPayable = totalBill;
-    const coverageBreakdown = [];
-
-    if (applicableTariff) {
-      Object.entries(billAfterExclusions).forEach(([service, amount]) => {
-        if (amount > 0) {
-          const serviceKey = service.toLowerCase().replace(" ", "");
-          const coveragePercentage =
-            applicableTariff[`${serviceKey}CoveragePercentage`] ||
-            applicableTariff.coveragePercentage ||
-            0;
-          const deductible =
-            applicableTariff[`${serviceKey}Deductible`] ||
-            applicableTariff.deductible ||
-            0;
-          const coverageLimit =
-            applicableTariff[`${serviceKey}CoverageLimit`] ||
-            applicableTariff.coverageLimit ||
-            0;
-
-          const amountAfterDeductible = Math.max(0, amount - deductible);
-          let coverage = (amountAfterDeductible * coveragePercentage) / 100;
-
-          if (coverageLimit > 0) {
-            coverage = Math.min(coverage, coverageLimit);
+    const insuranceResult =
+      settings.autoCalculateInsurance === false
+        ? {
+            totalBill: Object.values(billBreakdown).reduce(
+              (sum, amount) => sum + (Number(amount) || 0),
+              0,
+            ),
+            insuranceCoverage: 0,
+            patientPayable: Object.values(billBreakdown).reduce(
+              (sum, amount) => sum + (Number(amount) || 0),
+              0,
+            ),
+            coverageBreakdown: [],
+            exclusionsApplied: [],
+            warnings: ["Auto insurance calculation is disabled in settings."],
+            coPayAmount: 0,
+            coPayPercentage: 0,
+            coPayLimit: 0,
+            coPayType: patient.coPayType || "percentage",
+            deductible: 0,
+            coveragePercentage: 0,
+            coverageLimit: 0,
+            serviceCoverageDetails: {},
+            tariffFound: false,
+            tariffValid: false,
           }
+        : calculateInsuranceCoverage(
+            patient,
+            insuranceTariffs,
+            insuranceExclusions,
+            billBreakdown,
+            { endDate: calculateEndDate, settings },
+          );
 
-          insuranceCoverage += coverage;
-          const patientShare = amount - coverage;
-          patientPayable -= coverage;
+    const totalAdvancePaid = calculateTotalAdvance(
+      advanceReceipts,
+      id,
+      calculateEndDate,
+    );
+    const balanceDue = Math.max(
+      0,
+      insuranceResult.patientPayable - totalAdvancePaid,
+    );
 
-          coverageBreakdown.push({
-            service,
-            amount,
-            coverage,
-            patientShare,
-            excluded: false,
-            coveragePercentage,
-            coverageLimit,
-            deductible,
-          });
-        }
-      });
-    }
-
-    patientPayable = Math.max(0, patientPayable);
+    const hospitalRow = req.hospitalRow || req.hospital;
 
     res.json({
-      totalBill,
-      insuranceCoverage,
-      patientPayable,
+      ...insuranceResult,
       breakdown: billBreakdown,
-      coverageBreakdown,
-      exclusionsApplied,
       endDate: calculateEndDate,
+      totalAdvancePaid,
+      balanceDue,
+      hospital: hospitalRow
+        ? {
+            name: hospitalRow.name,
+            address: hospitalRow.address,
+            city: hospitalRow.city,
+            state: hospitalRow.state,
+            zipCode: hospitalRow.zipCode,
+            phone: hospitalRow.phone,
+            email: hospitalRow.email,
+            website: hospitalRow.website,
+          }
+        : null,
       patient: {
         UMRNo: patient.UMRNo,
         name: patient.name,
         age: patient.age,
         gender: patient.gender,
         phone: patient.phone,
+        patient_type: patient.patient_type,
+        paymentMethod: patient.paymentMethod,
         insurance_providerId: patient.insurance_providerId,
+        insurance_provider:
+          patient.insurance_provider || insuranceCompany?.name || "",
+        policy_number: patient.policy_number || "",
+        coPayPercentage: patient.coPayPercentage,
+        coPayLimit: patient.coPayLimit,
+        coPayType: patient.coPayType,
+        street_address: patient.street_address,
+        city: patient.city,
+        state: patient.state,
+        postal_code: patient.postal_code,
+        admissionDate: patient.admissionDate,
+        registration_date: patient.registration_date,
+        consultantDoctor: patient.consultantDoctor,
+        transfers: patient.transfers,
       },
+      insuranceCompany: insuranceCompany
+        ? {
+            name: insuranceCompany.name,
+            contactPerson: insuranceCompany.contactPerson,
+            phone: insuranceCompany.phone,
+            email: insuranceCompany.email,
+            address: insuranceCompany.address,
+            city: insuranceCompany.city,
+            state: insuranceCompany.state,
+            postalCode: insuranceCompany.postalCode,
+          }
+        : null,
     });
   } catch (error) {
     console.error("Error calculating interim bill:", error);

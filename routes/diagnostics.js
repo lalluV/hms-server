@@ -1,11 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const MasterDiagnostic = require("../models/MasterDiagnostic");
-const auth = require("../middleware/auth");
-const tenantDb = require("../middleware/tenantDb");
+const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
 
-router.use(auth);
-router.use(tenantDb);
+applyTenantEntitlements(router, { moduleKey: "lab" });
 
 // Get all diagnostics with pagination and search
 router.get("/", async (req, res) => {

@@ -8,10 +8,9 @@ const FileMerger = require("../utils/fileMerger");
 dotenv.config();
 
 const router = express.Router();
-const flexibleAuth = require("../middleware/flexibleAuth");
+const { applyEntitlementsNoTenantDb } = require("../utils/applyTenantEntitlements");
 
-// Use flexible auth that accepts both admin and user tokens
-router.use(flexibleAuth);
+applyEntitlementsNoTenantDb(router, { moduleKey: "core", useAuth: "flexible" });
 
 // Configure multer for memory storage with multiple files
 const upload = multer({
@@ -161,6 +160,76 @@ router.post("/photo", upload.single("photo"), async (req, res) => {
     console.error("Error uploading employee photo:", error);
     res.status(500).json({
       error: "Failed to upload photo",
+      details: error.message,
+    });
+  }
+});
+
+// Handle hospital logo upload (Admin / SuperAdmin)
+router.post("/hospital-logo", upload.single("logo"), async (req, res) => {
+  try {
+    if (!req.hospitalId) {
+      return res.status(400).json({ error: "Hospital ID is required" });
+    }
+
+    if (req.user) {
+      const { normalizeRole } = require("../config/rolePermissions");
+      const role = normalizeRole(req.user.type);
+      if (role !== "SuperAdmin" && role !== "Admin") {
+        return res.status(403).json({
+          error: "Only Admin or Super Admin can upload the hospital logo",
+        });
+      }
+    } else if (!req.isAdmin) {
+      return res.status(403).json({ error: "Unauthorized" });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: "No logo file uploaded" });
+    }
+
+    if (!req.file.mimetype.startsWith("image/")) {
+      return res
+        .status(400)
+        .json({ error: "Only image files are allowed for the hospital logo" });
+    }
+
+    if (req.file.size > 5 * 1024 * 1024) {
+      return res
+        .status(400)
+        .json({ error: "Logo file size should be less than 5MB" });
+    }
+
+    const fileExtension = req.file.originalname.split(".").pop();
+    const fileName = `${
+      req.hospitalId
+    }/branding/logo/${uuidv4()}.${fileExtension}`;
+
+    const command = new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: fileName,
+      Body: req.file.buffer,
+      ContentType: req.file.mimetype,
+    });
+
+    await s3Client.send(command);
+
+    const fileUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
+
+    res.json({
+      success: true,
+      fileUrl,
+      message: "Hospital logo uploaded successfully",
+      fileInfo: {
+        originalName: req.file.originalname,
+        size: req.file.size,
+        mimeType: req.file.mimetype,
+      },
+    });
+  } catch (error) {
+    console.error("Error uploading hospital logo:", error);
+    res.status(500).json({
+      error: "Failed to upload hospital logo",
       details: error.message,
     });
   }

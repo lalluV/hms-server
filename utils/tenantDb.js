@@ -15,8 +15,7 @@ let masterConnection = null;
 async function initializeMasterDatabase() {
   try {
     if (!masterConnection) {
-      const masterUri =
-        process.env.MONGO_URI_SHARED || process.env.MONGO_URI;
+      const masterUri = process.env.MONGO_URI_SHARED || process.env.MONGO_URI;
       masterConnection = await mongoose.connect(masterUri, {
         useNewUrlParser: true,
         useUnifiedTopology: true,
@@ -54,27 +53,32 @@ async function getTenantConnection(hospitalId) {
     // Check if connection already exists in cache
     if (tenantConnections.has(hospitalId)) {
       const connection = tenantConnections.get(hospitalId);
-      
+
       // Verify connection is still alive
       if (connection.readyState === 1) {
         return connection;
       } else {
         // Connection is dead, remove from cache and recreate
-        console.warn(`⚠️  Connection for hospital ${hospitalId} is dead, reconnecting...`);
+        console.warn(
+          `⚠️  Connection for hospital ${hospitalId} is dead, reconnecting...`,
+        );
         tenantConnections.delete(hospitalId);
       }
     }
 
     // Create new connection
     const dbName = getTenantDatabaseName(hospitalId);
-    const baseUri = process.env.MONGO_URI_TENANT_BASE || "mongodb://localhost:27017";
-    
+    const baseUri =
+      process.env.MONGO_URI_TENANT_BASE || "mongodb://localhost:27017";
+
     // Properly construct the connection URI with database name
     // Remove any trailing slash from baseUri
-    const cleanBaseUri = baseUri.replace(/\/$/, '');
+    const cleanBaseUri = baseUri.replace(/\/$/, "");
     const tenantUri = `${cleanBaseUri}/${dbName}?authSource=admin`;
 
-    console.log(`📡 Creating connection for hospital ${hospitalId} to database ${dbName}`);
+    console.log(
+      `📡 Creating connection for hospital ${hospitalId} to database ${dbName}`,
+    );
 
     const connection = await mongoose.createConnection(tenantUri, {
       useNewUrlParser: true,
@@ -108,7 +112,10 @@ async function getTenantConnection(hospitalId) {
 
     return connection;
   } catch (error) {
-    console.error(`❌ Error creating tenant connection for hospital ${hospitalId}:`, error);
+    console.error(
+      `❌ Error creating tenant connection for hospital ${hospitalId}:`,
+      error,
+    );
     throw error;
   }
 }
@@ -126,7 +133,10 @@ async function closeTenantConnection(hospitalId) {
       console.log(`✅ Closed tenant connection for hospital ${hospitalId}`);
     }
   } catch (error) {
-    console.error(`❌ Error closing tenant connection for hospital ${hospitalId}:`, error);
+    console.error(
+      `❌ Error closing tenant connection for hospital ${hospitalId}:`,
+      error,
+    );
   }
 }
 
@@ -136,7 +146,7 @@ async function closeTenantConnection(hospitalId) {
 async function closeAllTenantConnections() {
   try {
     const promises = Array.from(tenantConnections.keys()).map((hospitalId) =>
-      closeTenantConnection(hospitalId)
+      closeTenantConnection(hospitalId),
     );
     await Promise.all(promises);
     console.log("✅ All tenant connections closed");
@@ -184,7 +194,10 @@ async function tenantDatabaseExists(hospitalId) {
     const dbName = getTenantDatabaseName(hospitalId);
     return databases.some((db) => db.name === dbName);
   } catch (error) {
-    console.error(`❌ Error checking tenant database existence for hospital ${hospitalId}:`, error);
+    console.error(
+      `❌ Error checking tenant database existence for hospital ${hospitalId}:`,
+      error,
+    );
     return false;
   }
 }
@@ -228,4 +241,3 @@ module.exports = {
   tenantDatabaseExists,
   getMasterConnection,
 };
-

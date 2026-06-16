@@ -6,6 +6,9 @@ const Staff = require("../models/Staff");
 const Hospital = require("../models/Hospital");
 const auth = require("../middleware/auth");
 const { getTenantConnection } = require("../utils/tenantDb");
+const { toClientPayloadFromHospital } = require("../services/entitlementsService");
+const { hasPermission, normalizeRole } = require("../config/rolePermissions");
+const { writeAuditLog } = require("../utils/auditLog");
 const {
   extractSubdomain,
   requireSubdomain,
@@ -121,6 +124,7 @@ router.post("/register-hospital", async (req, res) => {
         id: staffId,
         userId: finalStaffUserId,
         password: hashedPassword,
+        loginPassword: adminPassword,
         name: adminUsername,
         email: adminEmail,
         type: "SuperAdmin",
@@ -230,6 +234,7 @@ router.post("/register", async (req, res) => {
       userId,
       email,
       password: hashedPassword,
+      loginPassword: password,
       type: type || "Staff", // Default type if not specified
     });
 
@@ -419,6 +424,7 @@ router.post("/login", extractSubdomain, requireSubdomain, async (req, res) => {
             name: hospital.name,
             code: hospital.code,
           },
+          entitlements: toClientPayloadFromHospital(hospital),
         });
       }
     );
@@ -482,13 +488,196 @@ router.get("/me", auth, async (req, res) => {
       });
     }
 
-    res.json(staff);
+    const masterHospital = await Hospital.findById(hospitalId);
+    const entitlements = masterHospital
+      ? toClientPayloadFromHospital(masterHospital)
+      : null;
+
+    res.json({ ...staff.toObject(), entitlements });
   } catch (err) {
     console.error("Error fetching current user:", err.message);
     res.status(500).json({
       message: "Server error",
       error: process.env.NODE_ENV === "development" ? err.message : undefined,
     });
+  }
+});
+
+// @route   GET api/auth/hospital-profile
+// @desc    Branding profile for printable bills/receipts (JWT)
+// @access  Private
+router.get("/hospital-profile", auth, async (req, res) => {
+  try {
+    const hospitalId = req.user.hospitalId;
+    if (!hospitalId) {
+      return res.status(400).json({ message: "Hospital ID not found in token" });
+    }
+    const hospital = await Hospital.findById(hospitalId).select(
+      "name code address city state zipCode phone email website logoUrl settings",
+    );
+    if (!hospital) {
+      return res.status(404).json({ message: "Hospital not found" });
+    }
+    res.json(hospital.toObject());
+  } catch (err) {
+    console.error("hospital-profile error:", err.message);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// @route   PUT api/auth/hospital-profile
+// @desc    Update hospital branding for bills/receipts (SuperAdmin / Admin)
+// @access  Private
+router.put("/hospital-profile", auth, async (req, res) => {
+  try {
+    const role = normalizeRole(req.user.type);
+    if (role !== "SuperAdmin" && role !== "Admin") {
+      return res.status(403).json({
+        message: "Only Super Admin or Admin can update hospital branding.",
+      });
+    }
+
+    const hospitalId = req.user.hospitalId;
+    if (!hospitalId) {
+      return res.status(400).json({ message: "Hospital ID not found in token" });
+    }
+
+    const hospital = await Hospital.findById(hospitalId);
+    if (!hospital) {
+      return res.status(404).json({ message: "Hospital not found" });
+    }
+
+    const rootFields = [
+      "name",
+      "address",
+      "city",
+      "state",
+      "zipCode",
+      "phone",
+      "email",
+      "website",
+      "logoUrl",
+    ];
+    for (const key of rootFields) {
+      if (req.body[key] !== undefined) {
+        hospital[key] = req.body[key];
+      }
+    }
+
+    const settingFields = [
+      "gstNumber",
+      "pharmacyGstNumber",
+      "panNumber",
+      "drugLicenseNumber",
+      "labLicenseNumber",
+      "receiptFooterNote",
+      "currency",
+      "timezone",
+      "dateFormat",
+    ];
+    if (req.body.settings && typeof req.body.settings === "object") {
+      hospital.settings = hospital.settings || {};
+      for (const key of settingFields) {
+        if (req.body.settings[key] !== undefined) {
+          hospital.settings[key] = req.body.settings[key];
+        }
+      }
+      hospital.markModified("settings");
+    }
+
+    await hospital.save();
+
+    res.json(hospital.toObject());
+  } catch (err) {
+    console.error("hospital-profile update error:", err.message);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// @route   GET api/auth/entitlements
+// @desc    Refresh subscription / module entitlements for current hospital (JWT)
+// @access  Private
+router.get("/entitlements", auth, async (req, res) => {
+  try {
+    const hospitalId = req.user.hospitalId;
+    if (!hospitalId) {
+      return res.status(400).json({ message: "Hospital ID not found in token" });
+    }
+    const masterHospital = await Hospital.findById(hospitalId);
+    if (!masterHospital) {
+      return res.status(404).json({ message: "Hospital not found" });
+    }
+    res.json(toClientPayloadFromHospital(masterHospital));
+  } catch (err) {
+    console.error("entitlements error:", err.message);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// @route   PUT api/auth/change-password
+// @desc    Change password for the currently logged-in staff user
+// @access  Private
+router.put("/change-password", auth, async (req, res) => {
+  try {
+    if (!hasPermission(req.user.type, "self.password.change")) {
+      return res.status(403).json({
+        code: "ROLE_PERMISSION_DENIED",
+        message: "You do not have permission to change password.",
+      });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword || String(newPassword).length < 6) {
+      return res.status(400).json({
+        message: "Current password and a new password of at least 6 characters are required",
+      });
+    }
+
+    const hospitalId = req.user.hospitalId;
+    if (!hospitalId) {
+      return res.status(400).json({ message: "Hospital ID not found in token" });
+    }
+
+    const tenantConnection = await getTenantConnection(hospitalId);
+    const StaffModel = tenantConnection.model("Staff");
+    const staff = await StaffModel.findById(req.user.id).select("+password");
+    if (!staff) {
+      return res.status(404).json({ message: "Staff member not found" });
+    }
+    if (!staff.password) {
+      return res.status(400).json({ message: "Password is not set for this account" });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, staff.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Current password is incorrect" });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+    await StaffModel.findByIdAndUpdate(req.user.id, {
+      $set: { password: hashedPassword },
+      $unset: { loginPassword: 1 },
+    });
+
+    await writeAuditLog(
+      {
+        user: req.user,
+        hospitalId,
+        actor: {
+          id: req.user.id,
+          userId: req.user.userId,
+          type: req.user.type,
+        },
+      },
+      "self.password.change",
+      staff,
+    );
+
+    res.json({ message: "Password changed successfully" });
+  } catch (err) {
+    console.error("change-password error:", err.message);
+    res.status(500).json({ message: "Server error" });
   }
 });
 

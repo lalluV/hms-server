@@ -71,6 +71,21 @@ const patientSchema = new mongoose.Schema(
     wardId: { type: String },
     selectedBed: { type: String },
     dischargeTo: { type: String },
+    dischargeDate: { type: String },
+    dischargedAt: { type: String },
+    dischargeCondition: { type: String },
+    dischargeDestination: { type: String },
+    finalDiagnosis: { type: String },
+    dischargeInstructions: { type: String },
+    followUpPlan: { type: String },
+    dischargeMedications: [mongoose.Schema.Types.Mixed],
+    dischargeSummary: { type: String },
+    dischargeSummaryType: { type: String },
+    dischargeSummaryTimestamp: { type: String },
+    finalBillAmount: { type: Number },
+    paymentStatus: { type: String },
+    discount: { type: Number, default: 0 },
+    insurance: { type: Number, default: 0 },
     transfers: [
       {
         price: Number,
@@ -88,25 +103,7 @@ const patientSchema = new mongoose.Schema(
       pharmacy: { type: Number },
       lab: { type: Number },
     },
-    vitals: [
-      {
-        time: String,
-        temperature: String,
-        heartRate: String,
-        bloodPressure: String,
-        respiratoryRate: String,
-        spo2: String,
-        grbs: String,
-        urineOutput: String,
-        modifiedBy: [
-          {
-            user: String,
-            type: { type: String },
-            modifiedTime: String,
-          },
-        ],
-      },
-    ],
+    vitals: [mongoose.Schema.Types.Mixed],
     chiefComplaintsPresentIllnessHistory: { type: String },
     pastMedicalHistory: { type: String },
     pastMedications: { type: String },
@@ -127,6 +124,7 @@ const patientSchema = new mongoose.Schema(
     provisionalDiagnosis: { type: String },
     allergiesHistory: { type: String },
     investigations: [mongoose.Schema.Types.Mixed],
+    procedures: [mongoose.Schema.Types.Mixed],
     treatment: [mongoose.Schema.Types.Mixed],
     casualtyTreatment: [mongoose.Schema.Types.Mixed],
     insulinChart: [mongoose.Schema.Types.Mixed],
@@ -142,7 +140,7 @@ const patientSchema = new mongoose.Schema(
       },
     ],
   },
-  { strict: true, timestamps: true }
+  { strict: true, timestamps: true },
 );
 
 // Fix for 'type' field in modifiedBy if needed, but since strict: false, it might pass.
@@ -158,7 +156,7 @@ patientSchema.pre("save", async function (next) {
       const counter = await Counter.findByIdAndUpdate(
         { _id: "UMRNo" },
         { $inc: { seq: 1 } },
-        { new: true, upsert: true }
+        { new: true, upsert: true },
       );
       this.UMRNo = `UMR${String(counter.seq).padStart(8, "0")}`;
     } catch (error) {

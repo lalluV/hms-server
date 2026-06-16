@@ -1,11 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const MasterParameter = require("../models/MasterParameter");
-const auth = require("../middleware/auth");
-const tenantDb = require("../middleware/tenantDb");
+const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
 
-router.use(auth);
-router.use(tenantDb);
+applyTenantEntitlements(router, { moduleKey: "lab" });
 
 // Get all parameters with pagination and search
 router.get("/", async (req, res) => {

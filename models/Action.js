@@ -16,6 +16,7 @@ const actionSchema = new mongoose.Schema(
     baseTotalAmount: { type: Number },
     doctorData: { type: mongoose.Schema.Types.Mixed },
     paymentStatus: { type: String },
+    paymentType: { type: String },
     type: { type: String, default: "action" },
     discount: { type: Number, default: 0 },
     paymentSplit: {

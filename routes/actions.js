@@ -1,16 +1,60 @@
 const express = require("express");
 const router = express.Router();
-const auth = require("../middleware/auth");
-const tenantDb = require("../middleware/tenantDb");
+const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
 
-router.use(auth);
-router.use(tenantDb);
+applyTenantEntitlements(router, { moduleKey: "clinical" });
+
+function normalizeServiceCode(code) {
+  return String(code ?? "").trim().toLowerCase();
+}
+
+async function markPatientProceduresPaid(Patient, hospitalId, patientId, items) {
+  if (!patientId || !Array.isArray(items) || items.length === 0) {
+    return false;
+  }
+
+  const patient = await Patient.findOne({ UMRNo: patientId, hospitalId });
+  if (!patient || !Array.isArray(patient.procedures) || !patient.procedures.length) {
+    return false;
+  }
+
+  let updated = false;
+  const updatedProcedures = patient.procedures.map((proc) => {
+    const procCode = normalizeServiceCode(proc?.service_code);
+    const match = items.find(
+      (item) =>
+        procCode &&
+        procCode === normalizeServiceCode(item?.service_code),
+    );
+
+    if (
+      match &&
+      proc?.status !== "Paid" &&
+      proc?.status !== "Completed"
+    ) {
+      updated = true;
+      return {
+        ...(proc?.toObject?.() ?? proc),
+        status: "Paid",
+        paidAt: new Date().toISOString(),
+      };
+    }
+
+    return proc?.toObject?.() ?? proc;
+  });
+
+  if (!updated) return false;
+
+  patient.procedures = updatedProcedures;
+  await patient.save();
+  return true;
+}
 
 // Get all actions with pagination support
 router.get("/", async (req, res) => {
   try {
     const Action = req.tenantDb.model("Action");
-    
+
     const {
       page = 1,
       limit = 20,
@@ -31,9 +75,8 @@ router.get("/", async (req, res) => {
       query.type = type;
     }
 
-    // Filter by status
     if (status) {
-      query.status = status;
+      query.paymentStatus = status;
     }
 
     // Filter by patient ID
@@ -63,6 +106,7 @@ router.get("/", async (req, res) => {
       query.$or = [
         { receiptId: { $regex: search, $options: "i" } },
         { patientId: { $regex: search, $options: "i" } },
+        { patientName: { $regex: search, $options: "i" } },
         { "items.name": { $regex: search, $options: "i" } },
       ];
     }
@@ -118,8 +162,17 @@ router.get("/:id", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const Action = req.tenantDb.model("Action");
+    const Patient = req.tenantDb.model("Patient");
     const action = new Action({ ...req.body, hospitalId: req.hospitalId });
     const newAction = await action.save();
+
+    await markPatientProceduresPaid(
+      Patient,
+      req.hospitalId,
+      req.body?.patientId,
+      req.body?.items,
+    );
+
     res.status(201).json(newAction);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -133,7 +186,7 @@ router.put("/:id", async (req, res) => {
     const action = await Action.findOneAndUpdate(
       { id: req.params.id, hospitalId: req.hospitalId },
       req.body,
-      { new: true }
+      { new: true },
     );
     if (!action) {
       return res.status(404).json({ message: "Action not found" });

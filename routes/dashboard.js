@@ -1,17 +1,16 @@
 const express = require("express");
 const router = express.Router();
 const dayjs = require("dayjs");
-const auth = require("../middleware/auth");
-const tenantDb = require("../middleware/tenantDb");
+const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
 
-router.use(auth);
-router.use(tenantDb);
+applyTenantEntitlements(router, { moduleKey: "core" });
 
 // Helper function to calculate days between dates
 const calculateDays = (startDate, endDate) => {
   const start = dayjs(startDate);
   const end = dayjs(endDate || new Date());
-  return end.diff(start, "day") + 1;
+  if (!start.isValid() || !end.isValid()) return 0;
+  return Math.max(0, end.diff(start, "day") + 1);
 };
 
 // Get dashboard statistics
@@ -27,7 +26,7 @@ router.get("/statistics", async (req, res) => {
     const AdvanceReceipt = req.tenantDb.model("AdvanceReceipt");
     const Expense = req.tenantDb.model("Expense");
     const Staff = req.tenantDb.model("Staff");
-    
+
     const now = new Date();
     const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -66,9 +65,9 @@ router.get("/statistics", async (req, res) => {
         (receipt.items || []).reduce(
           (sum, item) =>
             sum + parseFloat(item.charges || 0) * (item.quantity || 1),
-          0
+          0,
         ),
-      0
+      0,
     );
 
     // Calculate investigation charges
@@ -77,9 +76,9 @@ router.get("/statistics", async (req, res) => {
         total +
         (receipt.items || []).reduce(
           (sum, item) => sum + parseFloat(item.price || 0),
-          0
+          0,
         ),
-      0
+      0,
     );
 
     // Calculate procedure charges
@@ -91,9 +90,9 @@ router.get("/statistics", async (req, res) => {
           .reduce(
             (sum, item) =>
               sum + parseFloat(item.rate || 0) * (item.quantity || 1),
-            0
+            0,
           ),
-      0
+      0,
     );
 
     // Calculate service charges
@@ -105,17 +104,17 @@ router.get("/statistics", async (req, res) => {
           .reduce(
             (sum, item) =>
               sum + parseFloat(item.rate || 0) * (item.quantity || 1),
-            0
+            0,
           ),
-      0
+      0,
     );
 
     // Calculate pharmacy charges
     const pharmacySaleReceipts = pharmacyReceipts.filter(
-      (data) => data.type === "pharmacy-sale"
+      (data) => data.type === "pharmacy-sale",
     );
     const pharmacyReturnReceipts = pharmacyReceipts.filter(
-      (data) => data.type === "pharmacy-sale-return"
+      (data) => data.type === "pharmacy-sale-return",
     );
 
     const totalPharmacySaleCharges = pharmacySaleReceipts.reduce(
@@ -125,11 +124,11 @@ router.get("/statistics", async (req, res) => {
           const batchTotal = (item?.batches || []).reduce(
             (batchPrev, { bill_amount }) =>
               batchPrev + parseFloat(bill_amount || 0),
-            0
+            0,
           );
           return prev + batchTotal;
         }, 0),
-      0
+      0,
     );
 
     const totalPharmacyReturnCharges = pharmacyReturnReceipts.reduce(
@@ -139,11 +138,11 @@ router.get("/statistics", async (req, res) => {
           const batchTotal = (item?.batches || []).reduce(
             (batchPrev, { bill_amount }) =>
               batchPrev + parseFloat(bill_amount || 0),
-            0
+            0,
           );
           return prev + batchTotal;
         }, 0),
-      0
+      0,
     );
 
     const totalPharmacyCharges =
@@ -152,14 +151,25 @@ router.get("/statistics", async (req, res) => {
     // Calculate ward charges for all patients
     let totalWardCharges = 0;
     const allPatients = patients.filter(
-      (patient) => patient.active === true || patient.active === false
+      (patient) => patient.active === true || patient.active === false,
     );
+
+    const resolveDischargeMoment = (p) => {
+      if (!p || p.active !== false) return null;
+      const candidates = [p.dischargeDate, p.dischargedAt, p.updatedAt];
+      for (const candidate of candidates) {
+        if (!candidate) continue;
+        const m = dayjs(candidate);
+        if (m.isValid()) return m;
+      }
+      return null;
+    };
 
     allPatients.forEach((patient) => {
       const patientTransfers = patient.transfers || [];
-      const isDischarged = patient?.active === false;
-      const dischargeDt = isDischarged
-        ? patient?.dischargeDate || dayjs().format("YYYY-MM-DD")
+      const dischargeMoment = resolveDischargeMoment(patient);
+      const dischargeDt = dischargeMoment
+        ? dischargeMoment.format("YYYY-MM-DD")
         : dayjs().format("YYYY-MM-DD");
 
       for (let i = 0; i < patientTransfers.length; i++) {
@@ -170,7 +180,7 @@ router.get("/statistics", async (req, res) => {
 
         const daysSpent = calculateDays(
           currentTransfer.transferDate,
-          nextTransfer.transferDate
+          nextTransfer.transferDate,
         );
         const wardPrice = parseInt(currentTransfer.price || 0, 10);
 
@@ -181,7 +191,7 @@ router.get("/statistics", async (req, res) => {
     // Calculate advance payments
     const totalAdvanceCharges = advanceReceipts.reduce(
       (total, receipt) => total + parseFloat(receipt.advanceAmount || 0),
-      0
+      0,
     );
 
     // Calculate total revenue
@@ -196,7 +206,7 @@ router.get("/statistics", async (req, res) => {
     // Calculate monthly revenue
     const monthlyConsultationCharges = consultationReceipts
       .filter(
-        (receipt) => new Date(receipt.createdAt || receipt.date) >= thisMonth
+        (receipt) => new Date(receipt.createdAt || receipt.date) >= thisMonth,
       )
       .reduce(
         (total, receipt) =>
@@ -204,28 +214,28 @@ router.get("/statistics", async (req, res) => {
           (receipt.items || []).reduce(
             (sum, item) =>
               sum + parseFloat(item.charges || 0) * (item.quantity || 1),
-            0
+            0,
           ),
-        0
+        0,
       );
 
     const monthlyInvestigationCharges = diagnosticsReceipts
       .filter(
-        (receipt) => new Date(receipt.createdAt || receipt.date) >= thisMonth
+        (receipt) => new Date(receipt.createdAt || receipt.date) >= thisMonth,
       )
       .reduce(
         (total, receipt) =>
           total +
           (receipt.items || []).reduce(
             (sum, item) => sum + parseFloat(item.price || 0),
-            0
+            0,
           ),
-        0
+        0,
       );
 
     const monthlyPharmacyCharges = pharmacySaleReceipts
       .filter(
-        (receipt) => new Date(receipt.createdAt || receipt.date) >= thisMonth
+        (receipt) => new Date(receipt.createdAt || receipt.date) >= thisMonth,
       )
       .reduce(
         (total, receipt) =>
@@ -234,11 +244,11 @@ router.get("/statistics", async (req, res) => {
             const batchTotal = (item?.batches || []).reduce(
               (batchPrev, { bill_amount }) =>
                 batchPrev + parseFloat(bill_amount || 0),
-              0
+              0,
             );
             return prev + batchTotal;
           }, 0),
-        0
+        0,
       );
 
     const monthlyRevenue =
@@ -249,18 +259,18 @@ router.get("/statistics", async (req, res) => {
     // Calculate today's appointments
     const todayAppointments = appointments.filter(
       (appointment) =>
-        new Date(appointment.appointmentDate).toDateString() === today
+        new Date(appointment.appointmentDate).toDateString() === today,
     ).length;
 
     // Calculate active patients
     const activePatientsCount = patients.filter(
-      (patient) => patient.active === true
+      (patient) => patient.active === true,
     ).length;
 
     // Calculate total expenses
     const totalExpenses = expenses.reduce(
       (sum, expense) => sum + parseFloat(expense.amount || 0),
-      0
+      0,
     );
 
     // Generate recent activities
@@ -280,7 +290,7 @@ router.get("/statistics", async (req, res) => {
           .reduce(
             (sum, item) =>
               sum + parseFloat(item.charges || 0) * (item.quantity || 1),
-            0
+            0,
           )
           .toLocaleString()}`,
         time: new Date(receipt.createdAt || receipt.date).toLocaleDateString(),
@@ -304,9 +314,9 @@ router.get("/statistics", async (req, res) => {
             (receipt.items || []).reduce(
               (sum, item) =>
                 sum + parseFloat(item.charges || 0) * (item.quantity || 1),
-              0
+              0,
             ),
-          0
+          0,
         );
 
       const monthInvestigationRevenue = diagnosticsReceipts
@@ -322,9 +332,9 @@ router.get("/statistics", async (req, res) => {
             total +
             (receipt.items || []).reduce(
               (sum, item) => sum + parseFloat(item.price || 0),
-              0
+              0,
             ),
-          0
+          0,
         );
 
       const monthPharmacyRevenue = pharmacySaleReceipts
@@ -342,11 +352,11 @@ router.get("/statistics", async (req, res) => {
               const batchTotal = (item?.batches || []).reduce(
                 (batchPrev, { bill_amount }) =>
                   batchPrev + parseFloat(bill_amount || 0),
-                0
+                0,
               );
               return prev + batchTotal;
             }, 0),
-          0
+          0,
         );
 
       return {

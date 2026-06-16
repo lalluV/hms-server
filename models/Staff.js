@@ -5,6 +5,8 @@ const staffSchema = new mongoose.Schema(
     id: { type: String, unique: true, required: true },
     userId: { type: String, unique: true },
     password: { type: String },
+    /** Last set password (admin reference only; cleared when user changes their own password) */
+    loginPassword: { type: String, select: false },
     name: { type: String, required: true },
     email: { type: String },
     phone: { type: String },

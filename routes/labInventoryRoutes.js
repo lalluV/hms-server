@@ -1,11 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const MasterLabItem = require("../models/MasterLabItem");
-const auth = require("../middleware/auth");
-const tenantDb = require("../middleware/tenantDb");
+const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
 
-router.use(auth);
-router.use(tenantDb);
+applyTenantEntitlements(router, { moduleKey: "lab" });
 
 // Get lab inventory items (supports optional pagination & search)
 router.get("/", async (req, res) => {

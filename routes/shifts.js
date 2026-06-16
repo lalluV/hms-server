@@ -1,10 +1,30 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const router = express.Router();
-const auth = require("../middleware/auth");
-const tenantDb = require("../middleware/tenantDb");
+const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
 
-router.use(auth);
-router.use(tenantDb);
+applyTenantEntitlements(router, { moduleKey: "hr" });
+
+function generateShiftId() {
+  return `shift_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+async function findShiftByIdentifier(Shift, identifier, hospitalId) {
+  if (!identifier) return null;
+  const idStr = String(identifier).trim();
+  const or = [{ id: idStr }, { shiftName: idStr }];
+  if (mongoose.Types.ObjectId.isValid(idStr) && String(new mongoose.Types.ObjectId(idStr)) === idStr) {
+    or.push({ _id: new mongoose.Types.ObjectId(idStr) });
+  }
+  return Shift.findOne({ hospitalId, $or: or });
+}
+
+async function pullEmployeeFromAllShifts(Shift, employeeId, hospitalId) {
+  await Shift.updateMany(
+    { hospitalId, "employees.id": employeeId },
+    { $pull: { employees: { id: employeeId } } },
+  );
+}
 
 // Get all shifts
 router.get("/", async (req, res) => {
@@ -38,7 +58,13 @@ router.get("/:id", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const Shift = req.tenantDb.model("Shift");
-    const shift = new Shift({ ...req.body, hospitalId: req.hospitalId });
+    const id = req.body.id || generateShiftId();
+    const shift = new Shift({
+      ...req.body,
+      id,
+      hospitalId: req.hospitalId,
+      employees: req.body.employees || [],
+    });
     const newShift = await shift.save();
     res.status(201).json(newShift);
   } catch (error) {
@@ -50,14 +76,19 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const Shift = req.tenantDb.model("Shift");
-    const shift = await Shift.findOneAndUpdate(
-      { id: req.params.id, hospitalId: req.hospitalId },
-      req.body,
-      { new: true }
+    const existing = await findShiftByIdentifier(
+      Shift,
+      req.params.id,
+      req.hospitalId,
     );
-    if (!shift) {
+    if (!existing) {
       return res.status(404).json({ message: "Shift not found" });
     }
+    const shift = await Shift.findOneAndUpdate(
+      { _id: existing._id, hospitalId: req.hospitalId },
+      req.body,
+      { new: true },
+    );
     res.json(shift);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -188,24 +219,21 @@ router.post("/:shiftId/assign-employee", async (req, res) => {
       return res.status(400).json({ message: "Employee data is required" });
     }
 
-    // Remove employee from all other shifts first
-    await Shift.updateMany(
-      { "employees.id": employee.id, hospitalId: req.hospitalId },
-      { $pull: { employees: { id: employee.id } } }
-    );
-
-    // Add employee to the specified shift
-    const shift = await Shift.findOneAndUpdate(
-      { id: shiftId, hospitalId: req.hospitalId },
-      { $addToSet: { employees: employee } },
-      { new: true }
-    );
-
-    if (!shift) {
+    const target = await findShiftByIdentifier(Shift, shiftId, req.hospitalId);
+    if (!target) {
       return res.status(404).json({ message: "Shift not found" });
     }
 
-    res.json(shift);
+    await pullEmployeeFromAllShifts(Shift, employee.id, req.hospitalId);
+
+    await Shift.findOneAndUpdate(
+      { _id: target._id, hospitalId: req.hospitalId },
+      { $addToSet: { employees: employee } },
+      { new: true },
+    );
+
+    const allShifts = await Shift.find({ hospitalId: req.hospitalId });
+    res.json(allShifts);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -217,52 +245,57 @@ router.delete("/:shiftId/remove-employee/:employeeId", async (req, res) => {
     const Shift = req.tenantDb.model("Shift");
     const { shiftId, employeeId } = req.params;
 
-    const shift = await Shift.findOneAndUpdate(
-      { id: shiftId, hospitalId: req.hospitalId },
-      { $pull: { employees: { id: employeeId } } },
-      { new: true }
+    const shift = await findShiftByIdentifier(
+      Shift,
+      shiftId,
+      req.hospitalId,
     );
-
     if (!shift) {
       return res.status(404).json({ message: "Shift not found" });
     }
 
-    res.json(shift);
+    await Shift.findOneAndUpdate(
+      { _id: shift._id, hospitalId: req.hospitalId },
+      { $pull: { employees: { id: employeeId } } },
+      { new: true },
+    );
+
+    const allShifts = await Shift.find({ hospitalId: req.hospitalId });
+    res.json(allShifts);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// Move employee between shifts
+// Move employee between shifts (fromShiftName optional when unassigned)
 router.post("/move-employee", async (req, res) => {
   try {
     const Shift = req.tenantDb.model("Shift");
     const { employee, fromShiftName, toShiftName } = req.body;
 
-    if (!employee || !fromShiftName || !toShiftName) {
+    if (!employee?.id || !toShiftName) {
       return res.status(400).json({
-        message: "Employee, fromShiftName, and toShiftName are required",
+        message: "Employee and toShiftName are required",
       });
     }
 
-    // Remove employee from current shift
-    await Shift.updateOne(
-      { shiftName: fromShiftName, hospitalId: req.hospitalId },
-      { $pull: { employees: { id: employee.id } } }
-    );
+    if (fromShiftName && fromShiftName === toShiftName) {
+      const allShifts = await Shift.find({ hospitalId: req.hospitalId });
+      return res.json(allShifts);
+    }
 
-    // Add employee to new shift
-    const updatedShift = await Shift.findOneAndUpdate(
+    await pullEmployeeFromAllShifts(Shift, employee.id, req.hospitalId);
+
+    const target = await Shift.findOneAndUpdate(
       { shiftName: toShiftName, hospitalId: req.hospitalId },
       { $addToSet: { employees: employee } },
-      { new: true }
+      { new: true },
     );
 
-    if (!updatedShift) {
+    if (!target) {
       return res.status(404).json({ message: "Target shift not found" });
     }
 
-    // Get all shifts to return complete data
     const allShifts = await Shift.find({ hospitalId: req.hospitalId });
     res.json(allShifts);
   } catch (error) {

@@ -91,25 +91,7 @@ const patientSchema = new mongoose.Schema(
       pharmacy: { type: Number },
       lab: { type: Number },
     },
-    vitals: [
-      {
-        time: String,
-        temperature: String,
-        heartRate: String,
-        bloodPressure: String,
-        respiratoryRate: String,
-        spo2: String,
-        grbs: String,
-        urineOutput: String,
-        modifiedBy: [
-          {
-            user: String,
-            type: { type: String },
-            modifiedTime: String,
-          },
-        ],
-      },
-    ],
+    vitals: [mongoose.Schema.Types.Mixed],
     chiefComplaintsPresentIllnessHistory: { type: String },
     pastMedicalHistory: { type: String },
     pastMedications: { type: String },
@@ -130,8 +112,10 @@ const patientSchema = new mongoose.Schema(
     provisionalDiagnosis: { type: String },
     allergiesHistory: { type: String },
     investigations: [mongoose.Schema.Types.Mixed],
+    procedures: [mongoose.Schema.Types.Mixed],
     treatment: [mongoose.Schema.Types.Mixed],
     casualtyTreatment: [mongoose.Schema.Types.Mixed],
+    insulinChart: [mongoose.Schema.Types.Mixed],
     dischargeOrders: { type: String },
     counselling: { type: String },
     symptoms: [String],
@@ -144,7 +128,7 @@ const patientSchema = new mongoose.Schema(
       },
     ],
   },
-  { strict: true, timestamps: true }
+  { strict: true, timestamps: true },
 );
 
 // Pre-save middleware for UMR number generation
@@ -155,7 +139,7 @@ patientSchema.pre("save", async function (next) {
       const counter = await Counter.findByIdAndUpdate(
         { _id: "UMRNo" },
         { $inc: { seq: 1 } },
-        { new: true, upsert: true }
+        { new: true, upsert: true },
       );
       this.UMRNo = `UMR${String(counter.seq).padStart(8, "0")}`;
     } catch (error) {
@@ -171,6 +155,7 @@ const staffSchema = new mongoose.Schema(
     id: { type: String, unique: true, required: true },
     userId: { type: String, unique: true },
     password: { type: String },
+    loginPassword: { type: String, select: false },
     name: { type: String, required: true },
     email: { type: String },
     phone: { type: String },
@@ -210,7 +195,7 @@ const staffSchema = new mongoose.Schema(
       },
     ],
   },
-  { strict: true, timestamps: true }
+  { strict: true, timestamps: true },
 );
 
 /**
@@ -226,11 +211,27 @@ function registerTenantModels(connection) {
   // Register Patient model
   if (!connection.models.Patient) {
     connection.model("Patient", patientSchema);
+  } else {
+    const patientModel = connection.models.Patient;
+    if (!patientModel.schema.paths.procedures) {
+      patientModel.schema.add({
+        procedures: [mongoose.Schema.Types.Mixed],
+      });
+    }
+    if (!patientModel.schema.paths.insulinChart) {
+      patientModel.schema.add({
+        insulinChart: [mongoose.Schema.Types.Mixed],
+      });
+    }
   }
 
   // Register Staff model
   if (!connection.models.Staff) {
     connection.model("Staff", staffSchema);
+  } else if (!connection.models.Staff.schema.paths.loginPassword) {
+    connection.models.Staff.schema.add({
+      loginPassword: { type: String, select: false },
+    });
   }
 
   // Register all other tenant models from their model files
@@ -247,6 +248,7 @@ function registerTenantModels(connection) {
     { name: "Leave", path: "../models/Leave" },
     { name: "Holiday", path: "../models/Holiday" },
     { name: "Expense", path: "../models/Expense" },
+    { name: "Adjustment", path: "../models/Adjustment" },
     { name: "PharmacyReceipt", path: "../models/PharmacyReceipt" },
     { name: "DiagnosticsReceipt", path: "../models/DiagnosticsReceipt" },
     { name: "AdvanceReceipt", path: "../models/AdvanceReceipt" },
@@ -255,6 +257,7 @@ function registerTenantModels(connection) {
     { name: "InsuranceCompany", path: "../models/InsuranceCompany" },
     { name: "InsuranceTariff", path: "../models/InsuranceTariff" },
     { name: "InsuranceExclusion", path: "../models/InsuranceExclusion" },
+    { name: "InsuranceSettings", path: "../models/InsuranceSettings" },
     { name: "Vendor", path: "../models/Vendor" },
     { name: "Stamp", path: "../models/Stamp" },
     { name: "NurseDesc", path: "../models/NurseDesc" },
@@ -310,6 +313,7 @@ const TENANT_MODELS = [
   "Leave",
   "Holiday",
   "Expense",
+  "Adjustment",
   "PharmacyReceipt",
   "DiagnosticsReceipt",
   "AdvanceReceipt",
@@ -318,6 +322,7 @@ const TENANT_MODELS = [
   "InsuranceCompany",
   "InsuranceTariff",
   "InsuranceExclusion",
+  "InsuranceSettings",
   "Vendor",
   "Stamp",
   "NurseDesc",
@@ -341,7 +346,7 @@ function getTenantModel(connection, modelName) {
 
   if (!connection.models[modelName]) {
     throw new Error(
-      `Model ${modelName} is not registered on this connection. Please check registerTenantModels().`
+      `Model ${modelName} is not registered on this connection. Please check registerTenantModels().`,
     );
   }
 

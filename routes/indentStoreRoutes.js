@@ -1,10 +1,8 @@
 const express = require("express");
 const router = express.Router();
-const auth = require("../middleware/auth");
-const tenantDb = require("../middleware/tenantDb");
+const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
 
-router.use(auth);
-router.use(tenantDb);
+applyTenantEntitlements(router, { moduleKey: "indent" });
 
 // Get all indents
 router.get("/", async (req, res) => {

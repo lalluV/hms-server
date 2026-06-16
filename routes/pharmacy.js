@@ -3,11 +3,9 @@ const express = require("express");
 const router = express.Router();
 const mongoose = require("mongoose");
 const MasterMedicine = require("../models/MasterMedicine");
-const auth = require("../middleware/auth");
-const tenantDb = require("../middleware/tenantDb");
+const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
 
-router.use(auth);
-router.use(tenantDb);
+applyTenantEntitlements(router, { moduleKey: "pharmacy" });
 const multer = require("multer");
 const path = require("path");
 const axios = require("axios");

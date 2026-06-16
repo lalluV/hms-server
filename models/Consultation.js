@@ -20,6 +20,7 @@ const consultationSchema = new mongoose.Schema(
     doctorData: { type: mongoose.Schema.Types.Mixed },
     receiptId: { type: String },
     paymentStatus: { type: String, default: "pending" },
+    paymentType: { type: String },
     type: { type: String },
     discount: { type: Number },
     paymentSplit: { type: mongoose.Schema.Types.Mixed }, // Or specific object structure if consistent

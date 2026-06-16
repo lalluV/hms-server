@@ -164,7 +164,15 @@ router.put("/phone/:phoneNumber", tenantDbFromQuery, async (req, res) => {
 });
 
 // ========== PRIVATE ROUTES (require auth) ==========
+const {
+  loadEntitlements,
+  requireActiveSubscription,
+  requireModule,
+} = require("../middleware/entitlements");
 router.use(auth);
+router.use(loadEntitlements);
+router.use(requireActiveSubscription);
+router.use(requireModule("lab"));
 router.use(tenantDb);
 
 // @route   GET api/diagnostics-users

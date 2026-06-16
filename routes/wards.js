@@ -1,16 +1,44 @@
 const express = require("express");
 const router = express.Router();
-const auth = require("../middleware/auth");
-const tenantDb = require("../middleware/tenantDb");
+const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
 
-router.use(auth);
-router.use(tenantDb);
+applyTenantEntitlements(router, { moduleKey: "ipd" });
 
 // Get all wards
 router.get("/", async (req, res) => {
   try {
     const Ward = req.tenantDb.model("Ward");
-    const wards = await Ward.find({ hospitalId: req.hospitalId });
+    const wards = await Ward.find({ hospitalId: req.hospitalId }).sort({
+      wardName: 1,
+    });
+    res.json(wards);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get ward by type (before /:id)
+router.get("/type/:type", async (req, res) => {
+  try {
+    const Ward = req.tenantDb.model("Ward");
+    const wards = await Ward.find({
+      type: req.params.type,
+      hospitalId: req.hospitalId,
+    });
+    res.json(wards);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get ward by status
+router.get("/status/:status", async (req, res) => {
+  try {
+    const Ward = req.tenantDb.model("Ward");
+    const wards = await Ward.find({
+      status: req.params.status,
+      hospitalId: req.hospitalId,
+    });
     res.json(wards);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -56,9 +84,7 @@ router.put("/:id", async (req, res) => {
     const ward = await Ward.findOneAndUpdate(
       { wardId: req.params.id, hospitalId: req.hospitalId },
       req.body,
-      {
-        new: true,
-      }
+      { new: true },
     );
     if (!ward) {
       return res.status(404).json({ message: "Ward not found" });
@@ -81,34 +107,6 @@ router.delete("/:id", async (req, res) => {
       return res.status(404).json({ message: "Ward not found" });
     }
     res.json({ message: "Ward deleted" });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Get ward by type
-router.get("/type/:type", async (req, res) => {
-  try {
-    const Ward = req.tenantDb.model("Ward");
-    const wards = await Ward.find({
-      type: req.params.type,
-      hospitalId: req.hospitalId,
-    });
-    res.json(wards);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Get ward by status
-router.get("/status/:status", async (req, res) => {
-  try {
-    const Ward = req.tenantDb.model("Ward");
-    const wards = await Ward.find({
-      status: req.params.status,
-      hospitalId: req.hospitalId,
-    });
-    res.json(wards);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

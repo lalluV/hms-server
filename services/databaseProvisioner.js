@@ -135,7 +135,7 @@ async function seedInitialData(connection, hospitalId) {
     if (connection.models.Counter) {
       const Counter = connection.model("Counter");
       const existingCounter = await Counter.findById("UMRNo");
-      
+
       if (!existingCounter) {
         await Counter.create({
           _id: "UMRNo",
@@ -145,7 +145,13 @@ async function seedInitialData(connection, hospitalId) {
       }
     }
 
-    // Add any other initial data seeding here
+    if (process.env.SEED_PORTAL_STAFF !== "false") {
+      const { seedPortalStaffForHospital } = require("./portalStaffSeeder");
+      const results = await seedPortalStaffForHospital(hospitalId);
+      const created = results.filter((r) => r.action === "created").length;
+      console.log(`✅ Portal staff seeded (${created} new accounts)`);
+    }
+
     console.log("✅ Initial data seeded");
   } catch (error) {
     console.error("❌ Error seeding initial data:", error);

@@ -1,16 +1,14 @@
 const express = require("express");
 const router = express.Router();
-const auth = require("../middleware/auth");
-const tenantDb = require("../middleware/tenantDb");
+const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
 
-router.use(auth);
-router.use(tenantDb);
+applyTenantEntitlements(router, { moduleKey: "clinical" });
 
 // Get all consultations with pagination support
 router.get("/", async (req, res) => {
   try {
     const Consultation = req.tenantDb.model("Consultation");
-    
+
     const {
       page = 1,
       limit = 20,
@@ -35,9 +33,9 @@ router.get("/", async (req, res) => {
       query.patientId = patientId;
     }
 
-    // Filter by status
+    // Filter by payment status (Paid, Due, Pending Insurance Payment)
     if (status) {
-      query.status = status;
+      query.paymentStatus = status;
     }
 
     // Filter by date range
@@ -131,7 +129,7 @@ router.put("/:id", async (req, res) => {
     const consultation = await Consultation.findOneAndUpdate(
       { id: req.params.id, hospitalId: req.hospitalId },
       req.body,
-      { new: true }
+      { new: true },
     );
     if (!consultation) {
       return res.status(404).json({ message: "Consultation not found" });
