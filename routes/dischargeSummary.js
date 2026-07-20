@@ -286,16 +286,19 @@ Examples:
 - "repeat CBC tomorrow" when CBC already pending → action:continue or note_only, NOT add
 
 SPELLING & NORMALIZATION (critical):
-- Correct misspellings and voice-transcription errors to standard generic medicine names
-- Expand common abbreviations: PCM/Para/Dolo/Crocin → Paracetamol; Azithro → Azithromycin; Amox → Amoxicillin; Pantop → Pantoprazole; Cetrizine → Cetirizine; Atorva → Atorvastatin; Telma → Telmisartan; Montair → Montelukast; Emeset → Ondansetron; Brufen → Ibuprofen; Asthalin → Salbutamol
+- Fix misspellings and voice errors, but KEEP the doctor's spoken brand/product name — do NOT rewrite brands to generics for name/correctedName
+- Brands stay brands: Dolo → Dolo (not Paracetamol); Crocin → Crocin; T-Bact / tbact → T-Bact; Telma → Telma; Montair → Montair; Asthalin → Asthalin; Augmentin → Augmentin
+- Only use a generic as name/correctedName when the doctor spoke the generic (e.g. "paracetamol 650", "azithromycin")
+- Abbreviations that are generics/aliases may expand only when no brand was spoken: PCM/Para → Paracetamol; Azithro → Azithromycin; Amox → Amoxicillin; Pantop → Pantoprazole
 - Correct lab test spellings: "cb c"/"hemogram" → CBC; "liver function"/"lft" → LFT; "kft"/"rft" → KFT; "urine rm" → Urine R/M; "xray chest"/"cxr" → X-Ray Chest; "usg"/"sonography" → USG; "ecg"/"ekg" → ECG; "hba1c" → HbA1c; "blood sugar"/"rbs" → Random Blood Sugar; "fbs" → Fasting Blood Sugar; "ppbs" → Post Prandial Blood Sugar
 - If a hospital catalog is provided, pick the closest matching catalog name for medicines and lab tests
 - Never invent medicines or tests not mentioned in the note
 - Never list the same medicine or lab test twice in one response
 
 MEDICINE RULES:
-- name: generic name without strength (e.g. "Paracetamol", not "Para 650")
-- correctedName: standardized generic after spelling correction
+- name: spoken brand OR product name as the doctor said it (e.g. "Dolo", "T-Bact", "Augmentin"). Use generic ONLY if doctor said the generic
+- correctedName: spell-corrected form of the same spoken name (still brand if brand was spoken)
+- inventoryMatch: same as correctedName — never invent a different product
 - dosage: REQUIRED for every medicine with action "add" — strength only (500mg, 650mg, 1 tab). Never leave dosage empty for new orders. If the doctor omitted strength, use the standard adult dose for that drug when well-known (e.g. Paracetamol 500mg, Azithromycin 500mg, Pantoprazole 40mg); otherwise keep best inferred dose from context
 - frequency: REQUIRED for every medicine with action "add" — OD, BD, TDS, QID, HS, SOS, or descriptive. Default BD if a course is clearly intended but freq omitted
 - duration: REQUIRED for every medicine with action "add" — e.g. "5 days", "1 week". Default "5 days" if a course is ordered but days omitted
@@ -471,7 +474,9 @@ function normalizeParsedProcedure(proc) {
   if (!name) return null;
   return {
     name,
-    correctedName: String(proc?.correctedName || proc?.corrected_name || name).trim(),
+    correctedName: String(
+      proc?.correctedName || proc?.corrected_name || name,
+    ).trim(),
     inventoryMatch: String(
       proc?.inventoryMatch || proc?.inventory_match || name,
     ).trim(),
@@ -547,8 +552,8 @@ const PARSE_CLINICAL_NOTE_USER_PROMPT = (
 
   const settingLine =
     clinicalSetting === "ipd"
-      ? `Clinical setting: IPD inpatient progress note. Match format of recent doctor notes. Newly mentioned labs and procedures in this dictation MUST use action "add" (not continue) unless the doctor explicitly says continue/same/already ordered. Only use continue when the item is already pending on the chart AND the doctor did not place a new order. action "stop" = discontinue medicine on chart. Medicines/labs are resolved later via master search — set name/correctedName to spoken brand or generic; set inventoryMatch equal to correctedName. Extract vitals when mentioned (weight, height, BP, pulse, temp, SpO2, RR); never invent numbers.\n\n`
-      : `Clinical setting: OPD outpatient visit. Extract ALL medicines, labs, and vitals (including weight/height) mentioned in the dictation. action "add" = add to this visit Rx. action "stop" = DELETE/remove from this visit prescription (not inpatient discontinue). Medicines are resolved later via master-medicines search — set name/correctedName to the spoken brand or generic; set inventoryMatch equal to correctedName (do not invent a different product).\n\n`;
+      ? `Clinical setting: IPD inpatient progress note. Match format of recent doctor notes. Newly mentioned labs and procedures in this dictation MUST use action "add" (not continue) unless the doctor explicitly says continue/same/already ordered. Only use continue when the item is already pending on the chart AND the doctor did not place a new order. action "stop" = discontinue medicine on chart. Medicines/labs are resolved later via master search — set name/correctedName to the spoken BRAND when a brand was said (Dolo, T-Bact); do not rewrite brand to generic. Extract vitals when mentioned (weight, height, BP, pulse, temp, SpO2, RR); never invent numbers.\n\n`
+      : `Clinical setting: OPD outpatient visit. Extract ALL medicines, labs, and vitals (including weight/height) mentioned in the dictation. action "add" = add to this visit Rx. action "stop" = DELETE/remove from this visit prescription (not inpatient discontinue). Medicines are resolved later via master-medicines search — set name/correctedName to the spoken BRAND when a brand was said; do not rewrite brand to generic; set inventoryMatch equal to correctedName.\n\n`;
 
   const existingSection = existingContext
     ? `EXISTING CHART & NOTE CONTEXT (use for format detection and continue vs add decisions):
@@ -590,9 +595,9 @@ JSON schema (return exactly these keys):
   "provisionalDiagnosis": "string or empty",
   "medicines": [
     {
-      "name": "generic medicine name",
-      "correctedName": "spell-corrected generic name",
-      "inventoryMatch": "OPD: same as correctedName. IPD: closest hospital catalog name if available",
+      "name": "spoken brand or product name (prefer brand; generic only if doctor said generic)",
+      "correctedName": "spell-corrected spoken name — keep brand if brand was spoken",
+      "inventoryMatch": "same as correctedName",
       "dosage": "e.g. 500mg",
       "frequency": "BD | TDS | OD | QID | HS | SOS",
       "duration": "e.g. 5 days",
@@ -624,9 +629,10 @@ JSON schema (return exactly these keys):
 }
 
 Examples:
-- "give tab paracetmol 650 bd 5 days" → Paracetamol dosage:650mg frequency:BD duration:5 days action:add
-- "add azithro od 3 days" → Azithromycin dosage:500mg (standard) frequency:OD duration:3 days action:add
-- "ex tbact" / "t bact ointment" → name/correctedName T-Bact (or mupirocin); inventoryMatch only if catalog has T-Bact; dosage Apply locally frequency BD duration 5 days
+- "give tab dolo 650 bd 5 days" → name/correctedName Dolo dosage:650mg frequency:BD duration:5 days action:add (do NOT rewrite to Paracetamol)
+- "give tab paracetmol 650 bd 5 days" → name/correctedName Paracetamol dosage:650mg frequency:BD duration:5 days action:add
+- "add azithro od 3 days" → name/correctedName Azithromycin dosage:500mg frequency:OD duration:3 days action:add
+- "ex tbact" / "t bact ointment" → name/correctedName T-Bact; inventoryMatch T-Bact; dosage Apply locally frequency BD duration 5 days
 - "continue meds, add azithro 500 od, CBC" → Azithromycin medicines action:add dosage:500mg; CBC labTests action:add
 - "advise CRP" / "send crp" → labTests CRP action:add; medicines must be empty
 - "stop metformin" → metformin action:stop
@@ -911,16 +917,17 @@ router.post("/parse-clinical-note", async (req, res) => {
       // No hospital pharmacy fuzzy catalog — client resolves meds via master search
       const matchedMedicines = normalizedMedicines;
 
-      const matchedLabTests = Array.isArray(labCatalog) && labCatalog.length > 0
-        ? normalizedLabTests.map((test) => {
-            const matched = matchLabTestToCatalog(test.name, labCatalog);
-            return {
-              name:
-                matched.inventoryMatch || matched.standardized || test.name,
-              action: test.action,
-            };
-          })
-        : normalizedLabTests;
+      const matchedLabTests =
+        Array.isArray(labCatalog) && labCatalog.length > 0
+          ? normalizedLabTests.map((test) => {
+              const matched = matchLabTestToCatalog(test.name, labCatalog);
+              return {
+                name:
+                  matched.inventoryMatch || matched.standardized || test.name,
+                action: test.action,
+              };
+            })
+          : normalizedLabTests;
 
       const { medicines, labTests } = reclassifyMisplacedLabs(
         matchedMedicines,

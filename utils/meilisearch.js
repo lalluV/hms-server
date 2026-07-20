@@ -27,13 +27,21 @@ async function initializeMeilisearch() {
     const health = await client.health();
     console.log("✅ Meilisearch server is reachable");
 
-    // Configure Master Medicines index
+    // Configure Master Medicines index — brand description ranks before generics
+    await masterMedicinesIndex.updateSearchableAttributes([
+      "description",
+      "item_code",
+      "generic_name",
+      "generic_name2",
+      "manufacturer",
+    ]);
     await masterMedicinesIndex.updateFilterableAttributes([
       "active",
       "type",
       "manufacturer",
     ]);
     await masterMedicinesIndex.updateSortableAttributes([
+      "description",
       "generic_name",
       "item_code",
       "createdAt",
@@ -131,7 +139,7 @@ async function deleteMasterMedicine(id) {
   } catch (error) {
     console.error(
       "❌ Error deleting master medicine from index:",
-      error.message
+      error.message,
     );
     return false;
   }
@@ -146,12 +154,13 @@ async function searchMasterMedicines(query, limit = 20, filters = {}) {
     if (!cleanQuery || cleanQuery.length < 2) return [];
 
     const searchParams = {
+      // Order matters for Meili "attribute" ranking — brand description first
       attributesToSearchOn: [
+        "description",
         "item_code",
         "generic_name",
         "generic_name2",
         "manufacturer",
-        "description",
       ],
       limit: Math.min(limit, 50),
       attributesToRetrieve: [
@@ -184,7 +193,7 @@ async function searchMasterMedicines(query, limit = 20, filters = {}) {
 
     const searchResults = await masterMedicinesIndex.search(
       cleanQuery,
-      searchParams
+      searchParams,
     );
     return searchResults.hits || [];
   } catch (error) {
@@ -236,7 +245,7 @@ async function indexAllMasterMedicines() {
       console.log(
         `📦 Master Medicines - Batch ${Math.floor(skip / batchSize) + 1}: ${
           documents.length
-        } indexed`
+        } indexed`,
       );
       skip += batchSize;
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -292,7 +301,7 @@ async function deleteMasterDiagnostic(id) {
   } catch (error) {
     console.error(
       "❌ Error deleting master diagnostic from index:",
-      error.message
+      error.message,
     );
     return false;
   }
@@ -344,7 +353,7 @@ async function searchMasterDiagnostics(query, limit = 20, filters = {}) {
 
     const searchResults = await masterDiagnosticsIndex.search(
       cleanQuery,
-      searchParams
+      searchParams,
     );
     return searchResults.hits || [];
   } catch (error) {
@@ -395,7 +404,7 @@ async function indexAllMasterDiagnostics() {
       console.log(
         `📦 Master Diagnostics - Batch ${Math.floor(skip / batchSize) + 1}: ${
           documents.length
-        } indexed`
+        } indexed`,
       );
       skip += batchSize;
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -450,7 +459,7 @@ async function deleteMasterParameter(id) {
   } catch (error) {
     console.error(
       "❌ Error deleting master parameter from index:",
-      error.message
+      error.message,
     );
     return false;
   }
@@ -492,7 +501,7 @@ async function searchMasterParameters(query, limit = 20, filters = {}) {
 
     const searchResults = await masterParametersIndex.search(
       cleanQuery,
-      searchParams
+      searchParams,
     );
     return searchResults.hits || [];
   } catch (error) {
@@ -542,7 +551,7 @@ async function indexAllMasterParameters() {
       console.log(
         `📦 Master Parameters - Batch ${Math.floor(skip / batchSize) + 1}: ${
           documents.length
-        } indexed`
+        } indexed`,
       );
       skip += batchSize;
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -599,7 +608,7 @@ async function deleteMasterLabItem(id) {
   } catch (error) {
     console.error(
       "❌ Error deleting master lab item from index:",
-      error.message
+      error.message,
     );
     return false;
   }
@@ -655,7 +664,7 @@ async function searchMasterLabItems(query, limit = 20, filters = {}) {
 
     const searchResults = await masterLabItemsIndex.search(
       cleanQuery,
-      searchParams
+      searchParams,
     );
     return searchResults.hits || [];
   } catch (error) {
@@ -707,7 +716,7 @@ async function indexAllMasterLabItems() {
       console.log(
         `📦 Master Lab Items - Batch ${Math.floor(skip / batchSize) + 1}: ${
           documents.length
-        } indexed`
+        } indexed`,
       );
       skip += batchSize;
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -765,7 +774,7 @@ async function indexAllMasterData() {
       results.labItems.success;
 
     console.log(
-      `✅ Master data indexing completed. Total indexed: ${totalIndexed}`
+      `✅ Master data indexing completed. Total indexed: ${totalIndexed}`,
     );
     console.log(`   - Medicines: ${results.medicines.indexed}`);
     console.log(`   - Diagnostics: ${results.diagnostics.indexed}`);

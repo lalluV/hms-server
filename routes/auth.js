@@ -6,7 +6,9 @@ const Staff = require("../models/Staff");
 const Hospital = require("../models/Hospital");
 const auth = require("../middleware/auth");
 const { getTenantConnection } = require("../utils/tenantDb");
-const { toClientPayloadFromHospital } = require("../services/entitlementsService");
+const {
+  toClientPayloadFromHospital,
+} = require("../services/entitlementsService");
 const { hasPermission, normalizeRole } = require("../config/rolePermissions");
 const { writeAuditLog } = require("../utils/auditLog");
 const {
@@ -191,7 +193,7 @@ router.post("/register-hospital", async (req, res) => {
             type: staff.type,
           },
         });
-      }
+      },
     );
   } catch (err) {
     console.error("Error registering hospital:", err.message);
@@ -266,7 +268,7 @@ router.post("/register", async (req, res) => {
             type: staff.type,
           },
         });
-      }
+      },
     );
   } catch (err) {
     console.error(err.message);
@@ -321,7 +323,7 @@ router.post("/login", extractSubdomain, requireSubdomain, async (req, res) => {
     } catch (error) {
       console.error(
         `Error connecting to tenant database for hospital ${hospital._id}:`,
-        error
+        error,
       );
       return res.status(503).json({
         message:
@@ -338,7 +340,7 @@ router.post("/login", extractSubdomain, requireSubdomain, async (req, res) => {
     } catch (error) {
       console.error(
         `Error searching for staff in hospital ${hospital._id}:`,
-        error
+        error,
       );
       return res.status(500).json({
         message: "Error searching for user. Please try again.",
@@ -426,7 +428,7 @@ router.post("/login", extractSubdomain, requireSubdomain, async (req, res) => {
           },
           entitlements: toClientPayloadFromHospital(hospital),
         });
-      }
+      },
     );
   } catch (err) {
     console.error("Login error:", err.message);
@@ -510,7 +512,9 @@ router.get("/hospital-profile", auth, async (req, res) => {
   try {
     const hospitalId = req.user.hospitalId;
     if (!hospitalId) {
-      return res.status(400).json({ message: "Hospital ID not found in token" });
+      return res
+        .status(400)
+        .json({ message: "Hospital ID not found in token" });
     }
     const hospital = await Hospital.findById(hospitalId).select(
       "name code address city state zipCode phone email website logoUrl settings",
@@ -539,7 +543,9 @@ router.put("/hospital-profile", auth, async (req, res) => {
 
     const hospitalId = req.user.hospitalId;
     if (!hospitalId) {
-      return res.status(400).json({ message: "Hospital ID not found in token" });
+      return res
+        .status(400)
+        .json({ message: "Hospital ID not found in token" });
     }
 
     const hospital = await Hospital.findById(hospitalId);
@@ -601,7 +607,9 @@ router.get("/entitlements", auth, async (req, res) => {
   try {
     const hospitalId = req.user.hospitalId;
     if (!hospitalId) {
-      return res.status(400).json({ message: "Hospital ID not found in token" });
+      return res
+        .status(400)
+        .json({ message: "Hospital ID not found in token" });
     }
     const masterHospital = await Hospital.findById(hospitalId);
     if (!masterHospital) {
@@ -629,13 +637,16 @@ router.put("/change-password", auth, async (req, res) => {
     const { currentPassword, newPassword } = req.body;
     if (!currentPassword || !newPassword || String(newPassword).length < 6) {
       return res.status(400).json({
-        message: "Current password and a new password of at least 6 characters are required",
+        message:
+          "Current password and a new password of at least 6 characters are required",
       });
     }
 
     const hospitalId = req.user.hospitalId;
     if (!hospitalId) {
-      return res.status(400).json({ message: "Hospital ID not found in token" });
+      return res
+        .status(400)
+        .json({ message: "Hospital ID not found in token" });
     }
 
     const tenantConnection = await getTenantConnection(hospitalId);
@@ -645,7 +656,9 @@ router.put("/change-password", auth, async (req, res) => {
       return res.status(404).json({ message: "Staff member not found" });
     }
     if (!staff.password) {
-      return res.status(400).json({ message: "Password is not set for this account" });
+      return res
+        .status(400)
+        .json({ message: "Password is not set for this account" });
     }
 
     const isMatch = await bcrypt.compare(currentPassword, staff.password);
