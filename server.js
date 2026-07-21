@@ -98,6 +98,7 @@ app.use("/api/indent-store", require("./routes/indentStoreRoutes"));
 app.use("/api/pharmacy-receipts", require("./routes/pharmacyReceipts"));
 app.use("/api/diagnostics-receipts", require("./routes/diagnosticsReceipts"));
 app.use("/api/discharge-summary", require("./routes/dischargeSummary"));
+app.use("/api/gemini-live", require("./routes/geminiLive"));
 app.use("/api/healeka-agent", require("./routes/healekaAgent"));
 app.use("/api/consents", require("./routes/consentRoutes"));
 app.use("/api/consent-templates", require("./routes/consentTemplateRoutes"));
