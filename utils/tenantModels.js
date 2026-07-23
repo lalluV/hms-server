@@ -254,6 +254,10 @@ function registerTenantModels(connection) {
     { name: "AdvanceReceipt", path: "../models/AdvanceReceipt" },
     { name: "Consent", path: "../models/Consent" },
     { name: "ConsentTemplate", path: "../models/ConsentTemplate" },
+    {
+      name: "ClinicalOrderPackage",
+      path: "../models/ClinicalOrderPackage",
+    },
     { name: "InsuranceCompany", path: "../models/InsuranceCompany" },
     { name: "InsuranceTariff", path: "../models/InsuranceTariff" },
     { name: "InsuranceExclusion", path: "../models/InsuranceExclusion" },
@@ -319,6 +323,7 @@ const TENANT_MODELS = [
   "AdvanceReceipt",
   "Consent",
   "ConsentTemplate",
+  "ClinicalOrderPackage",
   "InsuranceCompany",
   "InsuranceTariff",
   "InsuranceExclusion",

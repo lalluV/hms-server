@@ -1,8 +1,46 @@
 const express = require("express");
 const router = express.Router();
 const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
+const Hospital = require("../models/Hospital");
+const {
+  sendAppointmentWhatsApp,
+  mapWhatsAppHttpError,
+} = require("../utils/whatsappCloud");
 
 applyTenantEntitlements(router, { moduleKey: "core" });
+
+const APPOINTMENT_EVENT_TO_TEMPLATE = {
+  booked: "appointment_booked",
+  confirmed: "appointment_confirmed",
+  rescheduled: "appointment_rescheduled",
+  cancelled: "appointment_cancelled",
+};
+
+function appointmentPhone(appointment) {
+  return appointment?.phone || appointment?.mobile || null;
+}
+
+function appointmentDoctorName(appointment) {
+  return appointment?.doctorName || appointment?.doctor || "-";
+}
+
+function appointmentDate(appointment) {
+  return (
+    appointment?.slotDate ||
+    appointment?.appointmentDate ||
+    appointment?.rescheduledDate ||
+    "-"
+  );
+}
+
+function appointmentTime(appointment) {
+  return (
+    appointment?.slotTime ||
+    appointment?.time ||
+    appointment?.rescheduledTime ||
+    "-"
+  );
+}
 
 // Get all appointments with pagination support
 router.get("/", async (req, res) => {
@@ -140,6 +178,66 @@ router.put("/:id", async (req, res) => {
     res.json(appointment);
   } catch (error) {
     res.status(400).json({ message: error.message });
+  }
+});
+
+/**
+ * AUTHENTICATED: notify patient about an appointment via WhatsApp.
+ * POST /api/appointments/:id/send-whatsapp
+ * Body: { event: 'booked' | 'confirmed' | 'rescheduled' | 'cancelled' }
+ */
+router.post("/:id/send-whatsapp", async (req, res) => {
+  try {
+    const { event } = req.body || {};
+    const templateKey = APPOINTMENT_EVENT_TO_TEMPLATE[event];
+    if (!templateKey) {
+      return res.status(400).json({
+        message:
+          "event must be one of: booked, confirmed, rescheduled, cancelled",
+      });
+    }
+
+    const Appointment = req.tenantDb.model("Appointment");
+    const appointment = await Appointment.findOne({
+      _id: req.params.id,
+      hospitalId: req.hospitalId,
+    }).lean();
+
+    if (!appointment) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    const phone = appointmentPhone(appointment);
+    if (!phone) {
+      return res
+        .status(400)
+        .json({ message: "Appointment does not have a mobile number." });
+    }
+
+    const hospital = await Hospital.findById(req.hospitalId).lean();
+    const result = await sendAppointmentWhatsApp({
+      templateKey,
+      phone,
+      patientName: appointment.name || appointment.fullName,
+      hospitalName: hospital?.name || "Your Clinic",
+      doctorName: appointmentDoctorName(appointment),
+      date: appointmentDate(appointment),
+      time: appointmentTime(appointment),
+    });
+
+    return res.json({
+      success: true,
+      event,
+      templateKey,
+      destination: result.destination,
+    });
+  } catch (error) {
+    console.error("Send appointment WhatsApp error:", error);
+    const mapped = mapWhatsAppHttpError(error, res);
+    if (mapped) return mapped;
+    return res
+      .status(500)
+      .json({ message: "Failed to send appointment WhatsApp message." });
   }
 });
 

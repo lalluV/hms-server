@@ -7,7 +7,10 @@ const {
   createPrescriptionToken,
   verifyPrescriptionToken,
 } = require("../utils/prescriptionToken");
-const { sendPrescriptionWhatsApp } = require("../utils/aisensy");
+const {
+  sendPrescriptionWhatsApp,
+  mapWhatsAppHttpError,
+} = require("../utils/whatsappCloud");
 
 function findPrescription(patient, prescriptionId) {
   if (!patient || !Array.isArray(patient.prescriptions)) return null;
@@ -135,105 +138,92 @@ router.get("/public/:token", async (req, res) => {
 applyTenantEntitlements(router, { moduleKey: "core" });
 
 /**
- * AUTHENTICATED: send the prescription to the patient via WhatsApp (AiSensy).
+ * AUTHENTICATED: send the prescription to the patient via WhatsApp
+ * (Meta Cloud API).
  * POST /api/prescriptions/:patientId/:prescriptionId/send-whatsapp
  * Body: { viewBaseUrl: string }  (e.g. https://hs-xxxx.healeka.com)
  */
-router.post(
-  "/:patientId/:prescriptionId/send-whatsapp",
-  async (req, res) => {
-    try {
-      const { patientId, prescriptionId } = req.params;
-      const { viewBaseUrl } = req.body || {};
+router.post("/:patientId/:prescriptionId/send-whatsapp", async (req, res) => {
+  try {
+    const { patientId, prescriptionId } = req.params;
+    const { viewBaseUrl } = req.body || {};
 
-      if (!viewBaseUrl) {
-        return res
-          .status(400)
-          .json({ message: "viewBaseUrl is required to build the view link." });
-      }
-
-      const Patient = req.tenantDb.model("Patient");
-      const patient = await Patient.findOne({
-        UMRNo: patientId,
-        hospitalId: req.hospitalId,
-      }).lean();
-
-      if (!patient) {
-        return res.status(404).json({ message: "Patient not found." });
-      }
-
-      const prescription = findPrescription(patient, prescriptionId);
-      if (!prescription) {
-        return res.status(404).json({ message: "Prescription not found." });
-      }
-
-      if (!patient.phone) {
-        return res
-          .status(400)
-          .json({ message: "Patient does not have a mobile number on file." });
-      }
-
-      let doctorName = patient.consultantDoctor || "";
-      if (prescription.doctorId) {
-        try {
-          const Staff = req.tenantDb.model("Staff");
-          const doctorDoc = await Staff.findOne({
-            id: prescription.doctorId,
-          }).lean();
-          if (doctorDoc?.name) doctorName = doctorDoc.name;
-        } catch (err) {
-          // best-effort
-        }
-      }
-
-      const hospital = await Hospital.findById(req.hospitalId).lean();
-      const hospitalName = hospital?.name || "Your Clinic";
-
-      const token = createPrescriptionToken({
-        hospitalId: String(req.hospitalId),
-        patientId: patient.UMRNo,
-        prescriptionId,
-      });
-
-      const cleanBase = String(viewBaseUrl).replace(/\/+$/, "");
-      const viewUrl = `${cleanBase}/view/prescription/${token}`;
-
-      const result = await sendPrescriptionWhatsApp({
-        phone: patient.phone,
-        patientName: patient.name,
-        hospitalName,
-        viewUrl,
-        doctorName,
-      });
-
-      return res.json({
-        success: true,
-        viewUrl,
-        destination: result.destination,
-      });
-    } catch (error) {
-      console.error("Send prescription WhatsApp error:", error);
-
-      if (error.code === "AISENSY_NOT_CONFIGURED") {
-        return res.status(503).json({
-          message:
-            "WhatsApp sending is not configured. Please contact the administrator.",
-        });
-      }
-      if (error.code === "INVALID_DESTINATION") {
-        return res.status(400).json({ message: error.message });
-      }
-      if (error.code === "AISENSY_SEND_FAILED") {
-        return res.status(502).json({
-          message: error.message || "Failed to send WhatsApp message.",
-        });
-      }
-
+    if (!viewBaseUrl) {
       return res
-        .status(500)
-        .json({ message: "Failed to send prescription to patient." });
+        .status(400)
+        .json({ message: "viewBaseUrl is required to build the view link." });
     }
-  },
-);
+
+    const Patient = req.tenantDb.model("Patient");
+    const patient = await Patient.findOne({
+      UMRNo: patientId,
+      hospitalId: req.hospitalId,
+    }).lean();
+
+    if (!patient) {
+      return res.status(404).json({ message: "Patient not found." });
+    }
+
+    const prescription = findPrescription(patient, prescriptionId);
+    if (!prescription) {
+      return res.status(404).json({ message: "Prescription not found." });
+    }
+
+    if (!patient.phone) {
+      return res
+        .status(400)
+        .json({ message: "Patient does not have a mobile number on file." });
+    }
+
+    let doctorName = patient.consultantDoctor || "";
+    if (prescription.doctorId) {
+      try {
+        const Staff = req.tenantDb.model("Staff");
+        const doctorDoc = await Staff.findOne({
+          id: prescription.doctorId,
+        }).lean();
+        if (doctorDoc?.name) doctorName = doctorDoc.name;
+      } catch (err) {
+        // best-effort
+      }
+    }
+
+    const hospital = await Hospital.findById(req.hospitalId).lean();
+    const hospitalName = hospital?.name || "Your Clinic";
+
+    const token = createPrescriptionToken({
+      hospitalId: String(req.hospitalId),
+      patientId: patient.UMRNo,
+      prescriptionId,
+    });
+
+    const cleanBase = String(viewBaseUrl).replace(/\/+$/, "");
+    const viewUrl = `${cleanBase}/view/prescription/${token}`;
+
+    const result = await sendPrescriptionWhatsApp({
+      phone: patient.phone,
+      patientName: patient.name,
+      hospitalName,
+      doctorName,
+      token,
+      viewUrl,
+    });
+
+    return res.json({
+      success: true,
+      viewUrl,
+      destination: result.destination,
+    });
+  } catch (error) {
+    console.error("Send prescription WhatsApp error:", error);
+
+    const mapped = mapWhatsAppHttpError(error, res);
+    if (mapped) return mapped;
+
+    return res
+      .status(500)
+      .json({ message: "Failed to send prescription to patient." });
+  }
+});
 
 module.exports = router;

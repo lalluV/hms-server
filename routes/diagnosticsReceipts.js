@@ -1,6 +1,11 @@
 const express = require("express");
 const router = express.Router();
 const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
+const Hospital = require("../models/Hospital");
+const {
+  sendLabReportWhatsApp,
+  mapWhatsAppHttpError,
+} = require("../utils/whatsappCloud");
 
 applyTenantEntitlements(router, { moduleKey: "lab" });
 
@@ -144,6 +149,60 @@ router.put("/:id", async (req, res) => {
     res.json(receipt);
   } catch (error) {
     res.status(400).json({ message: error.message });
+  }
+});
+
+/**
+ * AUTHENTICATED: notify patient that lab reports are ready via WhatsApp.
+ * POST /api/diagnostics-receipts/:id/send-whatsapp
+ */
+router.post("/:id/send-whatsapp", async (req, res) => {
+  try {
+    const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
+    const receipt = await DiagnosticsReceipt.findOne({
+      _id: req.params.id,
+      hospitalId: req.hospitalId,
+    }).lean();
+
+    if (!receipt) {
+      return res.status(404).json({ message: "Diagnostics receipt not found" });
+    }
+
+    const phone = receipt.patientPhone || receipt.accountPhone;
+    if (!phone) {
+      return res
+        .status(400)
+        .json({ message: "Receipt does not have a patient mobile number." });
+    }
+
+    const items = Array.isArray(receipt.items) ? receipt.items : [];
+    const testsSummary =
+      items
+        .map((item) => item.testName || item.name || item.description)
+        .filter(Boolean)
+        .slice(0, 5)
+        .join(", ") || "your lab tests";
+
+    const hospital = await Hospital.findById(req.hospitalId).lean();
+    const result = await sendLabReportWhatsApp({
+      phone,
+      patientName: receipt.patientName,
+      hospitalName: hospital?.name || "Your Clinic",
+      testsSummary,
+    });
+
+    return res.json({
+      success: true,
+      destination: result.destination,
+      testsSummary,
+    });
+  } catch (error) {
+    console.error("Send lab report WhatsApp error:", error);
+    const mapped = mapWhatsAppHttpError(error, res);
+    if (mapped) return mapped;
+    return res
+      .status(500)
+      .json({ message: "Failed to send lab report WhatsApp message." });
   }
 });
 

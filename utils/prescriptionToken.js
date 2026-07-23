@@ -76,11 +76,34 @@ function createPrescriptionToken({ hospitalId, patientId, prescriptionId }) {
 }
 
 /**
+ * Normalize a token taken from a URL path / WhatsApp CTA button.
+ * Meta sometimes leaves a literal "{{1}}" prefix when the dynamic URL
+ * button variable is not substituted correctly.
+ */
+function normalizePrescriptionToken(rawToken) {
+  if (!rawToken || typeof rawToken !== "string") return rawToken;
+
+  let token = rawToken.trim();
+  try {
+    token = decodeURIComponent(token);
+  } catch {
+    // keep raw value if it wasn't URI-encoded
+  }
+
+  // Strip accidental Meta template placeholders left in the path
+  token = token.replace(/^(\{\{1\}\}|%7B%7B1%7D%7D)+/i, "");
+
+  return token;
+}
+
+/**
  * Verify and decode a prescription token.
  * @param {string} token
  * @returns {{ hospitalId: string, patientId: string, prescriptionId: string, iat: number }}
  */
 function verifyPrescriptionToken(token) {
+  token = normalizePrescriptionToken(token);
+
   if (!token || typeof token !== "string") {
     throw new Error("Invalid token format.");
   }

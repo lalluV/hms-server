@@ -279,16 +279,12 @@ FORMAT (critical):
   Examination:
   Vitals:
   Diagnosis:
-  Medicines:
-  Investigations:
-  Procedures:
   Advice:
+- Do NOT put Medicines, Investigations, or Procedures inside doctorNotes — those belong ONLY in the medicines[], labTests[], and procedures[] arrays (already shown as separate lists in the UI)
 - Each label on its own line, ending with a colon
-- Under EVERY labeled section, put content as unicode DOT bullets (•) — one clinical fact / order / advice per line
+- Under EVERY labeled section, put content as unicode DOT bullets (•) — one clinical fact / advice per line
 - Always use "• " (bullet + space), even when the section has only one item — never plain paragraphs or comma-lists under a label
 - Do NOT use markdown dashes (-), asterisks (*), or numbered lists
-- Medicines: one drug per bullet, with dose / frequency / duration on the same line
-- Investigations / Procedures / Advice: one item per bullet
 - Vitals: one vital per bullet (e.g. • BP 120/80)
 - Example:
   Complaints:
@@ -296,13 +292,9 @@ FORMAT (critical):
   • Dry cough
   Diagnosis:
   • Acute febrile illness
-  Medicines:
-  • Dolo 650 mg — BD × 5 days
-  Investigations:
-  • CBC
-  • Dengue NS1
   Advice:
   • Plenty of fluids
+  (and medicines/labTests/procedures filled in their arrays — not duplicated in doctorNotes)
 - If existing chart notes already use S:/O:/A:/P: SOAP letter labels, keep SOAP (noteFormat "soap") and use ONLY:
   S:
   O:
@@ -712,11 +704,11 @@ JSON schema (return exactly these keys):
     "respiratoryRate": "per min or empty",
     "bloodPressure": "e.g. 120/80 or empty"
   },
-  "doctorNotes": "clean ENGLISH-ONLY labeled note with Complaints:/History:/Examination:/Vitals:/Diagnosis:/Medicines:/Investigations:/Procedures:/Advice: (skip empty). Under each section use • bullets (one item per line). SOAP S:/O:/A:/P: only if existing notes already use SOAP (still • under each letter)."
+  "doctorNotes": "clean ENGLISH-ONLY labeled note with Complaints:/History:/Examination:/Vitals:/Diagnosis:/Advice: (skip empty). Do NOT include Medicines, Investigations, or Procedures in doctorNotes — put those only in medicines/labTests/procedures arrays. Under each section use • bullets (one item per line). SOAP S:/O:/A:/P: only if existing notes already use SOAP (still • under each letter)."
 }
 
 Examples:
-- "fever 3 days, give dolo 650 bd 5 days, send cbc" → doctorNotes like "Complaints:\\n• Fever for 3 days\\nMedicines:\\n• Dolo 650 mg — BD × 5 days\\nInvestigations:\\n• CBC"; medicines Dolo type:Tablet action:add; labTests CBC action:add
+- "fever 3 days, give dolo 650 bd 5 days, send cbc" → doctorNotes like "Complaints:\\n• Fever for 3 days"; medicines Dolo type:Tablet action:add; labTests CBC action:add (orders NOT repeated in doctorNotes)
 - "give tab dolo 650 bd 5 days" → name/description Dolo type:Tablet dosage:650mg frequency:BD duration:5 days action:add (do NOT rewrite to Paracetamol; do NOT pick Injection)
 - "inj pantop 40 stat" → name Pantop type:Injection dosage:40mg action:add
 - "pantop syrup 5ml bd" → name Pantop type:Syrup dosage:5ml frequency:BD
