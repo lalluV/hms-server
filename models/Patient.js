@@ -48,6 +48,8 @@ const patientSchema = new mongoose.Schema(
     active: { type: Boolean, default: true },
     registered_by: { type: String },
     registration_date: { type: String },
+    /** Deterministic identity for public OP self-registration dedupe */
+    publicRegistrationKey: { type: String },
     appointment_date: { type: String },
     admissionDate: { type: String },
     admissionTime: { type: String },
@@ -141,6 +143,15 @@ const patientSchema = new mongoose.Schema(
     ],
   },
   { strict: true, timestamps: true },
+);
+
+patientSchema.index(
+  { hospitalId: 1, publicRegistrationKey: 1 },
+  {
+    unique: true,
+    sparse: true,
+    name: "hospitalId_publicRegistrationKey_unique",
+  },
 );
 
 // Fix for 'type' field in modifiedBy if needed, but since strict: false, it might pass.

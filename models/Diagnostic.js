@@ -25,6 +25,8 @@ const diagnosticSchema = new mongoose.Schema(
     reportsIn: { type: String },
     type: { type: String },
     visitType: { type: String },
+    /** For type === "Package": catalog tests included in this package */
+    includedTests: [mongoose.Schema.Types.Mixed],
     parameters: [mongoose.Schema.Types.Mixed],
     testInstructions: [String],
     active: { type: Boolean, default: true },

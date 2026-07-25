@@ -51,6 +51,8 @@ const patientSchema = new mongoose.Schema(
     active: { type: Boolean, default: true },
     registered_by: { type: String },
     registration_date: { type: String },
+    /** Deterministic identity for public OP self-registration dedupe */
+    publicRegistrationKey: { type: String },
     appointment_date: { type: String },
     admissionDate: { type: String },
     admissionTime: { type: String },
@@ -129,6 +131,15 @@ const patientSchema = new mongoose.Schema(
     ],
   },
   { strict: true, timestamps: true },
+);
+
+patientSchema.index(
+  { hospitalId: 1, publicRegistrationKey: 1 },
+  {
+    unique: true,
+    sparse: true,
+    name: "hospitalId_publicRegistrationKey_unique",
+  },
 );
 
 // Pre-save middleware for UMR number generation
@@ -213,6 +224,19 @@ function registerTenantModels(connection) {
     connection.model("Patient", patientSchema);
   } else {
     const patientModel = connection.models.Patient;
+    if (!patientModel.schema.paths.publicRegistrationKey) {
+      patientModel.schema.add({
+        publicRegistrationKey: { type: String },
+      });
+      patientModel.schema.index(
+        { hospitalId: 1, publicRegistrationKey: 1 },
+        {
+          unique: true,
+          sparse: true,
+          name: "hospitalId_publicRegistrationKey_unique",
+        },
+      );
+    }
     if (!patientModel.schema.paths.procedures) {
       patientModel.schema.add({
         procedures: [mongoose.Schema.Types.Mixed],

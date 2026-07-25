@@ -7,7 +7,182 @@ const {
   calculateInsuranceCoverage,
   calculateTotalAdvance,
 } = require("../utils/insuranceCalculation");
+const {
+  extractSubdomain,
+  requireSubdomain,
+} = require("../middleware/subdomain");
+const { getTenantConnection } = require("../utils/tenantDb");
+const {
+  buildPublicRegistrationKey,
+  checkPublicOpRateLimit,
+  assertHospitalAllowsPublicOp,
+  validatePublicOpPayload,
+  buildTrustedPublicPatientDoc,
+  toPublicRegistrationResponse,
+  normalizeName,
+  normalizeAge,
+  normalizeGender,
+} = require("../utils/publicOpRegistration");
 
+/**
+ * PUBLIC (no auth): hospital branding for the self-registration page.
+ * Defined BEFORE applyTenantEntitlements so auth middleware does not apply.
+ * GET /api/patients/public/register-op-info
+ */
+router.get(
+  "/public/register-op-info",
+  extractSubdomain,
+  requireSubdomain,
+  async (req, res) => {
+    try {
+      const hospital = req.hospital;
+      const access = assertHospitalAllowsPublicOp(hospital);
+      if (!access.ok) {
+        return res.status(access.status).json({ message: access.message });
+      }
+
+      return res.json({
+        hospital: {
+          name: hospital.name,
+          code: hospital.code,
+          address: hospital.address,
+          city: hospital.city,
+          state: hospital.state,
+          zipCode: hospital.zipCode,
+          phone: hospital.phone,
+          logoUrl: hospital.logoUrl,
+        },
+      });
+    } catch (error) {
+      console.error("Public OP registration info error:", error);
+      return res
+        .status(500)
+        .json({ message: "Unable to load registration page." });
+    }
+  },
+);
+
+/**
+ * PUBLIC (no auth): create or reuse an OP patient from the shareable link.
+ * POST /api/patients/public/register-op
+ */
+router.post(
+  "/public/register-op",
+  extractSubdomain,
+  requireSubdomain,
+  async (req, res) => {
+    try {
+      const rate = checkPublicOpRateLimit(req);
+      if (!rate.allowed) {
+        res.setHeader("Retry-After", String(rate.retryAfterSec));
+        return res.status(429).json({
+          message: "Too many registration attempts. Please try again later.",
+        });
+      }
+
+      const hospital = req.hospital;
+      const access = assertHospitalAllowsPublicOp(hospital);
+      if (!access.ok) {
+        return res.status(access.status).json({ message: access.message });
+      }
+
+      const validated = validatePublicOpPayload(req.body);
+      if (!validated.ok) {
+        return res.status(400).json({
+          message: "Please correct the highlighted fields.",
+          errors: validated.errors,
+        });
+      }
+
+      const hospitalId = req.hospitalId;
+      const connection = await getTenantConnection(hospitalId);
+      if (!connection) {
+        return res
+          .status(500)
+          .json({ message: "Unable to complete registration." });
+      }
+
+      const Patient = connection.model("Patient");
+      const data = validated.data;
+      const publicRegistrationKey = buildPublicRegistrationKey({
+        hospitalId,
+        phone: data.phone,
+        name: data.name,
+        age: data.age,
+        gender: data.gender,
+      });
+
+      let existing = await Patient.findOne({
+        hospitalId,
+        publicRegistrationKey,
+      });
+
+      if (!existing) {
+        const phoneMatches = await Patient.find({
+          hospitalId,
+          phone: data.phone,
+          patient_type: "OP",
+        }).limit(25);
+
+        existing = phoneMatches.find(
+          (p) =>
+            normalizeName(p.name) === normalizeName(data.name) &&
+            normalizeAge(p.age) === normalizeAge(data.age) &&
+            normalizeGender(p.gender) === normalizeGender(data.gender),
+        );
+
+        if (existing && !existing.publicRegistrationKey) {
+          existing.publicRegistrationKey = publicRegistrationKey;
+          try {
+            await existing.save();
+          } catch (err) {
+            // Ignore race on key backfill; identity match already found.
+          }
+        }
+      }
+
+      if (existing) {
+        return res.json(
+          toPublicRegistrationResponse(existing, { created: false }),
+        );
+      }
+
+      const patientDoc = buildTrustedPublicPatientDoc({
+        hospitalId,
+        data,
+        publicRegistrationKey,
+      });
+
+      try {
+        const patient = new Patient(patientDoc);
+        const created = await patient.save();
+        return res
+          .status(201)
+          .json(toPublicRegistrationResponse(created, { created: true }));
+      } catch (error) {
+        if (error?.code === 11000) {
+          const raced = await Patient.findOne({
+            hospitalId,
+            publicRegistrationKey,
+          });
+          if (raced) {
+            return res.json(
+              toPublicRegistrationResponse(raced, { created: false }),
+            );
+          }
+        }
+        throw error;
+      }
+    } catch (error) {
+      console.error("Public OP registration error:", error);
+      return res
+        .status(500)
+        .json({ message: "Unable to complete registration. Please try again." });
+    }
+  },
+);
+
+// Everything below requires authentication + active subscription + tenant DB
 applyTenantEntitlements(router, { moduleKey: "core" });
 
 const INPATIENT_TYPES = new Set(["IP", "OPtoIP"]);

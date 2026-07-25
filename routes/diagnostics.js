@@ -29,6 +29,8 @@ router.get("/", async (req, res) => {
         { visitType: { $regex: search, $options: "i" } },
         { "parameters.name": { $regex: search, $options: "i" } },
         { "parameters.category": { $regex: search, $options: "i" } },
+        { "includedTests.name": { $regex: search, $options: "i" } },
+        { "includedTests.code": { $regex: search, $options: "i" } },
       ];
     }
 
@@ -126,7 +128,7 @@ router.post("/from-master/:masterId", async (req, res) => {
       fasting: masterDiagnostic.default_fasting || "Not Required",
       reportsIn: masterDiagnostic.default_reportsIn || "Same Day",
       testInstructions: masterDiagnostic.default_testInstructions || [],
-      type: "Test",
+      type: req.body.type || "Test",
       visitType: "Center",
       active: req.body.active !== false,
       isCustom: false, // Created from master
@@ -135,6 +137,7 @@ router.post("/from-master/:masterId", async (req, res) => {
       price: req.body.price || 0,
       // Parameters will be set from hospital's own parameters
       parameters: req.body.parameters || [],
+      includedTests: req.body.includedTests || [],
     });
 
     // Allow overriding defaults from request body
@@ -150,6 +153,9 @@ router.post("/from-master/:masterId", async (req, res) => {
     if (req.body.testInstructions)
       hospitalDiagnostic.testInstructions = req.body.testInstructions;
     if (req.body.visitType) hospitalDiagnostic.visitType = req.body.visitType;
+    if (req.body.type) hospitalDiagnostic.type = req.body.type;
+    if (req.body.includedTests)
+      hospitalDiagnostic.includedTests = req.body.includedTests;
 
     const newDiagnostic = await hospitalDiagnostic.save();
     res.status(201).json(newDiagnostic);
