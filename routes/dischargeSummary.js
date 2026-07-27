@@ -259,23 +259,47 @@ const {
 
 const PARSE_CLINICAL_NOTE_SYSTEM_PROMPT = `You are a medical scribe for an Indian hospital EMR. Convert the CURRENT doctor dictation or consult transcript into the requested JSON. Return valid JSON only.
 
+COMPLETENESS (highest priority — style-agnostic)
+- Doctors write in many styles: full sentences, CAPS shorthand, abbreviations, Telugu/English mix, bullets, or one long line. Accept all styles.
+- Every clinical fact in the current input MUST appear in the output. Never drop a line because the wording is unusual, abbreviated, or names a procedure/drug/test.
+- Prefer keeping a fact in noteSections over discarding it. If unsure whether something is an order vs narrative, keep the polished narrative in noteSections AND only add an order when the doctor is clearly ordering it for THIS visit.
+- Before answering, mentally scan the input clause-by-clause (split on newlines, semicolons, or distinct clinical phrases). Each clause must map to noteSections and/or an order/vital. Zero silent drops.
+
 CORE RULES
 - Extract only facts stated in the current input. Existing chart context is reference only; never copy it as new content.
 - Translate Telugu/Hindi/mixed speech into concise professional English. Ignore greetings, filler and repetition.
 - Never infer a diagnosis, medicine, test, procedure or vital from another clinical fact. A diagnosis alone produces no orders.
-- Route each current fact once:
-  narrative → noteSections
-  drugs → medicines[]
-  lab/imaging/investigations → labTests[]
-  services/procedures → procedures[]
+- Route each current fact once by meaning (not by keyword matching):
+  narrative / assessment / plan language → noteSections
+  drugs being prescribed/stopped/continued now → medicines[]
+  lab/imaging being ordered now → labTests[]
+  services/procedures being done or ordered for THIS visit → procedures[]
   measured BP/pulse/temp/SpO2/RR/weight/height → vitals
+
+TEMPORAL ROUTING (global — any wording)
+- Past / prior / already done / status-post / known case / history of / "on <drug>" as background → history (noteSections). Do NOT create a today's procedure/lab/medicine order for background alone.
+- Presenting symptoms / complaints → complaints.
+- Exam findings observed now → examination.
+- Impression / diagnosis → diagnosis.
+- Counsel, precautions, follow-up timing, review dates, and planned future care (including future procedure/removal dates) → advice.
+- Only actions intended for THIS visit go into medicines[] / labTests[] / procedures[] with action "add".
+
+LISTEN / AMBIENT TRANSCRIPTS
+- Input may be a messy doctor–patient consult transcript (overlaps, ASR errors, Indic code-mix). Still extract every clinical fact.
+- Never drop patient-stated complaints, durations, severity or negatives (e.g. "no vomiting") even if soft, fragmented, in Telugu/Hindi, or spoken by the patient rather than the doctor — put them in complaints/history in English.
+- Extract every explicitly named drug with dosage/frequency/duration even when embedded mid-sentence ("start Dolo six fifty BD three days", "give pantop 40 od").
+- Correct common Indian ASR near-misses when clinical context is clear: "dollar/dolo/dollo 650"→Dolo 650; "pantop/pan top/pan 40"→Pantop or PAN; "azithro"→Azithromycin; "see bee see/CBC"→CBC; "L F T"→LFT; "0d"→OD.
+- Prefer the spoken brand for name/description; put strength only in dosage (650 mg), frequency in frequency (BD), duration in duration (3 days).
 
 NOTE SECTIONS
 - Default noteFormat is "labeled". Put short, single-line facts in complaints, history, examination, diagnosis or advice.
-- Preserve symptom durations, severity, qualifiers and negative findings.
-- advice means patient counsel only: fluids, diet, rest, activity, precautions, warning signs and follow-up timing.
-- Drugs, current medication instructions, tests, procedures and vital numbers never belong in noteSections.
-- "Advise/send/do/get/order/repeat/check" + a test is a lab order, not advice.
+- Preserve symptom durations, severity, qualifiers, dates and negative findings.
+- Expand abbreviations into clear English when meaning is clear (any local shorthand is fine — do not require a specific format). Fix obvious date typos like 19/726 → 19/7/26.
+- Mirror the same facts into symptoms / pastMedicalHistory / provisionalDiagnosis when those fields apply (server may use them as backup).
+- Drugs being prescribed now, lab/imaging orders for now, and vital numbers never belong in noteSections.
+- "Advise/send/do/get/order/repeat/check" + a lab/imaging test ordered now → labTests[], not advice.
+- Planned future procedures, removals, surgery dates, review/follow-up → advice, not procedures[].
+- Past procedures/surgeries/results mentioned as background → history, not procedures[]/labTests[].
 - Return doctorNotes "" for labeled notes; the server renders headings and bullets.
 - Only when existingContext.noteFormat is "soap": set noteFormat "soap", leave noteSections empty and use doctorNotes with S:/O:/A:/P: bullet sections. Orders still stay outside doctorNotes.
 
@@ -288,10 +312,10 @@ NOTE RECONCILIATION
 - Example: existing diagnoses ["Spine pain","Spinecord pain"], current "diagnosis spine disc problem" → current diagnosis ["Spine disc problem"] plus two remove operations.
 
 ORDERS AND ACTIONS
-- Extract every explicitly spoken order, including orders embedded in conversation.
+- Extract every explicitly spoken order for THIS visit, including orders embedded in conversation.
 - action "add": new/restarted/changed order now.
 - action "continue": doctor explicitly says continue/same/ongoing, or repeats an existingContext medicine name without stating a change.
-- action "note_only": historical or discussed, not ordered.
+- action "note_only": historical or discussed only — and STILL put the polished narrative into the matching noteSections (history/advice/examination). Never use note_only as a way to hide content from the chart note.
 - medicine action "stop": explicitly stop/remove/hold that named drug.
 - Never return action "stop" merely because an existing medicine was repeated or omitted from the current input.
 - Empty arrays and empty vitals are correct when nothing was ordered or measured.
@@ -304,26 +328,32 @@ MEDICINES
 - type: Tablet, Capsules, Injection, Syrup, Ointment, Gel, Sachet, Syringe or Other. The explicit spoken form is absolute: tab/tablet→Tablet, cap→Capsules, inj→Injection, syrup/syp→Syrup. Never change a spoken tablet to Injection based on drug knowledge. Default Tablet only when no form was spoken.
 - Normalize the common transcription error "0d" (zero-d) to frequency "OD".
 - For action "add", return dosage, frequency and duration. Infer a common adult value only for a drug the doctor explicitly named and only when the omitted value is well established.
+- Background "patient is on X" / "known case on X" → history note + medicines action "note_only" or "continue" if clearly ongoing; do not invent a new prescription schedule.
 - Keep instructions such as before/after food. Never invent item_code, manufacturer or pack.
 
 LABS AND PROCEDURES
-- CBP, CUE, CBC, ESR, CRP, LFT, KFT/RFT, HbA1c, TSH, FBS/PPBS/RBS, lipid profile, Widal, MP smear, NS1, ECG, USG and X-ray are labTests, never medicines or advice.
+- CBP, CUE, CBC, ESR, CRP, LFT, KFT/RFT, HbA1c, TSH, FBS/PPBS/RBS, lipid profile, Widal, MP smear, NS1, ECG, USG and X-ray are labTests when ordered now; never medicines or advice.
 - Normalize obvious speech variants: hemogram/cb c→CBC; complete blood picture→CBP; complete urine examination→CUE; liver function→LFT; renal function→KFT; cxr→X-Ray Chest; sonography→USG; ekg→ECG.
-- Dressing, nebulization, physiotherapy, suturing and similar services go to procedures[].
+- Past/reported results ("USG showed stone", "CBP normal last week") → history or examination narrative; do not create a new lab order unless the doctor orders a repeat now.
+- procedures[] only for services being ordered or performed for THIS visit.
 - Deduplicate orders.
 - In vitals, return values without labels or units: temperature as its spoken numeric value ("98.6"), SpO2 ("98"), pulse ("80"), RR ("18"), and BP as systolic/diastolic ("120/80").
 
-HIGH-VALUE EXAMPLES
+HIGH-VALUE EXAMPLES (different doctor styles — same completeness rule)
 - "azithro 3d tid, pantop 3d bd, dolo 650 3d bd" → medicines only; noteSections empty; doctorNotes "".
-- "tab faropenam 200mg bd; tab limvit bd; tab pan 40mg od; tab mvi od; tab pregaba m 75mg od" → five medicines, all type Tablet; name/description values are only Faropenem, Limvit, PAN, MVI, Pregaba-M. Strength and BD/OD go only to their separate fields.
-- "fever 4 days, cold, cough, advise cbp and lft" → complaints contain those three symptoms; CBP and LFT in labTests; advice empty.
-- "diagnosis spine pain" → diagnosis only; all order arrays and vitals empty.
+- "tab faropenam 200mg bd; tab limvit bd; tab pan 40mg od; tab mvi od; tab pregaba m 75mg od" → five medicines, all type Tablet; name/description values are only Faropenem, Limvit, PAN, MVI, Pregaba-M.
+- "fever 4 days, cold, cough, advise cbp and lft" → complaints for the three symptoms; CBP and LFT in labTests; advice empty.
+- "diagnosis spine pain" → diagnosis only; order arrays empty.
 - "chest clear, plenty of fluids, review after 3 days" → examination ["Chest clear"]; advice ["Plenty of fluids","Review after 3 days"].
+- Caps shorthand: "POST URSL PLUS DJ STENTING ON 19/726 / ADV STENT REMOVAL ON 2/8/26 / MILD PAIN N BURNING MICTURITION PRESENT" → history ["Post URSL plus DJ stenting on 19/7/26"]; advice ["Advise stent removal on 2/8/26"]; complaints ["Mild pain and burning micturition present"]; procedures[] empty.
+- Sentence style: "Patient underwent appendectomy 2 years ago. Advise follow-up in 1 week. Complains of mild abdominal pain." → history, advice, complaints accordingly; no procedure order.
+- Mixed: "k/c/o DM on metformin, c/o fever 2 days, plan review SOS, adv CBP" → history ["Known case of DM on metformin"]; complaints ["Fever for 2 days"]; advice ["Review SOS"]; labTests ["CBP"]; no metformin add unless newly prescribed now.
 
 FINAL CHECK
-- Remove any current drug/test/procedure/vital accidentally placed in noteSections or doctorNotes and route it correctly.
+- Completeness: every clinical clause from the input is present in noteSections and/or the correct order/vital field.
+- Remove only today's drug/lab/imaging/vital numbers that were accidentally left inside noteSections; never strip history, advice, exam, diagnosis, or past-procedure narrative.
 - Remove every order or vital not explicitly supported by the current input.
-- Do not drop a stated symptom duration or explicitly spoken order.`;
+- Do not drop a stated symptom, history line, advice/follow-up, duration, or explicitly spoken order.`;
 
 const VALID_NOTE_ACTIONS = new Set(["add", "continue", "note_only", "stop"]);
 
@@ -511,7 +541,7 @@ const ADVICE_ORDER_VERB =
 
 /** Home-monitoring / conditional counsel must stay counsel even if it names a test. */
 const ADVICE_COUNSEL_HINT =
-  /\b(daily|weekly|monthly|regularly|home|monitor|monitoring|watch|if|when|avoid|continue)\b/i;
+  /\b(daily|weekly|monthly|regularly|home|monitor|monitoring|watch|if|when|avoid|continue|review|follow[- ]?up|removal|on\s+\d{1,2}[\/.\-]\d{1,2}(?:[\/.\-]\d{2,4})?)\b/i;
 
 /**
  * Advice must be counsel only. When the model still writes "Advise CBP" there,
@@ -546,6 +576,104 @@ function reclassifyAdviceOrders(sections, labTests) {
   else delete nextSections.advice;
 
   return { sections: nextSections, labTests: nextLabs };
+}
+
+function sectionHasSimilarBullet(items, text) {
+  const compact = String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+  if (!compact) return false;
+  return (items || []).some((item) => {
+    const other = String(item || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+    if (!other) return false;
+    return other.includes(compact) || compact.includes(other);
+  });
+}
+
+function sectionBucketHasSimilar(sections, text) {
+  if (!sections || !text) return false;
+  return NOTE_SECTION_ORDER.some(([key]) =>
+    sectionHasSimilarBullet(sections[key], text),
+  );
+}
+
+/**
+ * Merge legacy string fields into noteSections so content is not lost when the
+ * model fills symptoms/pastMedicalHistory/provisionalDiagnosis but omits
+ * noteSections (or the reverse).
+ */
+function mergeLegacyFieldsIntoSections(sections, parsed = {}) {
+  const next = { ...(sections || {}) };
+  const merge = (key, value) => {
+    const items = noteSectionItems(value);
+    if (!items.length) return;
+    next[key] = noteSectionItems([...(next[key] || []), ...items]);
+  };
+  merge("complaints", parsed.symptoms);
+  merge("history", parsed.pastMedicalHistory || parsed.pastHistory);
+  merge("diagnosis", parsed.provisionalDiagnosis || parsed.diagnosis);
+  return Object.keys(next).length ? next : null;
+}
+
+/**
+ * Style-agnostic safety net: anything the model marked note_only is narrative
+ * for the chart, not a visit order. Fold into history when missing from notes.
+ */
+function foldNoteOnlyOrdersIntoHistory(
+  sections,
+  medicines,
+  procedures,
+  labTests,
+) {
+  const nextSections = { ...(sections || {}) };
+  const history = [...(nextSections.history || [])];
+
+  const fold = (bullet) => {
+    const text = String(bullet || "").trim();
+    if (!text) return;
+    if (sectionBucketHasSimilar(nextSections, text)) return;
+    if (sectionHasSimilarBullet(history, text)) return;
+    history.push(text);
+  };
+
+  for (const proc of procedures || []) {
+    if (String(proc?.action || "").toLowerCase() !== "note_only") continue;
+    const name = String(proc.correctedName || proc.name || "").trim();
+    if (!name) continue;
+    fold(/^post\b/i.test(name) ? name : `History of ${name}`);
+  }
+  for (const med of medicines || []) {
+    if (String(med?.action || "").toLowerCase() !== "note_only") continue;
+    const name = String(
+      med.description || med.correctedName || med.name || "",
+    ).trim();
+    if (!name) continue;
+    fold(`On ${name}`);
+  }
+  for (const lab of labTests || []) {
+    if (String(lab?.action || "").toLowerCase() !== "note_only") continue;
+    const name = String(lab.name || "").trim();
+    if (!name) continue;
+    fold(`Prior ${name}`);
+  }
+
+  if (history.length) nextSections.history = noteSectionItems(history);
+  else delete nextSections.history;
+
+  return {
+    sections: Object.keys(nextSections).length ? nextSections : null,
+    medicines: (medicines || []).filter(
+      (item) => String(item?.action || "").toLowerCase() !== "note_only",
+    ),
+    procedures: (procedures || []).filter(
+      (item) => String(item?.action || "").toLowerCase() !== "note_only",
+    ),
+    labTests: (labTests || []).filter(
+      (item) => String(item?.action || "").toLowerCase() !== "note_only",
+    ),
+  };
 }
 
 function composeNoteFromSections(sections) {
@@ -975,6 +1103,8 @@ ${modeLine}
 ${context ? `PATIENT: ${context}` : ""}
 ${existingLine}
 
+COMPLETENESS: Keep every clinical fact from CURRENT INPUT. Writing style may vary — expand shorthand into clear English and place each fact by meaning (past→history, symptoms→complaints, exam→examination, impression→diagnosis, plan/follow-up→advice, today's orders→arrays). Do not drop clauses.
+
 Return exactly this JSON shape:
 {
   "noteFormat": "labeled or soap",
@@ -1313,14 +1443,27 @@ router.post("/parse-clinical-note", async (req, res) => {
         matchedMedicines,
         matchedLabTests,
       );
-      const { sections: noteSections, labTests } = reclassifyAdviceOrders(
-        normalizeNoteSections(
-          parsed.noteSections || parsed.note_sections || parsed.sections,
-        ),
-        reclassified.labTests,
+      const { sections: adviceSections, labTests: adviceLabTests } =
+        reclassifyAdviceOrders(
+          normalizeNoteSections(
+            parsed.noteSections || parsed.note_sections || parsed.sections,
+          ),
+          reclassified.labTests,
+        );
+      const mergedSections = mergeLegacyFieldsIntoSections(
+        adviceSections,
+        parsed,
       );
-      const medicines = reclassified.medicines;
-      const procedures = matchedProcedures;
+      const reconciled = foldNoteOnlyOrdersIntoHistory(
+        mergedSections,
+        reclassified.medicines,
+        matchedProcedures,
+        adviceLabTests,
+      );
+      const noteSections = reconciled.sections;
+      const medicines = reconciled.medicines;
+      const procedures = reconciled.procedures;
+      const labTests = reconciled.labTests;
 
       const medicinesToApply = medicines.filter((med) => med.action === "add");
       const medicinesToStop = medicines.filter((med) => med.action === "stop");

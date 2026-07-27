@@ -260,6 +260,8 @@ router.get("/", async (req, res) => {
       insuranceOnly = "",
       maxDaysAdmitted = "",
       minDaysAdmitted = "",
+      fromDate = "",
+      toDate = "",
     } = req.query;
 
     const dayjs = require("dayjs");
@@ -356,6 +358,25 @@ router.get("/", async (req, res) => {
           { registration_date: { $lte: cutoff } },
         ],
       });
+    }
+
+    if (fromDate || toDate) {
+      const start = fromDate
+        ? dayjs(fromDate).format("YYYY-MM-DD")
+        : null;
+      const end = toDate ? dayjs(toDate).format("YYYY-MM-DD") : null;
+      const dateRange = {};
+      if (start) dateRange.$gte = start;
+      // Include full ISO day when registration_date is stored as ISO string
+      if (end) dateRange.$lte = `${end}T23:59:59.999Z`;
+      if (Object.keys(dateRange).length > 0) {
+        andConditions.push({
+          $or: [
+            { registration_date: dateRange },
+            { admissionDate: dateRange },
+          ],
+        });
+      }
     }
 
     if (search && search.length >= 2) {
