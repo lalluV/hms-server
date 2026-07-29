@@ -4,6 +4,7 @@ const axios = require("axios");
 const {
   applyEntitlementsNoTenantDb,
 } = require("../utils/applyTenantEntitlements");
+const { runAiWriteVisitAgent } = require("../utils/aiWriteVisitAgent");
 
 applyEntitlementsNoTenantDb(router, { moduleKey: "ipd" });
 
@@ -104,9 +105,9 @@ Rules:
 - Same-day "and"/"also"/"plus" doses stay ONE row.
 - "then"/"next"/"followed by"/"→" with changing strength or schedule → SEPARATE rows (one object per step).
 - Short course "days then stop" stays ONE add row (not a taper split into stop).
-- Keep brand in name; fill generic_name when known.
+- Keep brand in name; generic_name always "".
 - directions: simple morning/afternoon/evening/night English (no twice/thrice/BD/OD/TDS as patient text).
-- dosages: time, amount, beforeFood; unit "" for Tablet/Capsules else short (ml|IU|drop|puff|app|U|sach).
+- dosages: time, amount, beforeFood; unit "" for Tablet/Capsules; "puffs" for inhaler/puff; else short (ml|IU|drop|puffs|app|U|sach).
 
 Shape example (anonymous):
 Input packed: BrandX 20 bd 5d then 10 3d then 5 3d
@@ -409,12 +410,12 @@ NOTE SECTIONS (BULLETS — REQUIRED)
 - Mirror into symptoms, pastMedicalHistory, provisionalDiagnosis as newline "• " bullets — same facts as complaints / history / diagnosis respectively (never put complaints facts into provisionalDiagnosis).
 - Expand shorthand into readable English. Never put today's drug/lab/imaging orders inside noteSections.
 
-MEDICINE NAMES — BRAND + GENERIC
+MEDICINE NAMES — BRAND ONLY
 - name: spoken BRAND when a brand was spoken. Correct obvious misspellings when confident (e.g. dollo→Dolo, faropenam→Faropenem, azi/azithro→Azithromycin only when used as generic antibiotic shorthand). Never replace a brand with its generic chemical name in "name" (Pantop/PAN stays Pantop or PAN, not Pantoprazole; Dolo stays Dolo, not Paracetamol; Telma stays Telma).
 - If unsure of spelling, keep EXACTLY as the doctor wrote.
-- generic_name: ALWAYS fill when you know the generic/salt (e.g. name "Dolo 650", generic_name "Paracetamol"; name "Pantop 40", generic_name "Pantoprazole"). If unknown, leave generic_name "".
-- Expand GENERIC-only shorthand when no brand was spoken (PCM→Paracetamol). Keep strength in name when it distinguishes products.
-- type from spoken form: tab→Tablet, inj→Injection, drops/eye drops/tears→Drops, syp→Syrup, ointment/cream→Ointment, etc.
+- generic_name: ALWAYS leave "". Do NOT invent or guess salt/generic names (they are often wrong).
+- Expand GENERIC-only shorthand when no brand was spoken (PCM→Paracetamol as the name). Keep strength in name when it distinguishes products.
+- type from spoken form: tab→Tablet, inj→Injection, drops/eye drops/tears→Drops, syp→Syrup, ointment/cream→Ointment, inhaler/puff→Inhaler, etc.
 
 TAPERS / SEQUENTIAL (MULTI medicines[] ROWS — REQUIRED)
 - Same-day concurrent doses ("and"/"also"/"plus" same day) → ONE medicines[] object.
@@ -441,7 +442,8 @@ STOP / DELETE MEDICINES (REQUIRED)
 DURATION
 - If duration is stated for a medicine, fill it.
 - If several medicines are ordered in the same clause/list and only one shared duration is stated (e.g. "… bd 5d" covering the group), apply that duration to each med in that group.
-- If no duration is stated anywhere for a medicine, leave duration "".
+- If no duration is stated for a NEW fixed daily add (OD/BD/TDS/QID/HS / morning-evening grid), default duration to "5 days".
+- Leave duration "" for SOS/PRN, continue, note_only, weekly, alternate-day, sliding-scale, one-time/stat, or when the doctor clearly implies ongoing/chronic use without a course length.
 
 DIRECTIONS (LAYMAN ENGLISH — REQUIRED)
 - directions: simple Indian patient English. Never use twice, thrice, BD, OD, TDS, QID, HS, SOS, PRN as the only patient text.
@@ -452,7 +454,8 @@ DOSAGES GRID (M/A/E/N)
 - For fixed daily schedules fill dosages[] with Morning/Afternoon/Evening/Night as needed.
 - Each dosage object MUST include: time, amount (number), unit, beforeFood (true/false).
 - Tablet or Capsules type: unit MUST be "" (empty). Never put tablet/tab/capsule in unit — grid shows amount only (½, 1, 2…).
-- All other types: unit MUST be a short form only — ml | IU | drop | puff | app | U | sach. Never long words (tablet, millilitre, drops, application, international units).
+- If the doctor says puff / puffs / inhaler: type Inhaler and EVERY dosages[].unit MUST be "puffs" (not empty, not puff singular).
+- All other non-tablet types: unit MUST be a short form only — ml | IU | drop | puffs | app | U | sach. Never long words (tablet, millilitre, drops, application, international units).
 - If doctor says before food / empty stomach → beforeFood true on those slots. After food → beforeFood false and mention after food in directions.
 - Unequal same-day amounts (e.g. morning 10 IU and afternoon 15 IU) → one medicine, two dosage slots with correct amounts and unit "IU".
 - Do NOT invent a daily grid for SOS / weekly / alternate-day / sliding-scale / conditional schedules; leave dosages [] and put clear text in directions.
@@ -474,9 +477,10 @@ FINAL CHECK
 - No complaints/symptoms text in diagnosis; diagnosis empty if no named disease/impression.
 - Tapers = multiple medicines[] rows (never one packed taper object).
 - Explicit stop/delete of a named drug = action "stop" row; course "then stop" stays action "add".
-- name is brand (not generic); generic_name filled when known.
+- name is brand; generic_name always "".
 - directions are morning/afternoon/evening/night English (no twice/thrice).
-- Tablet/Capsule dosages: unit ""; other forms: short unit only; beforeFood when known.
+- Tablet/Capsule dosages: unit ""; puff/inhaler → unit "puffs"; other forms: short unit only; beforeFood when known.
+- Missing duration on fixed daily add → "5 days"; SOS/PRN/continue → duration "".
 - Conditional labs are advice, not duplicate labTests.
 - No invented facts.`;
 
@@ -725,7 +729,7 @@ ${modeLine}
 ${context ? `PATIENT: ${context}` : ""}
 ${existingLine}
 
-COMPLETENESS: Keep every clinical fact from CURRENT INPUT. Writing style may vary — expand shorthand into clear English and place each fact by meaning (past→history, symptoms→complaints only never diagnosis, exam→examination, named impression→diagnosis else leave diagnosis empty, plan/follow-up/if-needed→advice, today's orders→arrays). noteSections are bullet lists. name=brand, generic_name=salt when known. Tapers = multiple medicines[] rows. Explicit stop/delete of a named drug = action stop. Tablet/Capsule unit ""; other forms short unit only; beforeFood when known. Do not drop clauses.
+COMPLETENESS: Keep every clinical fact from CURRENT INPUT. Writing style may vary — expand shorthand into clear English and place each fact by meaning (past→history, symptoms→complaints only never diagnosis, exam→examination, named impression→diagnosis else leave diagnosis empty, plan/follow-up/if-needed→advice, today's orders→arrays). noteSections are bullet lists. name=brand; generic_name always "". Tapers = multiple medicines[] rows. Explicit stop/delete of a named drug = action stop. Tablet/Capsule unit ""; puff/inhaler unit "puffs"; other forms short unit only; beforeFood when known. Fixed daily add with no duration → "5 days"; SOS/PRN/continue → duration "". Do not drop clauses.
 
 Return exactly this JSON shape:
 {
@@ -740,7 +744,7 @@ Return exactly this JSON shape:
     "strength": "", "dosage": "", "frequency": "", "duration": "",
     "scheduleKind": "fixed_daily|interval|weekly|monthly|alternate_day|prn|sliding_scale|one_time|sequential|device_controlled|free_text",
     "directions": "",
-    "dosages": [{ "time": "Morning|Afternoon|Evening|Night", "amount": 1, "unit": "\"\" for Tablet/Capsules else ml|IU|drop|puff|app|U|sach", "beforeFood": false }],
+    "dosages": [{ "time": "Morning|Afternoon|Evening|Night", "amount": 1, "unit": "\"\" for Tablet/Capsules; puffs for inhaler; else ml|IU|drop|puffs|app|U|sach", "beforeFood": false }],
     "action": "add|continue|note_only|stop"
   }],
   "labTests": [{"name": "", "action": "add|continue|note_only"}],
@@ -996,133 +1000,53 @@ function buildPatientContextLine({ age, gender, allergies }) {
   return contextParts.join(", ");
 }
 
-/** Pure questions — do not re-run chart extraction. */
-function isChartQuestionOnly(text) {
-  const t = String(text || "").trim();
-  if (!t) return false;
-  if (
-    /\b(fever|cough|pain|advise|adv\b|tab|mg|bd|od|tds|cbc|cbp|lft|post\b|h\/o|k\/c\/o|dolo|remove|add |stop |delete|clear)\b/i.test(
-      t,
-    )
-  ) {
-    return false;
-  }
-  return /^(what|what's|whats|how|show|summarize|summary|recap|list|tell me|do we have|anything else)\b|\?$/.test(
-    t,
-  );
-}
-
-function doctorTranscriptFromChat(chatMessages, fallbackDelta) {
-  const lines = [];
-  for (const msg of Array.isArray(chatMessages) ? chatMessages : []) {
-    const role = msg?.role === "assistant" ? "assistant" : "user";
-    if (role === "assistant") continue;
-    const content = String(msg?.content || msg?.text || "").trim();
-    if (!content || isChartQuestionOnly(content)) continue;
-    lines.push(content);
-  }
-  if (
-    !lines.length &&
-    typeof fallbackDelta === "string" &&
-    fallbackDelta.trim()
-  ) {
-    if (!isChartQuestionOnly(fallbackDelta)) lines.push(fallbackDelta.trim());
-  }
-  return lines.join("\n");
-}
-
-function draftResultFromPayload(draftPayload = {}) {
-  const medicines = Array.isArray(draftPayload.medicines)
-    ? draftPayload.medicines
-    : [];
-  const labTests = Array.isArray(draftPayload.labTests)
-    ? draftPayload.labTests
-    : [];
-  const procedures = Array.isArray(draftPayload.procedures)
-    ? draftPayload.procedures
-    : [];
-  const doctorNotes = String(draftPayload.doctorNotes || "").trim();
-  return {
-    noteFormat: "labeled",
-    assistantReply: "",
-    symptoms: "",
-    pastMedicalHistory: "",
-    provisionalDiagnosis: "",
-    medicines,
-    labTests,
-    procedures,
-    vitals: draftPayload.vitals || {},
-    medicinesToApply: medicines.filter(
-      (med) => String(med?.action || "add").toLowerCase() === "add",
-    ),
-    medicinesToStop: Array.isArray(draftPayload.medicinesToStop)
-      ? draftPayload.medicinesToStop
-      : medicines.filter(
-          (med) => String(med?.action || "").toLowerCase() === "stop",
-        ),
-    labTestsToApply: labTests
-      .filter((test) => String(test?.action || "add").toLowerCase() === "add")
-      .map((test) => test.name),
-    proceduresToApply: procedures.filter(
-      (proc) => String(proc?.action || "add").toLowerCase() === "add",
-    ),
-    noteOperations: [],
-    doctorNotes,
-  };
-}
-
-function summarizeDraftForReply(result) {
-  const bits = [];
-  if (result.doctorNotes?.trim()) {
-    bits.push(`Note:\n${result.doctorNotes.trim()}`);
-  }
-  const meds = (result.medicinesToApply || result.medicines || [])
-    .map((med) => med.description || med.correctedName || med.name)
-    .filter(Boolean);
-  if (meds.length) bits.push(`Medicines: ${meds.join(", ")}`);
-  const labs = result.labTestsToApply?.length
-    ? result.labTestsToApply
-    : (result.labTests || []).map((lab) => lab.name || lab).filter(Boolean);
-  if (labs.length) bits.push(`Labs: ${labs.join(", ")}`);
-  if (!bits.length)
-    return "Nothing in the working chart yet — send clinical details.";
-  return `Here's what we have so far:\n\n${bits.join("\n\n")}`;
-}
-
-function buildExtractionReply(result, latestUserText) {
-  if (isChartQuestionOnly(latestUserText)) {
-    return summarizeDraftForReply(result);
-  }
-  const meds = result.medicinesToApply || [];
-  const labs = result.labTestsToApply || [];
-  const stops = result.medicinesToStop || [];
-  const hasNote = Boolean(String(result.doctorNotes || "").trim());
-  const medName = (med) => med.description || med.name || "medicine";
-  const labName = (lab) =>
-    typeof lab === "string" ? lab : lab?.name || "lab";
-
-  if (meds.length === 1 && !labs.length && !stops.length && !hasNote) {
-    return `I've added ${medName(meds[0])}.`;
-  }
-  if (labs.length === 1 && !meds.length && !stops.length) {
-    return `I've ordered ${labName(labs[0])}.`;
+/**
+ * Shared AI Write extract — same rules/prompt/passes as /parse-clinical-note.
+ */
+async function parseClinicalNoteContent({
+  clinicalNote,
+  age,
+  gender,
+  allergies,
+  existingContext,
+  mode = "replace",
+  clinicalSetting = "opd",
+}) {
+  const note = String(clinicalNote || "").trim();
+  if (!note) {
+    const err = new Error("clinicalNote is required");
+    err.status = 400;
+    throw err;
   }
 
-  const bits = [];
-  if (hasNote) bits.push("updated the note");
-  if (meds.length === 1) bits.push(`added ${medName(meds[0])}`);
-  else if (meds.length > 1) bits.push(`added ${meds.length} medicines`);
-  if (labs.length === 1) bits.push(`ordered ${labName(labs[0])}`);
-  else if (labs.length > 1) bits.push(`ordered ${labs.length} labs`);
-  if (stops.length) bits.push("noted a medicine to stop");
+  const context = buildPatientContextLine({ age, gender, allergies });
+  const response = await callParseClinicalNoteCompletion([
+    {
+      role: "system",
+      content: PARSE_CLINICAL_NOTE_SYSTEM_PROMPT,
+    },
+    {
+      role: "user",
+      content: PARSE_CLINICAL_NOTE_USER_PROMPT(
+        note,
+        context,
+        existingContext,
+        mode,
+        clinicalSetting,
+      ),
+    },
+  ]);
 
-  if (!bits.length) {
-    return "Got it — send more details anytime.";
+  if (!response?.data?.choices?.[0]?.message?.content) {
+    const err = new Error("Invalid response from OpenAI API");
+    err.status = 502;
+    throw err;
   }
-  if (bits.length === 1) {
-    return `I've ${bits[0]}.`;
-  }
-  return `I've ${bits.slice(0, -1).join(", ")} and ${bits[bits.length - 1]}.`;
+
+  const content = response.data.choices[0].message.content.trim();
+  const parsed = JSON.parse(extractJsonObject(content));
+  const withMedicinePasses = await applyAiOnlyMedicinePasses(parsed, note);
+  return finalizeParsedClinicalNote(withMedicinePasses, existingContext);
 }
 
 /**
@@ -1152,62 +1076,42 @@ router.post("/parse-clinical-note", async (req, res) => {
       });
     }
 
-    const context = buildPatientContextLine({ age, gender, allergies });
-
-    let response;
     try {
-      response = await callParseClinicalNoteCompletion([
-        {
-          role: "system",
-          content: PARSE_CLINICAL_NOTE_SYSTEM_PROMPT,
-        },
-        {
-          role: "user",
-          content: PARSE_CLINICAL_NOTE_USER_PROMPT(
-            clinicalNote,
-            context,
-            existingContext,
-            mode,
-            clinicalSetting,
-          ),
-        },
-      ]);
-    } catch (apiError) {
-      console.error(
-        "OpenAI API error:",
-        apiError?.response?.data || apiError.message,
-      );
-      return res.status(502).json({
-        error: "Failed to contact OpenAI API",
-        details: apiError?.response?.data || apiError.message,
-      });
-    }
-
-    if (
-      !response?.data?.choices ||
-      !response.data.choices[0]?.message?.content
-    ) {
-      return res
-        .status(500)
-        .json({ error: "Invalid response from OpenAI API" });
-    }
-
-    const content = response.data.choices[0].message.content.trim();
-
-    try {
-      const parsed = JSON.parse(extractJsonObject(content));
-      const withMedicinePasses = await applyAiOnlyMedicinePasses(
-        parsed,
+      const result = await parseClinicalNoteContent({
         clinicalNote,
-      );
-      res.json(finalizeParsedClinicalNote(withMedicinePasses, existingContext));
-    } catch (parseError) {
-      console.error("Error parsing AI response:", parseError);
-      console.error("AI Response:", content);
-      res.status(500).json({
-        error: "Failed to parse AI response",
-        details: parseError.message,
+        age,
+        gender,
+        allergies,
+        existingContext,
+        mode,
+        clinicalSetting,
       });
+      return res.json(result);
+    } catch (apiError) {
+      if (apiError?.status === 400) {
+        return res.status(400).json({ error: apiError.message });
+      }
+      if (
+        apiError?.message === "Invalid response from OpenAI API" ||
+        apiError?.response
+      ) {
+        console.error(
+          "OpenAI API error:",
+          apiError?.response?.data || apiError.message,
+        );
+        return res.status(502).json({
+          error: "Failed to contact OpenAI API",
+          details: apiError?.response?.data || apiError.message,
+        });
+      }
+      if (apiError instanceof SyntaxError || /JSON/i.test(apiError.message)) {
+        console.error("Error parsing AI response:", apiError);
+        return res.status(500).json({
+          error: "Failed to parse AI response",
+          details: apiError.message,
+        });
+      }
+      throw apiError;
     }
   } catch (error) {
     console.error("Error parsing clinical note:", error);
@@ -1220,8 +1124,7 @@ router.post("/parse-clinical-note", async (req, res) => {
 
 /**
  * POST /merge-clinical-draft
- * AI Chat UI + same extraction engine as AI Write (parse-clinical-note).
- * Re-extracts the full doctor transcript each turn for Write-quality output.
+ * AI Write chat — conversational agent; clinical structuring uses AI Write extract rules.
  */
 router.post("/merge-clinical-draft", async (req, res) => {
   try {
@@ -1239,118 +1142,24 @@ router.post("/merge-clinical-draft", async (req, res) => {
     const draftPayload =
       currentDraft && typeof currentDraft === "object" ? currentDraft : {};
 
-    let conversation = Array.isArray(chatMessages) ? chatMessages : [];
-    if (
-      !conversation.length &&
-      typeof deltaText === "string" &&
-      deltaText.trim()
-    ) {
-      conversation = [{ role: "user", content: deltaText.trim() }];
-    }
+    const result = await runAiWriteVisitAgent({
+      messages: chatMessages,
+      currentDraft: draftPayload,
+      age,
+      gender,
+      allergies,
+      existingContext,
+      clinicalSetting,
+      deltaText,
+      parseClinicalNote: parseClinicalNoteContent,
+    });
 
-    const latestUser = [...conversation]
-      .reverse()
-      .find((msg) => (msg?.role || "user") !== "assistant");
-    const latestUserText = String(
-      latestUser?.content || latestUser?.text || deltaText || "",
-    ).trim();
-
-    if (!latestUserText) {
-      return res.status(400).json({
-        error: "A doctor message is required",
-      });
-    }
-
-    // Questions: keep current chart, reply with summary (no re-extract).
-    if (isChartQuestionOnly(latestUserText)) {
-      const kept = draftResultFromPayload(draftPayload);
-      kept.assistantReply = summarizeDraftForReply(kept);
-      return res.json(kept);
-    }
-
-    const clinicalNote = doctorTranscriptFromChat(conversation, deltaText);
-    if (!clinicalNote.trim()) {
-      return res.status(400).json({
-        error: "No clinical content to extract",
-      });
-    }
-
-    const context = buildPatientContextLine({ age, gender, allergies });
-
-    // Same model + system prompt + temperature as AI Write extract.
-    let response;
-    try {
-      response = await callParseClinicalNoteCompletion([
-        {
-          role: "system",
-          content: `${PARSE_CLINICAL_NOTE_SYSTEM_PROMPT}
-
-CHAT TRANSCRIPT MODE
-- CURRENT INPUT is the doctor's full chat transcript for this session (multiple lines / corrections).
-- Apply later lines that correct earlier ones ("remove cough", "stop dolo", "change advice…").
-- Produce the FINAL chart after the whole transcript — same extraction quality as one-shot AI Write.
-- Include assistantReply: one short natural sentence (spoken English) confirming what you did — e.g. "I've added Dolo 650 twice a day for 3 days and ordered CBP." Never use bullet-style inventory like "Updated note · 2 meds".`,
-        },
-        {
-          role: "user",
-          content: PARSE_CLINICAL_NOTE_USER_PROMPT(
-            clinicalNote,
-            context,
-            existingContext,
-            "replace",
-            clinicalSetting,
-          ),
-        },
-      ]);
-    } catch (apiError) {
-      console.error(
-        "OpenAI clinical chat extract error:",
-        apiError?.response?.data || apiError.message,
-      );
-      return res.status(502).json({
-        error: "Failed to contact OpenAI API",
-        details: apiError?.response?.data || apiError.message,
-      });
-    }
-
-    if (
-      !response?.data?.choices ||
-      !response.data.choices[0]?.message?.content
-    ) {
-      return res
-        .status(500)
-        .json({ error: "Invalid response from OpenAI API" });
-    }
-
-    const content = response.data.choices[0].message.content.trim();
-
-    try {
-      const parsed = JSON.parse(extractJsonObject(content));
-      const withMedicinePasses = await applyAiOnlyMedicinePasses(
-        parsed,
-        clinicalNote,
-      );
-      const result = finalizeParsedClinicalNote(
-        withMedicinePasses,
-        existingContext,
-      );
-      result.assistantReply =
-        String(
-          withMedicinePasses.assistantReply || parsed.assistantReply || "",
-        ).trim() || buildExtractionReply(result, latestUserText);
-      res.json(result);
-    } catch (parseError) {
-      console.error("Error parsing clinical chat extract:", parseError);
-      console.error("AI Response:", content);
-      res.status(500).json({
-        error: "Failed to parse AI response",
-        details: parseError.message,
-      });
-    }
+    return res.json(result);
   } catch (error) {
     console.error("Error in clinical chat:", error);
-    res.status(500).json({
-      error: "Failed to process clinical chat",
+    const status = error.status || 500;
+    return res.status(status).json({
+      error: error.message || "Failed to process clinical chat",
       details: error.message,
     });
   }
