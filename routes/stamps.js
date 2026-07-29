@@ -123,7 +123,7 @@ router.delete("/:id", async (req, res) => {
 });
 
 // Toggle stamp active status
-router.patch("/:id/toggle", async (req, res) => {
+router.put("/:id/toggle", async (req, res) => {
   try {
     const Stamp = req.tenantDb.model("Stamp");
     const stamp = await Stamp.findOne({

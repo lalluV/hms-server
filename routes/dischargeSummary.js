@@ -12,6 +12,38 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = "gpt-4o-mini";
 // Note parsing is the most instruction-sensitive call; override without a deploy if needed.
 const PARSE_NOTE_MODEL = process.env.OPENAI_PARSE_MODEL || OPENAI_MODEL;
+const PARSE_NOTE_TIMEOUT_MS =
+  Number(process.env.OPENAI_PARSE_TIMEOUT_MS) || 60000;
+const PARSE_NOTE_MAX_TOKENS =
+  Number(process.env.OPENAI_PARSE_MAX_TOKENS) || 3500;
+
+async function callParseClinicalNoteCompletion(
+  messages,
+  { timeoutMs = PARSE_NOTE_TIMEOUT_MS } = {},
+) {
+  const payload = {
+    model: PARSE_NOTE_MODEL,
+    messages,
+    max_tokens: PARSE_NOTE_MAX_TOKENS,
+    temperature: 0.1,
+    top_p: 0.9,
+    response_format: { type: "json_object" },
+  };
+  try {
+    return await openaiApi.post("/chat/completions", payload, {
+      timeout: timeoutMs,
+    });
+  } catch (firstError) {
+    const timedOut =
+      firstError?.code === "ECONNABORTED" ||
+      /timeout/i.test(String(firstError?.message || ""));
+    if (!timedOut) throw firstError;
+    console.warn("Parse clinical note timed out; retrying once…");
+    return openaiApi.post("/chat/completions", payload, {
+      timeout: timeoutMs,
+    });
+  }
+}
 
 const openaiApi = axios.create({
   baseURL: OPENAI_API_BASE_URL,
@@ -20,6 +52,104 @@ const openaiApi = axios.create({
     Authorization: `Bearer ${OPENAI_API_KEY}`,
   },
 });
+
+function medicineTextBlob(med = {}) {
+  return [
+    med.sourceText,
+    med.name,
+    med.description,
+    med.directions,
+    med.patientDirections,
+    med.instructions,
+    med.duration,
+    med.frequency,
+    med.dosage,
+    med.strength,
+  ]
+    .map((value) => String(value || ""))
+    .join(" ");
+}
+
+/** Heuristic only: decide whether to ask the model to re-split medicines. */
+function medicineLooksPackedTaper(med = {}) {
+  const blob = medicineTextBlob(med);
+  if (!/\b(?:then|followed\s+by)\b|→/i.test(blob)) return false;
+  const withoutCourseStop = blob.replace(/\bthen\s+stop\b/gi, " ");
+  if (
+    /\bthen\s+stop\b/i.test(blob) &&
+    !/\bthen\s+(?:half\s+)?\d+/i.test(withoutCourseStop)
+  ) {
+    return false;
+  }
+  const strengths = withoutCourseStop.match(
+    /\b\d+(?:\.\d+)?\s*(?:mg|mcg|µg|g|gm)?\b/gi,
+  );
+  return (
+    /\bthen\s+(?:half\s+)?\d+/i.test(withoutCourseStop) ||
+    (strengths && strengths.length >= 2)
+  );
+}
+
+function medicinesNeedTaperExpandPass(medicines = []) {
+  return (Array.isArray(medicines) ? medicines : []).some(
+    medicineLooksPackedTaper,
+  );
+}
+
+const TAPER_EXPAND_SYSTEM_PROMPT = `You fix medicine rows for an Indian hospital EMR. Return valid JSON only: { "medicines": [ ... ] }.
+
+Task: split any PACKED sequential taper into separate medicines[] objects. Leave non-taper medicines unchanged.
+
+Rules:
+- Same-day "and"/"also"/"plus" doses stay ONE row.
+- "then"/"next"/"followed by"/"→" with changing strength or schedule → SEPARATE rows (one object per step).
+- Short course "days then stop" stays ONE add row (not a taper split into stop).
+- Keep brand in name; fill generic_name when known.
+- directions: simple morning/afternoon/evening/night English (no twice/thrice/BD/OD/TDS as patient text).
+- dosages: time, amount, beforeFood; unit "" for Tablet/Capsules else short (ml|IU|drop|puff|app|U|sach).
+
+Shape example (anonymous):
+Input packed: BrandX 20 bd 5d then 10 3d then 5 3d
+Output length 3: BrandX 20 (5 days), BrandX 10 (next 3 days), BrandX 5 (next 3 days).`;
+
+async function expandPackedTapersWithAi(medicines = [], clinicalNote = "") {
+  const list = Array.isArray(medicines) ? medicines : [];
+  if (!medicinesNeedTaperExpandPass(list)) return list;
+
+  try {
+    const response = await callParseClinicalNoteCompletion(
+      [
+        { role: "system", content: TAPER_EXPAND_SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: `ORIGINAL NOTE (context only):\n${clinicalNote}\n\nCURRENT medicines[] JSON:\n${JSON.stringify(list)}\n\nReturn the corrected { "medicines": [...] } only.`,
+        },
+      ],
+      { timeoutMs: Math.min(PARSE_NOTE_TIMEOUT_MS, 45000) },
+    );
+    const content = response?.data?.choices?.[0]?.message?.content?.trim();
+    if (!content) return list;
+    const parsed = JSON.parse(extractJsonObject(content));
+    const next = Array.isArray(parsed.medicines) ? parsed.medicines : null;
+    if (!next?.length) return list;
+    return next;
+  } catch (err) {
+    console.warn(
+      "Taper expand pass failed; keeping first-pass medicines:",
+      err?.message || err,
+    );
+    return list;
+  }
+}
+
+async function applyAiOnlyMedicinePasses(parsed, clinicalNote) {
+  if (!parsed || typeof parsed !== "object") return parsed;
+  const medicines = await expandPackedTapersWithAi(
+    parsed.medicines,
+    clinicalNote,
+  );
+  return { ...parsed, medicines };
+}
 
 function stripMarkdownFormatting(text) {
   if (!text || typeof text !== "string") return text;
@@ -251,224 +381,104 @@ Critical constraints:
 - Match the requested section format precisely
 - For SOAP notes: use ONLY S: O: A: P: letter labels — never write Subjective, Objective, Assessment, or Plan as headers`;
 
-const {
-  matchMedicineToCatalog,
-  matchLabTestToCatalog,
-  matchProcedureToCatalog,
-} = require("../utils/clinicalNoteMatcher");
+const PARSE_CLINICAL_NOTE_SYSTEM_PROMPT = `You are a medical scribe for an Indian hospital EMR. Convert the CURRENT doctor dictation or consult transcript into the requested JSON. Return valid JSON only. You are the ONLY clinical authority for this output — structure everything correctly yourself.
 
-const PARSE_CLINICAL_NOTE_SYSTEM_PROMPT = `You are a medical scribe for an Indian hospital EMR. Convert the CURRENT doctor dictation or consult transcript into the requested JSON. Return valid JSON only.
+COMPLETENESS AND SAFETY
+- Preserve every clinical fact from the current input, regardless of writing style, shorthand, language mix, or transcript quality.
+- Extract only stated facts. Never invent a diagnosis, order, dose, route, duration, result, or vital.
+- When clinical structure is uncertain, preserve the doctor's meaning in clear text instead of guessing.
+- Existing chart context is reference only; never copy it as a new current fact.
 
-COMPLETENESS (highest priority — style-agnostic)
-- Doctors write in many styles: full sentences, CAPS shorthand, abbreviations, Telugu/English mix, bullets, or one long line. Accept all styles.
-- Every clinical fact in the current input MUST appear in the output. Never drop a line because the wording is unusual, abbreviated, or names a procedure/drug/test.
-- Prefer keeping a fact in noteSections over discarding it. If unsure whether something is an order vs narrative, keep the polished narrative in noteSections AND only add an order when the doctor is clearly ordering it for THIS visit.
-- Before answering, mentally scan the input clause-by-clause (split on newlines, semicolons, or distinct clinical phrases). Each clause must map to noteSections and/or an order/vital. Zero silent drops.
+TEMPORAL AND SEMANTIC ROUTING
+- Past conditions, prior events, and background medicines → history (not diagnosis).
+- Observed findings → examination.
+- Counsel, precautions, follow-up, conditional plans ("if needed", "if not better") → advice.
+- Medicines, investigations, procedures, and measured vitals ordered or recorded now → structured fields only.
+- A finite medicine course that ends afterward remains action "add". action "stop" only when the doctor explicitly discontinues/holds/removes/omits a medicine.
 
-CORE RULES
-- Extract only facts stated in the current input. Existing chart context is reference only; never copy it as new content.
-- Translate Telugu/Hindi/mixed speech into concise professional English. Ignore greetings, filler and repetition.
-- Never infer a diagnosis, medicine, test, procedure or vital from another clinical fact. A diagnosis alone produces no orders.
-- Route each current fact once by meaning (not by keyword matching):
-  narrative / assessment / plan language → noteSections
-  drugs being prescribed/stopped/continued now → medicines[]
-  lab/imaging being ordered now → labTests[]
-  services/procedures being done or ordered for THIS visit → procedures[]
-  measured BP/pulse/temp/SpO2/RR/weight/height → vitals
+COMPLAINTS VS DIAGNOSIS (HARD — UNIVERSAL)
+- complaints / symptoms: ONLY what the patient presents with now (symptoms, complaints, with or without duration). Symptom language stays here regardless of wording style.
+- diagnosis / provisionalDiagnosis: ONLY a disease label, clinical impression, or named condition the doctor stated as diagnosis/impression (e.g. UTI, viral fever, GERD, hypertension, acute gastritis).
+- NEVER copy, paraphrase, or mirror a complaints bullet into diagnosis. No overlapping text between the two sections.
+- If the note has symptoms but no named diagnosis/impression, leave diagnosis [] and provisionalDiagnosis "".
+- Words like fever, pain, cough, cold, burning, itching, vomiting, diarrhea, headache, body ache, weakness belong in complaints — never in diagnosis — unless the doctor explicitly names a disease/impression.
 
-TEMPORAL ROUTING (global — any wording)
-- Past / prior / already done / status-post / known case / history of / "on <drug>" as background → history (noteSections). Do NOT create a today's procedure/lab/medicine order for background alone.
-- Presenting symptoms / complaints → complaints.
-- Exam findings observed now → examination.
-- Impression / diagnosis → diagnosis.
-- Counsel, precautions, follow-up timing, review dates, and planned future care (including future procedure/removal dates) → advice.
-- Only actions intended for THIS visit go into medicines[] / labTests[] / procedures[] with action "add".
+NOTE SECTIONS (BULLETS — REQUIRED)
+- Always fill noteSections arrays. Each array item is ONE short bullet in clear English.
+- complaints / history / examination / diagnosis / advice: one fact per bullet.
+- Mirror into symptoms, pastMedicalHistory, provisionalDiagnosis as newline "• " bullets — same facts as complaints / history / diagnosis respectively (never put complaints facts into provisionalDiagnosis).
+- Expand shorthand into readable English. Never put today's drug/lab/imaging orders inside noteSections.
 
-LISTEN / AMBIENT TRANSCRIPTS
-- Input may be a messy doctor–patient consult transcript (overlaps, ASR errors, Indic code-mix). Still extract every clinical fact.
-- Never drop patient-stated complaints, durations, severity or negatives (e.g. "no vomiting") even if soft, fragmented, in Telugu/Hindi, or spoken by the patient rather than the doctor — put them in complaints/history in English.
-- Extract every explicitly named drug with dosage/frequency/duration even when embedded mid-sentence ("start Dolo six fifty BD three days", "give pantop 40 od").
-- Correct common Indian ASR near-misses when clinical context is clear: "dollar/dolo/dollo 650"→Dolo 650; "pantop/pan top/pan 40"→Pantop or PAN; "azithro"→Azithromycin; "see bee see/CBC"→CBC; "L F T"→LFT; "0d"→OD.
-- Prefer the spoken brand for name/description; put strength only in dosage (650 mg), frequency in frequency (BD), duration in duration (3 days).
+MEDICINE NAMES — BRAND + GENERIC
+- name: spoken BRAND when a brand was spoken. Correct obvious misspellings when confident (e.g. dollo→Dolo, faropenam→Faropenem, azi/azithro→Azithromycin only when used as generic antibiotic shorthand). Never replace a brand with its generic chemical name in "name" (Pantop/PAN stays Pantop or PAN, not Pantoprazole; Dolo stays Dolo, not Paracetamol; Telma stays Telma).
+- If unsure of spelling, keep EXACTLY as the doctor wrote.
+- generic_name: ALWAYS fill when you know the generic/salt (e.g. name "Dolo 650", generic_name "Paracetamol"; name "Pantop 40", generic_name "Pantoprazole"). If unknown, leave generic_name "".
+- Expand GENERIC-only shorthand when no brand was spoken (PCM→Paracetamol). Keep strength in name when it distinguishes products.
+- type from spoken form: tab→Tablet, inj→Injection, drops/eye drops/tears→Drops, syp→Syrup, ointment/cream→Ointment, etc.
 
-NOTE SECTIONS
-- Default noteFormat is "labeled". Put short, single-line facts in complaints, history, examination, diagnosis or advice.
-- Preserve symptom durations, severity, qualifiers, dates and negative findings.
-- Expand abbreviations into clear English when meaning is clear (any local shorthand is fine — do not require a specific format). Fix obvious date typos like 19/726 → 19/7/26.
-- Mirror the same facts into symptoms / pastMedicalHistory / provisionalDiagnosis when those fields apply (server may use them as backup).
-- Drugs being prescribed now, lab/imaging orders for now, and vital numbers never belong in noteSections.
-- "Advise/send/do/get/order/repeat/check" + a lab/imaging test ordered now → labTests[], not advice.
-- Planned future procedures, removals, surgery dates, review/follow-up → advice, not procedures[].
-- Past procedures/surgeries/results mentioned as background → history, not procedures[]/labTests[].
-- Return doctorNotes "" for labeled notes; the server renders headings and bullets.
-- Only when existingContext.noteFormat is "soap": set noteFormat "soap", leave noteSections empty and use doctorNotes with S:/O:/A:/P: bullet sections. Orders still stay outside doctorNotes.
+TAPERS / SEQUENTIAL (MULTI medicines[] ROWS — REQUIRED)
+- Same-day concurrent doses ("and"/"also"/"plus" same day) → ONE medicines[] object.
+- Sequential/taper "then"/"next"/"followed by"/"→" with changing strength or schedule → SEPARATE medicines[] objects. If 3 steps, medicines[] length MUST be 3. Never pack a taper into one directions paragraph.
+- Count strength/schedule steps after each "then". medicines[] length for that drug MUST equal that step count.
+- Each step: own name (with that step's strength), frequency, duration, directions (that step only), dosages, action "add".
+- Short course "… days then stop" → ONE add row; put "then stop" in directions; action is NOT stop.
 
-NOTE RECONCILIATION
-- existingContext.noteSections contains compact existing bullets. Keep current facts in noteSections as usual.
-- noteOperations may remove an exact existing bullet only when the current input clearly contradicts, corrects or refines the same clinical concept.
-- Each removal must copy section and target exactly from existingContext.noteSections. Remove every superseded variant separately.
-- Never remove unrelated complaints/diagnoses or anything when the relationship is uncertain. Never target medicines, labs, procedures or vitals.
-- Example: existing complaints ["Fever","Fever for 3 days"], current "no fever" → current complaints ["No fever"] plus two remove operations targeting both old fever bullets.
-- Example: existing diagnoses ["Spine pain","Spinecord pain"], current "diagnosis spine disc problem" → current diagnosis ["Spine disc problem"] plus two remove operations.
+TAPER SHAPE (follow this structure — names are anonymous placeholders only):
+Doctor: "BrandX 20 bd 5d then 10 3d then 5 3d"
+Correct medicines[] (length 3):
+1) name "BrandX 20", duration "5 days", directions morning+evening for 5 days, dosages Morning+Evening
+2) name "BrandX 10", duration "next 3 days", directions morning+evening for next 3 days, dosages Morning+Evening
+3) name "BrandX 5", duration "next 3 days", directions morning+evening for next 3 days, dosages Morning+Evening
+Wrong: one medicine whose directions list all three steps.
 
-ORDERS AND ACTIONS
-- Extract every explicitly spoken order for THIS visit, including orders embedded in conversation.
-- action "add": new/restarted/changed order now.
-- action "continue": doctor explicitly says continue/same/ongoing, or repeats an existingContext medicine name without stating a change.
-- action "note_only": historical or discussed only — and STILL put the polished narrative into the matching noteSections (history/advice/examination). Never use note_only as a way to hide content from the chart note.
-- medicine action "stop": explicitly stop/remove/hold that named drug.
-- Never return action "stop" merely because an existing medicine was repeated or omitted from the current input.
-- Empty arrays and empty vitals are correct when nothing was ordered or measured.
+STOP / DELETE MEDICINES (REQUIRED)
+- If the doctor says stop / stopped / discontinue / hold / remove / delete / omit a NAMED medicine → include that medicine in medicines[] with action "stop".
+- directions for stop rows: short plain text like "Stop this medicine".
+- Prefer the chart name from existingContext.medicineNames when it matches the spoken stop target.
+- "3 days then stop" / "od 5d then stop" on a NEW course is NOT a stop action — that is action "add" with "then stop" in directions.
+- Do not invent stops for medicines merely omitted from the note.
 
-MEDICINES
-- Keep the spoken brand as name/description; do not replace Dolo, Crocin, Telma, T-Bact, Pantop or other brands with generics.
-- name and description contain ONLY the corrected medicine/brand name. Never include "Tab", "Cap", "Inj", strength, dose, frequency, duration or instructions in either field; those belong in type/dosage/frequency/duration/instructions.
-- Correct obvious medicine spelling, capitalization and punctuation while preserving brand identity: faropenam→Faropenem, limvit→Limvit, pan→PAN, mvi→MVI, pregaba m→Pregaba-M.
-- Expand generic shorthand only when no brand was spoken: PCM/Para → Paracetamol; Azithro → Azithromycin; Amox → Amoxicillin; Pantop → Pantoprazole.
-- type: Tablet, Capsules, Injection, Syrup, Ointment, Gel, Sachet, Syringe or Other. The explicit spoken form is absolute: tab/tablet→Tablet, cap→Capsules, inj→Injection, syrup/syp→Syrup. Never change a spoken tablet to Injection based on drug knowledge. Default Tablet only when no form was spoken.
-- Normalize the common transcription error "0d" (zero-d) to frequency "OD".
-- For action "add", return dosage, frequency and duration. Infer a common adult value only for a drug the doctor explicitly named and only when the omitted value is well established.
-- Background "patient is on X" / "known case on X" → history note + medicines action "note_only" or "continue" if clearly ongoing; do not invent a new prescription schedule.
-- Keep instructions such as before/after food. Never invent item_code, manufacturer or pack.
+DURATION
+- If duration is stated for a medicine, fill it.
+- If several medicines are ordered in the same clause/list and only one shared duration is stated (e.g. "… bd 5d" covering the group), apply that duration to each med in that group.
+- If no duration is stated anywhere for a medicine, leave duration "".
 
-LABS AND PROCEDURES
-- CBP, CUE, CBC, ESR, CRP, LFT, KFT/RFT, HbA1c, TSH, FBS/PPBS/RBS, lipid profile, Widal, MP smear, NS1, ECG, USG and X-ray are labTests when ordered now; never medicines or advice.
-- Normalize obvious speech variants: hemogram/cb c→CBC; complete blood picture→CBP; complete urine examination→CUE; liver function→LFT; renal function→KFT; cxr→X-Ray Chest; sonography→USG; ekg→ECG.
-- Past/reported results ("USG showed stone", "CBP normal last week") → history or examination narrative; do not create a new lab order unless the doctor orders a repeat now.
-- procedures[] only for services being ordered or performed for THIS visit.
-- Deduplicate orders.
-- In vitals, return values without labels or units: temperature as its spoken numeric value ("98.6"), SpO2 ("98"), pulse ("80"), RR ("18"), and BP as systolic/diastolic ("120/80").
+DIRECTIONS (LAYMAN ENGLISH — REQUIRED)
+- directions: simple Indian patient English. Never use twice, thrice, BD, OD, TDS, QID, HS, SOS, PRN as the only patient text.
+- Use morning / afternoon / evening / night. Examples: "Take 1 tablet in the morning and 1 tablet in the evening for 5 days"; "Instill 2 drops in each eye in the morning, afternoon and evening for 7 days"; "Take 1 tablet only if fever".
+- Map: OD→morning (or night if HS), BD→morning and evening, TDS→morning afternoon evening, QID→all four, HS→at night, SOS→only when needed / only if [reason].
 
-HIGH-VALUE EXAMPLES (different doctor styles — same completeness rule)
-- "azithro 3d tid, pantop 3d bd, dolo 650 3d bd" → medicines only; noteSections empty; doctorNotes "".
-- "tab faropenam 200mg bd; tab limvit bd; tab pan 40mg od; tab mvi od; tab pregaba m 75mg od" → five medicines, all type Tablet; name/description values are only Faropenem, Limvit, PAN, MVI, Pregaba-M.
-- "fever 4 days, cold, cough, advise cbp and lft" → complaints for the three symptoms; CBP and LFT in labTests; advice empty.
-- "diagnosis spine pain" → diagnosis only; order arrays empty.
-- "chest clear, plenty of fluids, review after 3 days" → examination ["Chest clear"]; advice ["Plenty of fluids","Review after 3 days"].
-- Caps shorthand: "POST URSL PLUS DJ STENTING ON 19/726 / ADV STENT REMOVAL ON 2/8/26 / MILD PAIN N BURNING MICTURITION PRESENT" → history ["Post URSL plus DJ stenting on 19/7/26"]; advice ["Advise stent removal on 2/8/26"]; complaints ["Mild pain and burning micturition present"]; procedures[] empty.
-- Sentence style: "Patient underwent appendectomy 2 years ago. Advise follow-up in 1 week. Complains of mild abdominal pain." → history, advice, complaints accordingly; no procedure order.
-- Mixed: "k/c/o DM on metformin, c/o fever 2 days, plan review SOS, adv CBP" → history ["Known case of DM on metformin"]; complaints ["Fever for 2 days"]; advice ["Review SOS"]; labTests ["CBP"]; no metformin add unless newly prescribed now.
+DOSAGES GRID (M/A/E/N)
+- For fixed daily schedules fill dosages[] with Morning/Afternoon/Evening/Night as needed.
+- Each dosage object MUST include: time, amount (number), unit, beforeFood (true/false).
+- Tablet or Capsules type: unit MUST be "" (empty). Never put tablet/tab/capsule in unit — grid shows amount only (½, 1, 2…).
+- All other types: unit MUST be a short form only — ml | IU | drop | puff | app | U | sach. Never long words (tablet, millilitre, drops, application, international units).
+- If doctor says before food / empty stomach → beforeFood true on those slots. After food → beforeFood false and mention after food in directions.
+- Unequal same-day amounts (e.g. morning 10 IU and afternoon 15 IU) → one medicine, two dosage slots with correct amounts and unit "IU".
+- Do NOT invent a daily grid for SOS / weekly / alternate-day / sliding-scale / conditional schedules; leave dosages [] and put clear text in directions.
+
+LABS
+- Current orders → labTests as separate items (split "CBP + LFT" into CBP and LFT).
+- Do not duplicate the same lab.
+- Phrases like "again if needed", "if required", "repeat if needed" are advice — put them in advice bullets; do NOT create extra labTests from conditional wording alone.
+- Past results stay in history/examination narrative.
+
+ORDERS AND NOTES
+- action: add | continue | note_only | stop. Do not mark omitted existing items as stopped.
+- Procedures only for this visit; future planned care → advice.
+- Vitals: values only. Empty arrays/fields when unsupported.
+- Labeled notes: use noteSections; leave doctorNotes "". SOAP only when existing format is SOAP.
+- noteOperations: remove only an exact existing bullet the current input clearly corrects.
 
 FINAL CHECK
-- Completeness: every clinical clause from the input is present in noteSections and/or the correct order/vital field.
-- Remove only today's drug/lab/imaging/vital numbers that were accidentally left inside noteSections; never strip history, advice, exam, diagnosis, or past-procedure narrative.
-- Remove every order or vital not explicitly supported by the current input.
-- Do not drop a stated symptom, history line, advice/follow-up, duration, or explicitly spoken order.`;
-
-const VALID_NOTE_ACTIONS = new Set(["add", "continue", "note_only", "stop"]);
-
-const LAB_NAME_HINTS = [
-  "crp",
-  "cbc",
-  "esr",
-  "lft",
-  "kft",
-  "rft",
-  "hba1c",
-  "tsh",
-  "t3",
-  "t4",
-  "fbs",
-  "ppbs",
-  "rbs",
-  "blood sugar",
-  "lipid",
-  "troponin",
-  "d-dimer",
-  "ddimer",
-  "procalcitonin",
-  "pt/inr",
-  "inr",
-  "aptt",
-  "widal",
-  "dengue",
-  "ns1",
-  "malaria",
-  "urine",
-  "usg",
-  "ultrasound",
-  "ecg",
-  "ekg",
-  "x-ray",
-  "xray",
-  "cxr",
-  "vitamin d",
-  "vitamin b12",
-  "b12",
-  "hiv",
-  "hbsag",
-  "hemogram",
-  "haemogram",
-  "thyroid",
-  "renal function",
-  "liver function",
-  "complete blood",
-  "cbp",
-  "complete blood picture",
-  "blood picture",
-  "cue",
-  "complete urine examination",
-  "urine routine",
-  "lipid profile",
-  "mp smear",
-  "sputum",
-  "culture",
-  "biopsy",
-  "psa",
-  "ferritin",
-  "amylase",
-  "lipase",
-  "vdrl",
-  "blood group",
-];
-
-function normalizeLabHint(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9/+ ]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function looksLikeLabTestName(name) {
-  const n = normalizeLabHint(name);
-  if (!n) return false;
-  if (
-    LAB_NAME_HINTS.some(
-      (hint) => n === hint || n.includes(hint) || hint.includes(n),
-    )
-  ) {
-    return true;
-  }
-  return /\b(test|count|panel|profile|assay|titre|titer|function)\b/.test(n);
-}
-
-function reclassifyMisplacedLabs(medicines = [], labTests = []) {
-  const nextLabs = [...labTests];
-  const nextMedicines = [];
-
-  for (const med of medicines) {
-    const name = String(
-      med.inventoryMatch || med.correctedName || med.name || "",
-    ).trim();
-    if (looksLikeLabTestName(name)) {
-      const already = nextLabs.some(
-        (test) =>
-          normalizeLabHint(test.name || test) === normalizeLabHint(name),
-      );
-      if (!already) {
-        nextLabs.push({
-          name,
-          action: med.action === "stop" ? "add" : med.action || "add",
-        });
-      }
-      continue;
-    }
-    nextMedicines.push(med);
-  }
-
-  return { medicines: nextMedicines, labTests: nextLabs };
-}
+- No complaints/symptoms text in diagnosis; diagnosis empty if no named disease/impression.
+- Tapers = multiple medicines[] rows (never one packed taper object).
+- Explicit stop/delete of a named drug = action "stop" row; course "then stop" stays action "add".
+- name is brand (not generic); generic_name filled when known.
+- directions are morning/afternoon/evening/night English (no twice/thrice).
+- Tablet/Capsule dosages: unit ""; other forms: short unit only; beforeFood when known.
+- Conditional labs are advice, not duplicate labTests.
+- No invented facts.`;
 
 const NOTE_SECTION_ORDER = [
   ["complaints", "Complaints"],
@@ -536,146 +546,6 @@ function normalizeNoteSections(rawSections) {
   return Object.keys(buckets).length ? buckets : null;
 }
 
-const ADVICE_ORDER_VERB =
-  /^(advise|advice|advised|send|sent|do|get|order|ordered|repeat|check)\s+(.+)$/i;
-
-/** Home-monitoring / conditional counsel must stay counsel even if it names a test. */
-const ADVICE_COUNSEL_HINT =
-  /\b(daily|weekly|monthly|regularly|home|monitor|monitoring|watch|if|when|avoid|continue|review|follow[- ]?up|removal|on\s+\d{1,2}[\/.\-]\d{1,2}(?:[\/.\-]\d{2,4})?)\b/i;
-
-/**
- * Advice must be counsel only. When the model still writes "Advise CBP" there,
- * move the investigation into labTests instead of dropping the fact.
- */
-function reclassifyAdviceOrders(sections, labTests) {
-  if (!sections?.advice?.length) return { sections, labTests };
-  const keptAdvice = [];
-  const nextLabs = [...labTests];
-
-  for (const item of sections.advice) {
-    const match = item.match(ADVICE_ORDER_VERB);
-    const candidate = match ? match[2].replace(/[.,;]+$/, "").trim() : "";
-    const isOrderPhrase =
-      candidate &&
-      candidate.length <= 40 &&
-      candidate.split(/\s+/).length <= 5 &&
-      !ADVICE_COUNSEL_HINT.test(candidate);
-    if (isOrderPhrase && looksLikeLabTestName(candidate)) {
-      const already = nextLabs.some(
-        (test) =>
-          normalizeLabHint(test?.name || test) === normalizeLabHint(candidate),
-      );
-      if (!already) nextLabs.push({ name: candidate, action: "add" });
-      continue;
-    }
-    keptAdvice.push(item);
-  }
-
-  const nextSections = { ...sections };
-  if (keptAdvice.length) nextSections.advice = keptAdvice;
-  else delete nextSections.advice;
-
-  return { sections: nextSections, labTests: nextLabs };
-}
-
-function sectionHasSimilarBullet(items, text) {
-  const compact = String(text || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-  if (!compact) return false;
-  return (items || []).some((item) => {
-    const other = String(item || "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "");
-    if (!other) return false;
-    return other.includes(compact) || compact.includes(other);
-  });
-}
-
-function sectionBucketHasSimilar(sections, text) {
-  if (!sections || !text) return false;
-  return NOTE_SECTION_ORDER.some(([key]) =>
-    sectionHasSimilarBullet(sections[key], text),
-  );
-}
-
-/**
- * Merge legacy string fields into noteSections so content is not lost when the
- * model fills symptoms/pastMedicalHistory/provisionalDiagnosis but omits
- * noteSections (or the reverse).
- */
-function mergeLegacyFieldsIntoSections(sections, parsed = {}) {
-  const next = { ...(sections || {}) };
-  const merge = (key, value) => {
-    const items = noteSectionItems(value);
-    if (!items.length) return;
-    next[key] = noteSectionItems([...(next[key] || []), ...items]);
-  };
-  merge("complaints", parsed.symptoms);
-  merge("history", parsed.pastMedicalHistory || parsed.pastHistory);
-  merge("diagnosis", parsed.provisionalDiagnosis || parsed.diagnosis);
-  return Object.keys(next).length ? next : null;
-}
-
-/**
- * Style-agnostic safety net: anything the model marked note_only is narrative
- * for the chart, not a visit order. Fold into history when missing from notes.
- */
-function foldNoteOnlyOrdersIntoHistory(
-  sections,
-  medicines,
-  procedures,
-  labTests,
-) {
-  const nextSections = { ...(sections || {}) };
-  const history = [...(nextSections.history || [])];
-
-  const fold = (bullet) => {
-    const text = String(bullet || "").trim();
-    if (!text) return;
-    if (sectionBucketHasSimilar(nextSections, text)) return;
-    if (sectionHasSimilarBullet(history, text)) return;
-    history.push(text);
-  };
-
-  for (const proc of procedures || []) {
-    if (String(proc?.action || "").toLowerCase() !== "note_only") continue;
-    const name = String(proc.correctedName || proc.name || "").trim();
-    if (!name) continue;
-    fold(/^post\b/i.test(name) ? name : `History of ${name}`);
-  }
-  for (const med of medicines || []) {
-    if (String(med?.action || "").toLowerCase() !== "note_only") continue;
-    const name = String(
-      med.description || med.correctedName || med.name || "",
-    ).trim();
-    if (!name) continue;
-    fold(`On ${name}`);
-  }
-  for (const lab of labTests || []) {
-    if (String(lab?.action || "").toLowerCase() !== "note_only") continue;
-    const name = String(lab.name || "").trim();
-    if (!name) continue;
-    fold(`Prior ${name}`);
-  }
-
-  if (history.length) nextSections.history = noteSectionItems(history);
-  else delete nextSections.history;
-
-  return {
-    sections: Object.keys(nextSections).length ? nextSections : null,
-    medicines: (medicines || []).filter(
-      (item) => String(item?.action || "").toLowerCase() !== "note_only",
-    ),
-    procedures: (procedures || []).filter(
-      (item) => String(item?.action || "").toLowerCase() !== "note_only",
-    ),
-    labTests: (labTests || []).filter(
-      (item) => String(item?.action || "").toLowerCase() !== "note_only",
-    ),
-  };
-}
-
 function composeNoteFromSections(sections) {
   if (!sections) return "";
   const blocks = [];
@@ -685,169 +555,6 @@ function composeNoteFromSections(sections) {
     blocks.push(`${label}:\n${items.map((item) => `• ${item}`).join("\n")}`);
   }
   return blocks.join("\n\n").trim();
-}
-
-function normalizeNoteAction(action) {
-  const normalized = String(action || "add")
-    .trim()
-    .toLowerCase();
-  if (normalized === "stop") return "stop";
-  return VALID_NOTE_ACTIONS.has(normalized) ? normalized : "add";
-}
-
-const SPOKEN_MEDICINE_FORM =
-  /\b(tab(?:let)?s?|cap(?:sule)?s?|inj(?:ection)?s?|syp|syrup|suspension|ointment|cream|gel|sachet)\b/gi;
-
-function normalizeSpokenMedicineForm(value) {
-  const token = String(value || "").toLowerCase();
-  if (/^tab/.test(token)) return "Tablet";
-  if (/^cap/.test(token)) return "Capsules";
-  if (/^inj/.test(token)) return "Injection";
-  if (/^(syp|syrup|suspension)$/.test(token)) return "Syrup";
-  if (/^(ointment|cream)$/.test(token)) return "Ointment";
-  if (token === "gel") return "Gel";
-  if (token === "sachet") return "Sachet";
-  return "";
-}
-
-/**
- * Conservatively align explicit spoken forms by order. We override the model
- * only when the number of form words equals the number of extracted medicines.
- */
-function extractSpokenMedicineForms(clinicalNote, medicineCount) {
-  const forms = [...String(clinicalNote || "").matchAll(SPOKEN_MEDICINE_FORM)]
-    .map((match) => normalizeSpokenMedicineForm(match[1]))
-    .filter(Boolean);
-  if (forms.length === medicineCount) return forms;
-  if (
-    medicineCount > 0 &&
-    medicineCount <= forms.length &&
-    new Set(forms).size === 1
-  ) {
-    return Array(medicineCount).fill(forms[0]);
-  }
-  return [];
-}
-
-const MEDICINE_NAME_CORRECTIONS = new Map([
-  ["faropenam", "Faropenem"],
-  ["faropenem", "Faropenem"],
-  ["limvit", "Limvit"],
-  ["pan", "PAN"],
-  ["mvi", "MVI"],
-  ["pregaba m", "Pregaba-M"],
-  ["pregaba-m", "Pregaba-M"],
-]);
-
-function extractMedicineNameOnly(value) {
-  return String(value || "")
-    .trim()
-    .replace(
-      /^(?:tab(?:let)?s?|cap(?:sule)?s?|inj(?:ection)?s?|syp|syrup|suspension|ointment|cream|gel|sachet)\.?\s+/i,
-      "",
-    )
-    .replace(
-      /\s+(?:(?:\d+(?:\.\d+)?\s*(?:mg|mcg|µg|g|gm|ml|iu|units?))|(?:od|0d|bd|bid|tds|tid|qid|hs|sos|stat|prn)\b|(?:for\s+)?\d+\s*(?:d|day|days|wk|wks|week|weeks|month|months)\b).*$/i,
-      "",
-    )
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function normalizeMedicineDisplayName(value) {
-  const trimmed = extractMedicineNameOnly(value);
-  if (!trimmed) return "";
-  const key = trimmed
-    .toLowerCase()
-    .replace(/[._-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (MEDICINE_NAME_CORRECTIONS.has(key)) {
-    return MEDICINE_NAME_CORRECTIONS.get(key);
-  }
-  if (trimmed === trimmed.toLowerCase()) {
-    return trimmed.replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
-  }
-  return trimmed;
-}
-
-function normalizeMedicineFrequency(value) {
-  const frequency = String(value || "").trim();
-  if (/^0\s*d$/i.test(frequency)) return "OD";
-  return frequency;
-}
-
-function normalizeParsedMedicine(med, spokenType = "", allowStop = false) {
-  const name = String(med.name || med.medicine || "").trim();
-  const correctedName = String(
-    med.correctedName || med.corrected_name || med.description || name,
-  ).trim();
-  const displayName = normalizeMedicineDisplayName(correctedName || name);
-  const description = displayName;
-  const rawGenericName = String(
-    med.generic_name || med.genericName || displayName,
-  ).trim();
-  const genericName =
-    rawGenericName.toLowerCase() === (correctedName || name).toLowerCase()
-      ? displayName
-      : normalizeMedicineDisplayName(rawGenericName);
-  const type = String(med.type || med.form || med.medicineType || "").trim();
-  const parsedAction = normalizeNoteAction(med.action);
-
-  return {
-    // Same field names as master medicines / PrescriptionForm manual add
-    name: displayName,
-    description,
-    generic_name: genericName,
-    generic_name2: String(med.generic_name2 || "").trim() || undefined,
-    type: spokenType || type || undefined,
-    form: spokenType || type || undefined,
-    manufacturer: String(med.manufacturer || "").trim() || undefined,
-    pack: String(med.pack || "").trim() || undefined,
-    hsn_code: String(med.hsn_code || med.hsnCode || "").trim() || undefined,
-    item_code: String(med.item_code || "").trim() || undefined,
-    correctedName: displayName,
-    inventoryMatch: displayName,
-    dosage: String(med.dosage || med.dose || "").trim(),
-    frequency: normalizeMedicineFrequency(med.frequency || med.freq),
-    duration: String(med.duration || "").trim(),
-    instructions: String(med.instructions || med.instruction || "").trim(),
-    action: parsedAction === "stop" && !allowStop ? "add" : parsedAction,
-  };
-}
-
-function normalizeParsedLabTest(test) {
-  if (typeof test === "string") {
-    const name = test.trim();
-    return name ? { name, action: "add" } : null;
-  }
-  const name = String(test?.name || test?.test || "").trim();
-  if (!name) return null;
-  return {
-    name,
-    action: normalizeNoteAction(test.action),
-  };
-}
-
-function normalizeParsedProcedure(proc) {
-  if (typeof proc === "string") {
-    const name = proc.trim();
-    return name ? { name, action: "add" } : null;
-  }
-  const name = String(
-    proc?.name || proc?.procedure || proc?.service_name || "",
-  ).trim();
-  if (!name) return null;
-  return {
-    name,
-    correctedName: String(
-      proc?.correctedName || proc?.corrected_name || name,
-    ).trim(),
-    inventoryMatch: String(
-      proc?.inventoryMatch || proc?.inventory_match || name,
-    ).trim(),
-    action: normalizeNoteAction(proc.action),
-  };
 }
 
 function pickVitalsField(raw, ...keys) {
@@ -950,91 +657,6 @@ function compactExistingClinicalContext(existingContext) {
   };
 }
 
-const EXPLICIT_MEDICINE_STOP =
-  /\b(stop|stopped|discontinue|discontinued|hold|remove|delete|omit)\b/i;
-
-function medicineNameMatchKey(value) {
-  return extractMedicineNameOnly(value)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function extractExplicitMedicineStopNames(clinicalNote, existingContext) {
-  const existingNames =
-    compactExistingClinicalContext(existingContext)?.medicineNames || [];
-  const targets = new Map();
-  const segments = String(clinicalNote || "")
-    .split(/[\n;,.]+/)
-    .map((segment) => segment.trim())
-    .filter((segment) => EXPLICIT_MEDICINE_STOP.test(segment));
-
-  for (const segment of segments) {
-    const segmentKey = ` ${medicineNameMatchKey(segment)} `;
-    let foundExisting = false;
-    for (const existingName of existingNames) {
-      const name = normalizeMedicineDisplayName(existingName);
-      const key = medicineNameMatchKey(name);
-      if (key && segmentKey.includes(` ${key} `)) {
-        targets.set(key, name);
-        foundExisting = true;
-      }
-    }
-
-    if (!foundExisting) {
-      const rawTarget = segment
-        .replace(EXPLICIT_MEDICINE_STOP, "")
-        .replace(
-          /\s+(?:from|in)\s+(?:this\s+)?(?:prescription|rx|medicines?).*$/i,
-          "",
-        )
-        .trim();
-      const name = normalizeMedicineDisplayName(rawTarget);
-      const key = medicineNameMatchKey(name);
-      if (key && !/^(all|all medicines?|medicines?|treatment)$/.test(key)) {
-        targets.set(key, name);
-      }
-    }
-  }
-
-  return [...targets.values()];
-}
-
-function applyExplicitMedicineStops(medicines, clinicalNote, existingContext) {
-  const stopNames = extractExplicitMedicineStopNames(
-    clinicalNote,
-    existingContext,
-  );
-  if (!stopNames.length) return medicines;
-
-  const stopKeys = new Set(stopNames.map(medicineNameMatchKey));
-  const result = medicines.map((medicine) =>
-    stopKeys.has(medicineNameMatchKey(medicine.name))
-      ? { ...medicine, action: "stop" }
-      : medicine,
-  );
-
-  for (const name of stopNames) {
-    const key = medicineNameMatchKey(name);
-    if (
-      result.some((medicine) => medicineNameMatchKey(medicine.name) === key)
-    ) {
-      continue;
-    }
-    result.push({
-      name,
-      description: name,
-      generic_name: name,
-      correctedName: name,
-      inventoryMatch: name,
-      action: "stop",
-    });
-  }
-
-  return result;
-}
-
 const NOTE_OPERATION_SECTIONS = new Set([
   "complaints",
   "history",
@@ -1103,18 +725,22 @@ ${modeLine}
 ${context ? `PATIENT: ${context}` : ""}
 ${existingLine}
 
-COMPLETENESS: Keep every clinical fact from CURRENT INPUT. Writing style may vary — expand shorthand into clear English and place each fact by meaning (past→history, symptoms→complaints, exam→examination, impression→diagnosis, plan/follow-up→advice, today's orders→arrays). Do not drop clauses.
+COMPLETENESS: Keep every clinical fact from CURRENT INPUT. Writing style may vary — expand shorthand into clear English and place each fact by meaning (past→history, symptoms→complaints only never diagnosis, exam→examination, named impression→diagnosis else leave diagnosis empty, plan/follow-up/if-needed→advice, today's orders→arrays). noteSections are bullet lists. name=brand, generic_name=salt when known. Tapers = multiple medicines[] rows. Explicit stop/delete of a named drug = action stop. Tablet/Capsule unit ""; other forms short unit only; beforeFood when known. Do not drop clauses.
 
 Return exactly this JSON shape:
 {
   "noteFormat": "labeled or soap",
-  "symptoms": "",
-  "pastMedicalHistory": "",
-  "provisionalDiagnosis": "",
+  "symptoms": "• bullet\\n• bullet",
+  "pastMedicalHistory": "• bullet\\n• bullet",
+  "provisionalDiagnosis": "• bullet\\n• bullet",
   "medicines": [{
-    "name": "", "description": "", "generic_name": "",
-    "type": "Tablet|Capsules|Injection|Syrup|Ointment|Gel|Sachet|Syringe|Other",
-    "dosage": "", "frequency": "", "duration": "", "instructions": "",
+    "sourceText": "",
+    "name": "", "generic_name": "",
+    "type": "Tablet|Capsules|Injection|Syrup|Ointment|Gel|Sachet|Syringe|Drops|Inhaler|Spray|Patch|Suppository|Other",
+    "strength": "", "dosage": "", "frequency": "", "duration": "",
+    "scheduleKind": "fixed_daily|interval|weekly|monthly|alternate_day|prn|sliding_scale|one_time|sequential|device_controlled|free_text",
+    "directions": "",
+    "dosages": [{ "time": "Morning|Afternoon|Evening|Night", "amount": 1, "unit": "\"\" for Tablet/Capsules else ml|IU|drop|puff|app|U|sach", "beforeFood": false }],
     "action": "add|continue|note_only|stop"
   }],
   "labTests": [{"name": "", "action": "add|continue|note_only"}],
@@ -1124,8 +750,11 @@ Return exactly this JSON shape:
     "heartRate": "", "respiratoryRate": "", "bloodPressure": ""
   },
   "noteSections": {
-    "complaints": [], "history": [], "examination": [],
-    "diagnosis": [], "advice": []
+    "complaints": ["one symptom bullet"],
+    "history": ["one past-history bullet"],
+    "examination": ["one exam bullet"],
+    "diagnosis": ["one diagnosis bullet"],
+    "advice": ["one advice bullet"]
   },
   "noteOperations": [{
     "section": "complaints|history|examination|diagnosis|advice",
@@ -1292,6 +921,210 @@ router.post("/rewrite-section", async (req, res) => {
   }
 });
 
+function finalizeParsedClinicalNote(parsed, existingContext) {
+  // Pass through model medicines/labs/procedures — no clinical rewrite.
+  const medicines = Array.isArray(parsed.medicines) ? parsed.medicines : [];
+  const labTests = Array.isArray(parsed.labTests)
+    ? parsed.labTests
+    : Array.isArray(parsed.lab_tests)
+      ? parsed.lab_tests
+      : [];
+  const procedures = Array.isArray(parsed.procedures) ? parsed.procedures : [];
+  const noteSections = normalizeNoteSections(
+    parsed.noteSections || parsed.note_sections || parsed.sections,
+  );
+  const freeTextNote = compactSoapLabels(
+    String(
+      parsed.doctorNotes || parsed.doctorNote || parsed.notes || "",
+    ).trim(),
+  );
+  const sectionNote = composeNoteFromSections(noteSections);
+  const isSoapNote = /^\s*[SOAP]\s*:/m.test(freeTextNote);
+
+  return {
+    noteFormat: String(parsed.noteFormat || "narrative").trim(),
+    assistantReply: String(parsed.assistantReply || parsed.reply || "").trim(),
+    symptoms: String(parsed.symptoms || "").trim(),
+    pastMedicalHistory: String(
+      parsed.pastMedicalHistory || parsed.pastHistory || "",
+    ).trim(),
+    provisionalDiagnosis: String(
+      parsed.provisionalDiagnosis || parsed.diagnosis || "",
+    ).trim(),
+    medicines,
+    labTests,
+    procedures,
+    vitals: normalizeParsedVitals(
+      parsed.vitals || parsed.vitalSigns || parsed.vital_signs,
+    ),
+    medicinesToApply: medicines.filter(
+      (med) => String(med?.action || "add").toLowerCase() === "add",
+    ),
+    medicinesToStop: medicines.filter(
+      (med) => String(med?.action || "").toLowerCase() === "stop",
+    ),
+    labTestsToApply: labTests
+      .filter(
+        (test) =>
+          typeof test === "string" ||
+          String(test?.action || "add").toLowerCase() === "add",
+      )
+      .map((test) => (typeof test === "string" ? test : test.name)),
+    proceduresToApply: procedures.filter(
+      (proc) => String(proc?.action || "add").toLowerCase() === "add",
+    ),
+    noteOperations: normalizeParsedNoteOperations(
+      parsed.noteOperations || parsed.note_operations,
+      existingContext,
+    ),
+    doctorNotes: isSoapNote && freeTextNote ? freeTextNote : sectionNote,
+    noteSections,
+  };
+}
+
+function extractJsonObject(content) {
+  const trimmed = String(content || "").trim();
+  const jsonMatch = trimmed.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+  return jsonMatch ? jsonMatch[1] : trimmed;
+}
+
+function buildPatientContextLine({ age, gender, allergies }) {
+  const contextParts = [];
+  if (age) contextParts.push(`age ${age}`);
+  if (gender) contextParts.push(`gender ${gender}`);
+  if (allergies) contextParts.push(`allergies: ${allergies}`);
+  return contextParts.join(", ");
+}
+
+/** Pure questions — do not re-run chart extraction. */
+function isChartQuestionOnly(text) {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  if (
+    /\b(fever|cough|pain|advise|adv\b|tab|mg|bd|od|tds|cbc|cbp|lft|post\b|h\/o|k\/c\/o|dolo|remove|add |stop |delete|clear)\b/i.test(
+      t,
+    )
+  ) {
+    return false;
+  }
+  return /^(what|what's|whats|how|show|summarize|summary|recap|list|tell me|do we have|anything else)\b|\?$/.test(
+    t,
+  );
+}
+
+function doctorTranscriptFromChat(chatMessages, fallbackDelta) {
+  const lines = [];
+  for (const msg of Array.isArray(chatMessages) ? chatMessages : []) {
+    const role = msg?.role === "assistant" ? "assistant" : "user";
+    if (role === "assistant") continue;
+    const content = String(msg?.content || msg?.text || "").trim();
+    if (!content || isChartQuestionOnly(content)) continue;
+    lines.push(content);
+  }
+  if (
+    !lines.length &&
+    typeof fallbackDelta === "string" &&
+    fallbackDelta.trim()
+  ) {
+    if (!isChartQuestionOnly(fallbackDelta)) lines.push(fallbackDelta.trim());
+  }
+  return lines.join("\n");
+}
+
+function draftResultFromPayload(draftPayload = {}) {
+  const medicines = Array.isArray(draftPayload.medicines)
+    ? draftPayload.medicines
+    : [];
+  const labTests = Array.isArray(draftPayload.labTests)
+    ? draftPayload.labTests
+    : [];
+  const procedures = Array.isArray(draftPayload.procedures)
+    ? draftPayload.procedures
+    : [];
+  const doctorNotes = String(draftPayload.doctorNotes || "").trim();
+  return {
+    noteFormat: "labeled",
+    assistantReply: "",
+    symptoms: "",
+    pastMedicalHistory: "",
+    provisionalDiagnosis: "",
+    medicines,
+    labTests,
+    procedures,
+    vitals: draftPayload.vitals || {},
+    medicinesToApply: medicines.filter(
+      (med) => String(med?.action || "add").toLowerCase() === "add",
+    ),
+    medicinesToStop: Array.isArray(draftPayload.medicinesToStop)
+      ? draftPayload.medicinesToStop
+      : medicines.filter(
+          (med) => String(med?.action || "").toLowerCase() === "stop",
+        ),
+    labTestsToApply: labTests
+      .filter((test) => String(test?.action || "add").toLowerCase() === "add")
+      .map((test) => test.name),
+    proceduresToApply: procedures.filter(
+      (proc) => String(proc?.action || "add").toLowerCase() === "add",
+    ),
+    noteOperations: [],
+    doctorNotes,
+  };
+}
+
+function summarizeDraftForReply(result) {
+  const bits = [];
+  if (result.doctorNotes?.trim()) {
+    bits.push(`Note:\n${result.doctorNotes.trim()}`);
+  }
+  const meds = (result.medicinesToApply || result.medicines || [])
+    .map((med) => med.description || med.correctedName || med.name)
+    .filter(Boolean);
+  if (meds.length) bits.push(`Medicines: ${meds.join(", ")}`);
+  const labs = result.labTestsToApply?.length
+    ? result.labTestsToApply
+    : (result.labTests || []).map((lab) => lab.name || lab).filter(Boolean);
+  if (labs.length) bits.push(`Labs: ${labs.join(", ")}`);
+  if (!bits.length)
+    return "Nothing in the working chart yet — send clinical details.";
+  return `Here's what we have so far:\n\n${bits.join("\n\n")}`;
+}
+
+function buildExtractionReply(result, latestUserText) {
+  if (isChartQuestionOnly(latestUserText)) {
+    return summarizeDraftForReply(result);
+  }
+  const meds = result.medicinesToApply || [];
+  const labs = result.labTestsToApply || [];
+  const stops = result.medicinesToStop || [];
+  const hasNote = Boolean(String(result.doctorNotes || "").trim());
+  const medName = (med) => med.description || med.name || "medicine";
+  const labName = (lab) =>
+    typeof lab === "string" ? lab : lab?.name || "lab";
+
+  if (meds.length === 1 && !labs.length && !stops.length && !hasNote) {
+    return `I've added ${medName(meds[0])}.`;
+  }
+  if (labs.length === 1 && !meds.length && !stops.length) {
+    return `I've ordered ${labName(labs[0])}.`;
+  }
+
+  const bits = [];
+  if (hasNote) bits.push("updated the note");
+  if (meds.length === 1) bits.push(`added ${medName(meds[0])}`);
+  else if (meds.length > 1) bits.push(`added ${meds.length} medicines`);
+  if (labs.length === 1) bits.push(`ordered ${labName(labs[0])}`);
+  else if (labs.length > 1) bits.push(`ordered ${labs.length} labs`);
+  if (stops.length) bits.push("noted a medicine to stop");
+
+  if (!bits.length) {
+    return "Got it — send more details anytime.";
+  }
+  if (bits.length === 1) {
+    return `I've ${bits[0]}.`;
+  }
+  return `I've ${bits.slice(0, -1).join(", ")} and ${bits[bits.length - 1]}.`;
+}
+
 /**
  * POST /parse-clinical-note
  * Body: { clinicalNote: string, age?: number, gender?: string, allergies?: string }
@@ -1304,7 +1137,6 @@ router.post("/parse-clinical-note", async (req, res) => {
       age,
       gender,
       allergies,
-      labCatalog,
       existingContext,
       mode = "replace",
       clinicalSetting = "opd",
@@ -1320,41 +1152,26 @@ router.post("/parse-clinical-note", async (req, res) => {
       });
     }
 
-    const contextParts = [];
-    if (age) contextParts.push(`age ${age}`);
-    if (gender) contextParts.push(`gender ${gender}`);
-    if (allergies) contextParts.push(`allergies: ${allergies}`);
-    const context = contextParts.join(", ");
+    const context = buildPatientContextLine({ age, gender, allergies });
 
     let response;
     try {
-      response = await openaiApi.post(
-        "/chat/completions",
+      response = await callParseClinicalNoteCompletion([
         {
-          model: PARSE_NOTE_MODEL,
-          messages: [
-            {
-              role: "system",
-              content: PARSE_CLINICAL_NOTE_SYSTEM_PROMPT,
-            },
-            {
-              role: "user",
-              content: PARSE_CLINICAL_NOTE_USER_PROMPT(
-                clinicalNote,
-                context,
-                existingContext,
-                mode,
-                clinicalSetting,
-              ),
-            },
-          ],
-          max_tokens: 2500,
-          temperature: 0.1,
-          top_p: 0.9,
-          response_format: { type: "json_object" },
+          role: "system",
+          content: PARSE_CLINICAL_NOTE_SYSTEM_PROMPT,
         },
-        { timeout: 20000 },
-      );
+        {
+          role: "user",
+          content: PARSE_CLINICAL_NOTE_USER_PROMPT(
+            clinicalNote,
+            context,
+            existingContext,
+            mode,
+            clinicalSetting,
+          ),
+        },
+      ]);
     } catch (apiError) {
       console.error(
         "OpenAI API error:",
@@ -1377,142 +1194,13 @@ router.post("/parse-clinical-note", async (req, res) => {
 
     const content = response.data.choices[0].message.content.trim();
 
-    let jsonString = content;
-    const jsonMatch = content.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
-    if (jsonMatch) {
-      jsonString = jsonMatch[1];
-    }
-
     try {
-      const parsed = JSON.parse(jsonString);
-
-      const rawMedicines = Array.isArray(parsed.medicines)
-        ? parsed.medicines
-        : [];
-      const spokenMedicineForms = extractSpokenMedicineForms(
-        clinicalNote,
-        rawMedicines.length,
-      );
-      const allowMedicineStop =
-        /\b(stop|stopped|discontinue|discontinued|hold|remove|delete|omit)\b/i.test(
-          clinicalNote,
-        );
-      const parsedMedicines = rawMedicines
-        .map((med, index) =>
-          normalizeParsedMedicine(
-            med,
-            spokenMedicineForms[index],
-            allowMedicineStop,
-          ),
-        )
-        .filter((med) => med.name);
-      const normalizedMedicines = applyExplicitMedicineStops(
-        parsedMedicines,
-        clinicalNote,
-        existingContext,
-      );
-
-      const normalizedLabTests = Array.isArray(parsed.labTests)
-        ? parsed.labTests.map(normalizeParsedLabTest).filter(Boolean)
-        : Array.isArray(parsed.lab_tests)
-          ? parsed.lab_tests.map(normalizeParsedLabTest).filter(Boolean)
-          : [];
-
-      const normalizedProcedures = Array.isArray(parsed.procedures)
-        ? parsed.procedures.map(normalizeParsedProcedure).filter(Boolean)
-        : [];
-
-      const matchedProcedures = normalizedProcedures;
-
-      // No hospital pharmacy fuzzy catalog — client resolves meds via master search
-      const matchedMedicines = normalizedMedicines;
-
-      const matchedLabTests =
-        Array.isArray(labCatalog) && labCatalog.length > 0
-          ? normalizedLabTests.map((test) => {
-              const matched = matchLabTestToCatalog(test.name, labCatalog);
-              return {
-                name:
-                  matched.inventoryMatch || matched.standardized || test.name,
-                action: test.action,
-              };
-            })
-          : normalizedLabTests;
-
-      const reclassified = reclassifyMisplacedLabs(
-        matchedMedicines,
-        matchedLabTests,
-      );
-      const { sections: adviceSections, labTests: adviceLabTests } =
-        reclassifyAdviceOrders(
-          normalizeNoteSections(
-            parsed.noteSections || parsed.note_sections || parsed.sections,
-          ),
-          reclassified.labTests,
-        );
-      const mergedSections = mergeLegacyFieldsIntoSections(
-        adviceSections,
+      const parsed = JSON.parse(extractJsonObject(content));
+      const withMedicinePasses = await applyAiOnlyMedicinePasses(
         parsed,
+        clinicalNote,
       );
-      const reconciled = foldNoteOnlyOrdersIntoHistory(
-        mergedSections,
-        reclassified.medicines,
-        matchedProcedures,
-        adviceLabTests,
-      );
-      const noteSections = reconciled.sections;
-      const medicines = reconciled.medicines;
-      const procedures = reconciled.procedures;
-      const labTests = reconciled.labTests;
-
-      const medicinesToApply = medicines.filter((med) => med.action === "add");
-      const medicinesToStop = medicines.filter((med) => med.action === "stop");
-      const labTestsToApply = labTests
-        .filter((test) => test.action === "add")
-        .map((test) => test.name);
-      const proceduresToApply = procedures.filter(
-        (proc) => proc.action === "add",
-      );
-
-      const vitals = normalizeParsedVitals(
-        parsed.vitals || parsed.vitalSigns || parsed.vital_signs,
-      );
-      const noteOperations = normalizeParsedNoteOperations(
-        parsed.noteOperations || parsed.note_operations,
-        existingContext,
-      );
-
-      const freeTextNote = compactSoapLabels(
-        String(
-          parsed.doctorNotes || parsed.doctorNote || parsed.notes || "",
-        ).trim(),
-      );
-      const sectionNote = composeNoteFromSections(noteSections);
-      // SOAP continuation still arrives as free text; everything else is composed here.
-      const isSoapNote = /^\s*[SOAP]\s*:/m.test(freeTextNote);
-
-      const result = {
-        noteFormat: String(parsed.noteFormat || "narrative").trim(),
-        symptoms: String(parsed.symptoms || "").trim(),
-        pastMedicalHistory: String(
-          parsed.pastMedicalHistory || parsed.pastHistory || "",
-        ).trim(),
-        provisionalDiagnosis: String(
-          parsed.provisionalDiagnosis || parsed.diagnosis || "",
-        ).trim(),
-        medicines,
-        labTests,
-        procedures,
-        vitals,
-        medicinesToApply,
-        medicinesToStop,
-        labTestsToApply,
-        proceduresToApply,
-        noteOperations,
-        doctorNotes: isSoapNote && freeTextNote ? freeTextNote : sectionNote,
-      };
-
-      res.json(result);
+      res.json(finalizeParsedClinicalNote(withMedicinePasses, existingContext));
     } catch (parseError) {
       console.error("Error parsing AI response:", parseError);
       console.error("AI Response:", content);
@@ -1525,6 +1213,144 @@ router.post("/parse-clinical-note", async (req, res) => {
     console.error("Error parsing clinical note:", error);
     res.status(500).json({
       error: "Failed to parse clinical note",
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * POST /merge-clinical-draft
+ * AI Chat UI + same extraction engine as AI Write (parse-clinical-note).
+ * Re-extracts the full doctor transcript each turn for Write-quality output.
+ */
+router.post("/merge-clinical-draft", async (req, res) => {
+  try {
+    const {
+      deltaText,
+      messages: chatMessages,
+      currentDraft,
+      age,
+      gender,
+      allergies,
+      existingContext,
+      clinicalSetting = "opd",
+    } = req.body;
+
+    const draftPayload =
+      currentDraft && typeof currentDraft === "object" ? currentDraft : {};
+
+    let conversation = Array.isArray(chatMessages) ? chatMessages : [];
+    if (
+      !conversation.length &&
+      typeof deltaText === "string" &&
+      deltaText.trim()
+    ) {
+      conversation = [{ role: "user", content: deltaText.trim() }];
+    }
+
+    const latestUser = [...conversation]
+      .reverse()
+      .find((msg) => (msg?.role || "user") !== "assistant");
+    const latestUserText = String(
+      latestUser?.content || latestUser?.text || deltaText || "",
+    ).trim();
+
+    if (!latestUserText) {
+      return res.status(400).json({
+        error: "A doctor message is required",
+      });
+    }
+
+    // Questions: keep current chart, reply with summary (no re-extract).
+    if (isChartQuestionOnly(latestUserText)) {
+      const kept = draftResultFromPayload(draftPayload);
+      kept.assistantReply = summarizeDraftForReply(kept);
+      return res.json(kept);
+    }
+
+    const clinicalNote = doctorTranscriptFromChat(conversation, deltaText);
+    if (!clinicalNote.trim()) {
+      return res.status(400).json({
+        error: "No clinical content to extract",
+      });
+    }
+
+    const context = buildPatientContextLine({ age, gender, allergies });
+
+    // Same model + system prompt + temperature as AI Write extract.
+    let response;
+    try {
+      response = await callParseClinicalNoteCompletion([
+        {
+          role: "system",
+          content: `${PARSE_CLINICAL_NOTE_SYSTEM_PROMPT}
+
+CHAT TRANSCRIPT MODE
+- CURRENT INPUT is the doctor's full chat transcript for this session (multiple lines / corrections).
+- Apply later lines that correct earlier ones ("remove cough", "stop dolo", "change advice…").
+- Produce the FINAL chart after the whole transcript — same extraction quality as one-shot AI Write.
+- Include assistantReply: one short natural sentence (spoken English) confirming what you did — e.g. "I've added Dolo 650 twice a day for 3 days and ordered CBP." Never use bullet-style inventory like "Updated note · 2 meds".`,
+        },
+        {
+          role: "user",
+          content: PARSE_CLINICAL_NOTE_USER_PROMPT(
+            clinicalNote,
+            context,
+            existingContext,
+            "replace",
+            clinicalSetting,
+          ),
+        },
+      ]);
+    } catch (apiError) {
+      console.error(
+        "OpenAI clinical chat extract error:",
+        apiError?.response?.data || apiError.message,
+      );
+      return res.status(502).json({
+        error: "Failed to contact OpenAI API",
+        details: apiError?.response?.data || apiError.message,
+      });
+    }
+
+    if (
+      !response?.data?.choices ||
+      !response.data.choices[0]?.message?.content
+    ) {
+      return res
+        .status(500)
+        .json({ error: "Invalid response from OpenAI API" });
+    }
+
+    const content = response.data.choices[0].message.content.trim();
+
+    try {
+      const parsed = JSON.parse(extractJsonObject(content));
+      const withMedicinePasses = await applyAiOnlyMedicinePasses(
+        parsed,
+        clinicalNote,
+      );
+      const result = finalizeParsedClinicalNote(
+        withMedicinePasses,
+        existingContext,
+      );
+      result.assistantReply =
+        String(
+          withMedicinePasses.assistantReply || parsed.assistantReply || "",
+        ).trim() || buildExtractionReply(result, latestUserText);
+      res.json(result);
+    } catch (parseError) {
+      console.error("Error parsing clinical chat extract:", parseError);
+      console.error("AI Response:", content);
+      res.status(500).json({
+        error: "Failed to parse AI response",
+        details: parseError.message,
+      });
+    }
+  } catch (error) {
+    console.error("Error in clinical chat:", error);
+    res.status(500).json({
+      error: "Failed to process clinical chat",
       details: error.message,
     });
   }

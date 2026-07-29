@@ -61,6 +61,40 @@ function buildPublicHospital(hospital) {
   };
 }
 
+function buildPublicPrescription(prescription) {
+  if (!prescription || typeof prescription !== "object") return null;
+
+  // Drop bulky nested blobs patients don't need (keeps mobile payload small).
+  const medicineData = Array.isArray(prescription.medicineData)
+    ? prescription.medicineData.map((med) => {
+        if (!med || typeof med !== "object") return med;
+        const {
+          selectedMedicineData,
+          masterMedicineId,
+          inventoryMatch,
+          sourceText,
+          ...rest
+        } = med;
+        return rest;
+      })
+    : [];
+
+  return {
+    prescriptionId: prescription.prescriptionId,
+    date: prescription.date,
+    symptoms: prescription.symptoms,
+    doctorNotes: prescription.doctorNotes || [],
+    vitals: prescription.vitals || [],
+    weight: prescription.weight,
+    height: prescription.height,
+    medicineData,
+    diagnosticData: prescription.diagnosticData || [],
+    pastMedicalHistory: prescription.pastMedicalHistory,
+    provisionalDiagnosis: prescription.provisionalDiagnosis,
+    doctorId: prescription.doctorId,
+  };
+}
+
 /**
  * PUBLIC (no auth): view a prescription via a signed token.
  * Defined BEFORE applyTenantEntitlements so the auth middleware does not apply.
@@ -83,10 +117,27 @@ router.get("/public/:token", async (req, res) => {
     }
 
     const Patient = connection.model("Patient");
-    const patient = await Patient.findOne({
-      UMRNo: patientId,
-      hospitalId,
-    }).lean();
+    const Staff = connection.model("Staff");
+
+    // Use findOne (not aggregate $match) so Mongoose casts hospitalId the same
+    // way authenticated routes do — aggregate string≠ObjectId was returning 404.
+    const [patient, hospital] = await Promise.all([
+      Patient.findOne(
+        { UMRNo: patientId, hospitalId },
+        {
+          name: 1,
+          age: 1,
+          gender: 1,
+          UMRNo: 1,
+          phone: 1,
+          street_address: 1,
+          prescriptions: 1,
+        },
+      ).lean(),
+      Hospital.findById(hospitalId)
+        .select("name address city state zipCode phone email logoUrl")
+        .lean(),
+    ]);
 
     if (!patient) {
       return res.status(404).json({ message: "Prescription not found." });
@@ -100,10 +151,10 @@ router.get("/public/:token", async (req, res) => {
     let doctor = null;
     if (prescription.doctorId) {
       try {
-        const Staff = connection.model("Staff");
-        const doctorDoc = await Staff.findOne({
-          id: prescription.doctorId,
-        }).lean();
+        const doctorDoc = await Staff.findOne(
+          { id: prescription.doctorId },
+          { name: 1, qualification: 1, specialization: 1 },
+        ).lean();
         if (doctorDoc) {
           doctor = {
             name: doctorDoc.name,
@@ -116,13 +167,11 @@ router.get("/public/:token", async (req, res) => {
       }
     }
 
-    const hospital = await Hospital.findById(hospitalId).lean();
-
     return res.json({
       hospital: buildPublicHospital(hospital),
       doctor,
       patient: buildPublicPatient(patient),
-      prescription,
+      prescription: buildPublicPrescription(prescription),
       visitNumber: getVisitNumber(patient, prescriptionId),
       totalVisits: Array.isArray(patient.prescriptions)
         ? patient.prescriptions.length
