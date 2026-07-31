@@ -21,9 +21,9 @@ function findPrescription(patient, prescriptionId) {
   );
 }
 
-function getVisitNumber(patient, prescriptionId) {
-  const prescriptions = Array.isArray(patient?.prescriptions)
-    ? patient.prescriptions
+function getVisitNumber(prescriptionsMeta, prescriptionId) {
+  const prescriptions = Array.isArray(prescriptionsMeta)
+    ? prescriptionsMeta
     : [];
   if (!prescriptions.length) return null;
 
@@ -43,7 +43,6 @@ function buildPublicPatient(patient) {
     gender: patient.gender,
     UMRNo: patient.UMRNo,
     phone: patient.phone,
-    street_address: patient.street_address,
   };
 }
 
@@ -56,42 +55,75 @@ function buildPublicHospital(hospital) {
     state: hospital.state,
     zipCode: hospital.zipCode,
     phone: hospital.phone,
-    email: hospital.email,
     logoUrl: hospital.logoUrl,
   };
 }
 
-function buildPublicPrescription(prescription) {
-  if (!prescription || typeof prescription !== "object") return null;
+function slimDosage(dose = {}) {
+  return {
+    time: dose.time || "",
+    amount: dose.amount,
+    unit: dose.unit || "",
+    beforeFood: Boolean(dose.beforeFood),
+  };
+}
 
-  // Drop bulky nested blobs patients don't need (keeps mobile payload small).
+function slimMedicine(med = {}) {
+  return {
+    lineId: med.lineId,
+    item_code: med.item_code,
+    name: med.name,
+    description: med.description,
+    correctedName: med.correctedName,
+    type: med.type,
+    generic_name: med.generic_name,
+    quantity: med.quantity,
+    duration: med.duration,
+    durationText: med.durationText,
+    dosages: Array.isArray(med.dosages) ? med.dosages.map(slimDosage) : [],
+    patientDirections: med.patientDirections,
+    directions: med.directions,
+    instructions: med.instructions,
+    sequenceGroup: med.sequenceGroup,
+    sequenceIndex: med.sequenceIndex,
+    sequenceLabel: med.sequenceLabel,
+  };
+}
+
+function buildPublicPrescription(prescription) {
+  if (!prescription) return null;
+  const vitals = Array.isArray(prescription.vitals)
+    ? prescription.vitals.map((v) => ({
+        time: v.time,
+        temperature: v.temperature,
+        heartRate: v.heartRate,
+        bloodPressure: v.bloodPressure,
+        spo2: v.spo2,
+      }))
+    : [];
+  const doctorNotes = Array.isArray(prescription.doctorNotes)
+    ? prescription.doctorNotes.map((n) => ({ content: n?.content || "" }))
+    : [];
+  const diagnosticData = Array.isArray(prescription.diagnosticData)
+    ? prescription.diagnosticData.map((t) => ({ name: t?.name || "" }))
+    : [];
   const medicineData = Array.isArray(prescription.medicineData)
-    ? prescription.medicineData.map((med) => {
-        if (!med || typeof med !== "object") return med;
-        const {
-          selectedMedicineData,
-          masterMedicineId,
-          inventoryMatch,
-          sourceText,
-          ...rest
-        } = med;
-        return rest;
-      })
+    ? prescription.medicineData.map(slimMedicine)
     : [];
 
   return {
     prescriptionId: prescription.prescriptionId,
     date: prescription.date,
-    symptoms: prescription.symptoms,
-    doctorNotes: prescription.doctorNotes || [],
-    vitals: prescription.vitals || [],
+    doctorId: prescription.doctorId,
+    symptoms: prescription.symptoms || "",
+    pastMedicalHistory: prescription.pastMedicalHistory || "",
+    provisionalDiagnosis: prescription.provisionalDiagnosis || "",
     weight: prescription.weight,
     height: prescription.height,
+    vitals,
+    doctorNotes,
+    diagnosticData,
     medicineData,
-    diagnosticData: prescription.diagnosticData || [],
-    pastMedicalHistory: prescription.pastMedicalHistory,
-    provisionalDiagnosis: prescription.provisionalDiagnosis,
-    doctorId: prescription.doctorId,
   };
 }
 
@@ -117,65 +149,93 @@ router.get("/public/:token", async (req, res) => {
     }
 
     const Patient = connection.model("Patient");
-    const Staff = connection.model("Staff");
-
-    // Use findOne (not aggregate $match) so Mongoose casts hospitalId the same
-    // way authenticated routes do — aggregate string≠ObjectId was returning 404.
-    const [patient, hospital] = await Promise.all([
-      Patient.findOne(
-        { UMRNo: patientId, hospitalId },
-        {
+    const rxId = String(prescriptionId);
+    // Load patient demographics + only the matched Rx (plus date/id meta for visit #).
+    const [patientRow] = await Patient.aggregate([
+      { $match: { UMRNo: patientId, hospitalId } },
+      {
+        $project: {
           name: 1,
           age: 1,
           gender: 1,
           UMRNo: 1,
           phone: 1,
-          street_address: 1,
-          prescriptions: 1,
+          prescriptionsMeta: {
+            $map: {
+              input: { $ifNull: ["$prescriptions", []] },
+              as: "p",
+              in: {
+                prescriptionId: "$$p.prescriptionId",
+                date: "$$p.date",
+              },
+            },
+          },
+          prescription: {
+            $first: {
+              $filter: {
+                input: { $ifNull: ["$prescriptions", []] },
+                as: "p",
+                cond: {
+                  $eq: [{ $toString: "$$p.prescriptionId" }, rxId],
+                },
+              },
+            },
+          },
         },
-      ).lean(),
-      Hospital.findById(hospitalId)
-        .select("name address city state zipCode phone email logoUrl")
-        .lean(),
+      },
     ]);
 
-    if (!patient) {
+    if (!patientRow) {
       return res.status(404).json({ message: "Prescription not found." });
     }
 
-    const prescription = findPrescription(patient, prescriptionId);
+    const prescription = patientRow.prescription;
     if (!prescription) {
       return res.status(404).json({ message: "Prescription not found." });
     }
 
-    let doctor = null;
-    if (prescription.doctorId) {
-      try {
-        const doctorDoc = await Staff.findOne(
+    const patient = {
+      name: patientRow.name,
+      age: patientRow.age,
+      gender: patientRow.gender,
+      UMRNo: patientRow.UMRNo,
+      phone: patientRow.phone,
+      prescriptions: patientRow.prescriptionsMeta || [],
+    };
+
+    const Staff = connection.model("Staff");
+    const doctorPromise = prescription.doctorId
+      ? Staff.findOne(
           { id: prescription.doctorId },
-          { name: 1, qualification: 1, specialization: 1 },
-        ).lean();
-        if (doctorDoc) {
-          doctor = {
-            name: doctorDoc.name,
-            qualification: doctorDoc.qualification,
-            specialization: doctorDoc.specialization,
-          };
+          { name: 1, qualification: 1, specialization: 1, id: 1 },
+        )
+          .lean()
+          .catch(() => null)
+      : Promise.resolve(null);
+
+    const hospitalPromise = Hospital.findById(hospitalId)
+      .select("name address city state zipCode phone logoUrl")
+      .lean();
+
+    const [doctorDoc, hospital] = await Promise.all([
+      doctorPromise,
+      hospitalPromise,
+    ]);
+
+    const doctor = doctorDoc
+      ? {
+          name: doctorDoc.name,
+          qualification: doctorDoc.qualification,
+          specialization: doctorDoc.specialization,
         }
-      } catch (err) {
-        // doctor lookup is best-effort; ignore failures
-      }
-    }
+      : null;
 
     return res.json({
       hospital: buildPublicHospital(hospital),
       doctor,
       patient: buildPublicPatient(patient),
       prescription: buildPublicPrescription(prescription),
-      visitNumber: getVisitNumber(patient, prescriptionId),
-      totalVisits: Array.isArray(patient.prescriptions)
-        ? patient.prescriptions.length
-        : 0,
+      visitNumber: getVisitNumber(patient.prescriptions, prescriptionId),
     });
   } catch (error) {
     console.error("Public prescription view error:", error);
