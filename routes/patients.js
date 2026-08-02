@@ -3,6 +3,12 @@ const router = express.Router();
 const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
 const { normalizeRole } = require("../config/rolePermissions");
 const {
+  resolveRequestDoctorIds,
+  doctorPatientVisibilityClauseFromIds,
+  patientVisibleToDoctorIds,
+  isDoctorRole,
+} = require("../utils/doctorPatientAccess");
+const {
   calculateBillBreakdown,
   calculateInsuranceCoverage,
   calculateTotalAdvance,
@@ -389,6 +395,12 @@ router.get("/", async (req, res) => {
       });
     }
 
+    // Doctors: only assigned consultant patients OR patients with their visit.
+    if (isDoctorRole(req)) {
+      const doctorIds = await resolveRequestDoctorIds(req);
+      andConditions.push(doctorPatientVisibilityClauseFromIds(doctorIds));
+    }
+
     const query =
       andConditions.length === 1 ? andConditions[0] : { $and: andConditions };
 
@@ -456,6 +468,15 @@ router.get("/:id", async (req, res) => {
       return res.status(404).json({ message: "Patient not found" });
     }
     if (blockInpatientRecordAccess(req, res, patient)) return;
+    if (isDoctorRole(req)) {
+      const doctorIds = await resolveRequestDoctorIds(req);
+      if (!patientVisibleToDoctorIds(patient, doctorIds)) {
+        return res.status(403).json({
+          message:
+            "Patient is not assigned to you and you have no visit on this record.",
+        });
+      }
+    }
     res.json(patient);
   } catch (error) {
     res.status(500).json({ message: error.message });

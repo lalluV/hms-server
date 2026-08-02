@@ -77,7 +77,7 @@ function levenshtein(a, b) {
   if (!a.length) return b.length;
   if (!b.length) return a.length;
   const matrix = Array.from({ length: a.length + 1 }, () =>
-    Array(b.length + 1).fill(0)
+    Array(b.length + 1).fill(0),
   );
   for (let i = 0; i <= a.length; i += 1) matrix[i][0] = i;
   for (let j = 0; j <= b.length; j += 1) matrix[0][j] = j;
@@ -87,7 +87,7 @@ function levenshtein(a, b) {
       matrix[i][j] = Math.min(
         matrix[i - 1][j] + 1,
         matrix[i][j - 1] + 1,
-        matrix[i - 1][j - 1] + cost
+        matrix[i - 1][j - 1] + cost,
       );
     }
   }
@@ -123,7 +123,7 @@ function findBestCatalogMatch(query, catalog, fields, minScore = 0.58) {
     query,
     fields.includes("name") && fields.includes("description")
       ? LAB_TEST_ALIASES
-      : MEDICINE_ALIASES
+      : MEDICINE_ALIASES,
   );
 
   let best = null;
@@ -135,7 +135,7 @@ function findBestCatalogMatch(query, catalog, fields, minScore = 0.58) {
       if (!candidate) continue;
       const score = Math.max(
         similarityScore(query, candidate),
-        similarityScore(aliasResolved, candidate)
+        similarityScore(aliasResolved, candidate),
       );
       if (score > bestScore) {
         bestScore = score;
@@ -149,9 +149,7 @@ function findBestCatalogMatch(query, catalog, fields, minScore = 0.58) {
 
 function matchMedicineToCatalog(medicine, pharmacyCatalog) {
   const query =
-    medicine.inventoryMatch ||
-    medicine.correctedName ||
-    medicine.name;
+    medicine.inventoryMatch || medicine.correctedName || medicine.name;
   const match = findBestCatalogMatch(query, pharmacyCatalog, [
     "generic_name",
     "description",
@@ -187,9 +185,7 @@ function matchLabTestToCatalog(testName, labCatalog) {
 
 function matchProcedureToCatalog(procedure, procedureCatalog) {
   const query =
-    procedure.inventoryMatch ||
-    procedure.correctedName ||
-    procedure.name;
+    procedure.inventoryMatch || procedure.correctedName || procedure.name;
   const match = findBestCatalogMatch(query, procedureCatalog, [
     "name",
     "service_name",

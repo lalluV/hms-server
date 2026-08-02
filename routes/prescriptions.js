@@ -1,4 +1,5 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const router = express.Router();
 const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
 const { getTenantConnection } = require("../utils/tenantDb");
@@ -143,6 +144,12 @@ router.get("/public/:token", async (req, res) => {
 
     const { hospitalId, patientId, prescriptionId } = decoded;
 
+    if (!mongoose.Types.ObjectId.isValid(hospitalId)) {
+      return res.status(400).json({ message: "Invalid or expired link." });
+    }
+    // Aggregate $match does not cast string → ObjectId like find() does.
+    const hospitalObjectId = new mongoose.Types.ObjectId(hospitalId);
+
     const connection = await getTenantConnection(hospitalId);
     if (!connection) {
       return res.status(500).json({ message: "Unable to load prescription." });
@@ -152,7 +159,7 @@ router.get("/public/:token", async (req, res) => {
     const rxId = String(prescriptionId);
     // Load patient demographics + only the matched Rx (plus date/id meta for visit #).
     const [patientRow] = await Patient.aggregate([
-      { $match: { UMRNo: patientId, hospitalId } },
+      { $match: { UMRNo: patientId, hospitalId: hospitalObjectId } },
       {
         $project: {
           name: 1,

@@ -52,6 +52,10 @@ function extractText(response) {
  * Returns { transcript, model }.
  */
 router.post("/transcribe", upload.single("audio"), async (req, res) => {
+  // Long Gemini round-trips; avoid proxy/socket closing mid-response.
+  req.setTimeout?.(180000);
+  res.setTimeout?.(180000);
+
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return res.status(503).json({
@@ -62,6 +66,10 @@ router.post("/transcribe", upload.single("audio"), async (req, res) => {
   if (!req.file?.buffer?.length) {
     return res.status(400).json({ error: "No audio file uploaded" });
   }
+
+  console.log(
+    `[gemini-live/transcribe] bytes=${req.file.buffer.length} mime=${req.file.mimetype || "?"}`,
+  );
 
   const mimeType = String(req.file.mimetype || "audio/webm").split(";")[0];
   const allowed = new Set([

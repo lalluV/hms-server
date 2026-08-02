@@ -1352,22 +1352,20 @@ async function list_todays_op(ctx, args) {
 
   let doctorFilter = null;
   if (mineOnly && ctx.role === "Doctor") {
+    // Assigned consultant OR a prescription visit under this doctor.
     const Staff = ctx.tenantDb.model("Staff");
-    const me = await Staff.findById(ctx.staffMongoId)
-      .select("id name")
-      .lean();
+    const me = await Staff.findById(ctx.staffMongoId).select("id userId").lean();
+    const ids = [
+      ...new Set(
+        [ctx.staffMongoId, ctx.userId, me?.id, me?.userId]
+          .map((v) => String(v || "").trim())
+          .filter(Boolean),
+      ),
+    ];
     const doctorClauses = [];
-    if (me?.id) doctorClauses.push({ doctorId: String(me.id) });
-    if (me?.name) {
-      doctorClauses.push({
-        consultantDoctor: {
-          $regex: escapeRegex(me.name),
-          $options: "i",
-        },
-      });
-    }
-    if (ctx.userId) {
-      doctorClauses.push({ doctorId: String(ctx.userId) });
+    for (const id of ids) {
+      doctorClauses.push({ doctorId: id });
+      doctorClauses.push({ "prescriptions.doctorId": id });
     }
     if (doctorClauses.length) {
       doctorFilter = { $or: doctorClauses };
