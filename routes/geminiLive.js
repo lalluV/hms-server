@@ -1,4 +1,5 @@
 const express = require("express");
+const multer = require("multer");
 const { GoogleGenAI } = require("@google/genai");
 const {
   applyEntitlementsNoTenantDb,
@@ -8,78 +9,49 @@ const router = express.Router();
 
 applyEntitlementsNoTenantDb(router, { moduleKey: "core" });
 
-const GEMINI_LIVE_MODEL = "gemini-3.1-flash-live-preview";
+/** Record → transcribe (not Live). Override with GEMINI_TRANSCRIBE_MODEL. */
+const GEMINI_TRANSCRIBE_MODEL =
+  process.env.GEMINI_TRANSCRIBE_MODEL || "gemini-3.1-flash-lite";
+
+const INLINE_MAX_BYTES = 15 * 1024 * 1024;
+
+const TRANSCRIBE_PROMPT =
+  "Transcribe this medical consult / dictation audio accurately.\n" +
+  "Rules:\n" +
+  "- Output ONLY the transcript text. No preamble, labels, or markdown.\n" +
+  "- Use the speaker’s language and script (auto-detect; support code-switching).\n" +
+  "- Keep medicine names, strengths, frequencies (OD/BD/TDS/SOS/HS), lab abbreviations, numbers and doses as spoken.\n" +
+  "- Do not invent clinical content. Do not structure into a chart.\n" +
+  "- Skip pure greetings with no clinical content.\n" +
+  "- If there is no speech, return an empty string.";
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 25 * 1024 * 1024,
+    files: 1,
+  },
+});
+
+function extractText(response) {
+  if (!response) return "";
+  if (typeof response.text === "string" && response.text.trim()) {
+    return response.text.trim();
+  }
+  const parts = response?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) return "";
+  return parts
+    .map((p) => (typeof p?.text === "string" ? p.text : ""))
+    .join("")
+    .trim();
+}
 
 /**
- * Keep aligned with hms/src/helpers/geminiLiveListenConfig.js
- * Live API uses short codes: te / hi / en (NOT te-IN).
+ * POST /api/gemini-live/transcribe
+ * multipart field "audio" — MediaRecorder blob (webm/mp4/ogg/wav).
+ * Returns { transcript, model }.
  */
-const LIVE_ADAPTATION_PHRASES = [
-  "జ్వరం",
-  "దగ్గు",
-  "జలుబు",
-  "నొప్పి",
-  "తలనొప్పి",
-  "శరీర నొప్పి",
-  "వాంతులు",
-  "విరేచనాలు",
-  "ఆయాసం",
-  "మందు",
-  "టాబ్లెట్",
-  "సిరప్",
-  "ఇంజెక్షన్",
-  "పరీక్ష",
-  "jwaram",
-  "daggu",
-  "jalubu",
-  "noppi",
-  "talanoppi",
-  "vantulu",
-  "virechanaalu",
-  "aayasam",
-  "Dolo 650",
-  "Dolo",
-  "Crocin",
-  "Pantop",
-  "PAN 40",
-  "Azithromycin",
-  "Azithro",
-  "Amoxicillin",
-  "Augmentin",
-  "Telma",
-  "Metformin",
-  "Montair",
-  "Cetirizine",
-  "T-Bact",
-  "ORS",
-  "PCM",
-  "Paracetamol",
-  "OD",
-  "BD",
-  "TDS",
-  "SOS",
-  "HS",
-  "CBC",
-  "CBP",
-  "CUE",
-  "LFT",
-  "KFT",
-  "HbA1c",
-  "TSH",
-  "ECG",
-  "USG",
-  "X-ray",
-];
-
-const SCRIBE_SYSTEM_INSTRUCTION =
-  "You are a silent medical scribe for a Telugu-speaking Indian hospital (Andhra / Telangana) OPD/IPD.\nThe consult is primarily TELUGU, often mixed with English medicine/lab names (code-switching).\nDo NOT speak, reply, or interrupt. Your only job is accurate input transcription.\n\nLANGUAGE (critical — do not ignore)\n- When the speaker uses Telugu, transcribe in TELUGU SCRIPT (తెలుగు). Do NOT force everything into English.\n- Keep English drug names, lab abbreviations, numbers and doses in Latin script as spoken (Dolo 650, BD, CBC, LFT).\n- Hindi, if spoken, may be in Devanagari or clear romanization.\n- Never invent English paraphrases during transcription; the chart writer will translate later.\n- Prefer common OPD Telugu terms when unsure: fever=జ్వరం, cough=దగ్గు, pain=నొప్పి, vomiting=వాంతులు, loose stools=విరేచనాలు, breathlessness=ఆయాసం.\n\nAUDIO\n- Expect soft/low voices, slow speech, and ward noise. Still capture faint patient Telugu answers.\n- Prefer a best-effort transcript over silence.\n\nTRANSCRIBE VERBATIM (do not reorder into a chart):\n- Complaints, history, exam remarks, diagnosis words, advice.\n- Medicines with strength/frequency/duration; labs; vitals.\n- Ignore pure greetings only when they contain no clinical content.";
-
-/**
- * POST /api/gemini-live/ephemeral-token
- * Short-lived token for Live listen (transcription only).
- * Chart writing uses GPT-4o-mini via /discharge-summary/parse-clinical-note.
- */
-router.post("/ephemeral-token", async (req, res) => {
+router.post("/transcribe", upload.single("audio"), async (req, res) => {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return res.status(503).json({
@@ -87,65 +59,96 @@ router.post("/ephemeral-token", async (req, res) => {
     });
   }
 
+  if (!req.file?.buffer?.length) {
+    return res.status(400).json({ error: "No audio file uploaded" });
+  }
+
+  const mimeType = String(req.file.mimetype || "audio/webm").split(";")[0];
+  const allowed = new Set([
+    "audio/webm",
+    "audio/mp4",
+    "audio/mpeg",
+    "audio/mp3",
+    "audio/ogg",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/aac",
+    "audio/flac",
+    "audio/m4a",
+    "video/webm", // some browsers label MediaRecorder this way
+  ]);
+  if (!allowed.has(mimeType) && !mimeType.startsWith("audio/")) {
+    return res.status(400).json({
+      error: `Unsupported audio type: ${mimeType}`,
+    });
+  }
+
+  const audioMime = mimeType === "video/webm" ? "audio/webm" : mimeType;
+
   try {
     const client = new GoogleGenAI({ apiKey });
-    const expireTime = new Date(Date.now() + 30 * 60 * 1000).toISOString();
-    const newSessionExpireTime = new Date(
-      Date.now() + 2 * 60 * 1000,
-    ).toISOString();
+    const buffer = req.file.buffer;
+    let contents;
 
-    const token = await client.authTokens.create({
-      config: {
-        uses: 1,
-        expireTime,
-        newSessionExpireTime,
-        liveConnectConstraints: {
-          model: GEMINI_LIVE_MODEL,
-          config: {
-            responseModalities: ["AUDIO"],
-            inputAudioTranscription: {
-              // Live API short codes — te-IN / en-IN break recognition
-              languageHints: {
-                languageCodes: ["te", "en", "hi"],
+    if (buffer.length <= INLINE_MAX_BYTES) {
+      contents = [
+        {
+          role: "user",
+          parts: [
+            { text: TRANSCRIBE_PROMPT },
+            {
+              inlineData: {
+                mimeType: audioMime,
+                data: buffer.toString("base64"),
               },
-              adaptationPhrases: LIVE_ADAPTATION_PHRASES,
             },
-            systemInstruction: {
-              parts: [{ text: SCRIBE_SYSTEM_INSTRUCTION }],
-            },
-            realtimeInputConfig: {
-              automaticActivityDetection: {
-                disabled: false,
-                startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
-                endOfSpeechSensitivity: "END_SENSITIVITY_LOW",
-                prefixPaddingMs: 200,
-                silenceDurationMs: 1800,
-              },
-              turnCoverage: "TURN_INCLUDES_ALL_INPUT",
-              activityHandling: "NO_INTERRUPTION",
-            },
-            temperature: 0.2,
-          },
+          ],
         },
-        httpOptions: { apiVersion: "v1alpha" },
+      ];
+    } else {
+      // Files API for larger clips (Node Buffer accepted by @google/genai).
+      const uploaded = await client.files.upload({
+        file: buffer,
+        config: { mimeType: audioMime },
+      });
+      if (!uploaded?.uri) {
+        return res
+          .status(502)
+          .json({ error: "Failed to upload audio to Gemini" });
+      }
+      contents = [
+        {
+          role: "user",
+          parts: [
+            { text: TRANSCRIBE_PROMPT },
+            {
+              fileData: {
+                fileUri: uploaded.uri,
+                mimeType: uploaded.mimeType || audioMime,
+              },
+            },
+          ],
+        },
+      ];
+    }
+
+    const response = await client.models.generateContent({
+      model: GEMINI_TRANSCRIBE_MODEL,
+      contents,
+      config: {
+        temperature: 0.2,
       },
     });
 
-    if (!token?.name) {
-      return res
-        .status(502)
-        .json({ error: "Failed to create ephemeral token" });
-    }
-
+    const transcript = extractText(response);
     return res.json({
-      token: token.name,
-      model: GEMINI_LIVE_MODEL,
-      expireTime,
+      transcript,
+      model: GEMINI_TRANSCRIBE_MODEL,
     });
   } catch (error) {
-    console.error("Gemini Live ephemeral token error:", error);
+    console.error("Gemini consult transcribe error:", error);
     return res.status(500).json({
-      error: "Failed to create Gemini Live token",
+      error: "Failed to transcribe audio",
       detail: error?.message || String(error),
     });
   }

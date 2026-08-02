@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const axios = require("axios");
+const { GoogleGenAI } = require("@google/genai");
 const {
   applyEntitlementsNoTenantDb,
 } = require("../utils/applyTenantEntitlements");
@@ -10,47 +11,161 @@ applyEntitlementsNoTenantDb(router, { moduleKey: "ipd" });
 const OPENAI_API_BASE_URL = "https://api.openai.com/v1";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = "gpt-4o-mini";
-// Note parsing is the most instruction-sensitive call; override without a deploy if needed.
-const PARSE_NOTE_MODEL = process.env.OPENAI_PARSE_MODEL || OPENAI_MODEL;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+// AI Write extract / review-followup / taper expand — Gemini 3.1 Flash Lite.
+const PARSE_NOTE_MODEL =
+  process.env.GEMINI_PARSE_MODEL ||
+  process.env.GEMINI_TRANSCRIBE_MODEL ||
+  "gemini-3.1-flash-lite";
 const PARSE_NOTE_TIMEOUT_MS =
-  Number(process.env.OPENAI_PARSE_TIMEOUT_MS) || 60000;
+  Number(process.env.GEMINI_PARSE_TIMEOUT_MS) ||
+  Number(process.env.OPENAI_PARSE_TIMEOUT_MS) ||
+  60000;
+// Large consults (many meds/labs) need a high ceiling — 3500 truncates mid-JSON.
 const PARSE_NOTE_MAX_TOKENS =
-  Number(process.env.OPENAI_PARSE_MAX_TOKENS) || 3500;
+  Number(process.env.GEMINI_PARSE_MAX_TOKENS) ||
+  Number(process.env.OPENAI_PARSE_MAX_TOKENS) ||
+  16384;
+const PARSE_NOTE_RETRY_MAX_TOKENS = Math.max(
+  PARSE_NOTE_MAX_TOKENS,
+  Number(process.env.GEMINI_PARSE_RETRY_MAX_TOKENS) || 24576,
+);
 // Review follow-up returns a small PATCH, not the whole chart — keep the cap
 // modest so the model can't fall back to re-emitting everything.
 const REVIEW_FOLLOWUP_DELTA_MAX_TOKENS =
-  Number(process.env.OPENAI_FOLLOWUP_MAX_TOKENS) || 1800;
+  Number(process.env.OPENAI_FOLLOWUP_MAX_TOKENS) || 16384;
 // Retry budget when the first response is truncated / invalid JSON.
 const REVIEW_FOLLOWUP_DELTA_RETRY_MAX_TOKENS =
-  Number(process.env.OPENAI_FOLLOWUP_RETRY_MAX_TOKENS) || 2200;
+  Number(process.env.OPENAI_FOLLOWUP_RETRY_MAX_TOKENS) || 24576;
 // Live "typing" reply is a separate tiny call — plain text, streamed, no JSON mode.
 const REVIEW_FOLLOWUP_REPLY_MAX_TOKENS = 60;
 
+function withTimeout(promise, timeoutMs) {
+  if (!timeoutMs || timeoutMs <= 0) return promise;
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const err = new Error(`AI request timed out after ${timeoutMs}ms`);
+      err.code = "ECONNABORTED";
+      reject(err);
+    }, timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+/** OpenAI-style messages → Gemini systemInstruction + contents. */
+function openAiMessagesToGemini(messages) {
+  const list = Array.isArray(messages) ? messages : [];
+  const systemChunks = [];
+  const contents = [];
+  for (const message of list) {
+    const text = String(message?.content || "").trim();
+    if (!text) continue;
+    if (message.role === "system") {
+      systemChunks.push(text);
+      continue;
+    }
+    const role = message.role === "assistant" ? "model" : "user";
+    const prev = contents[contents.length - 1];
+    if (prev && prev.role === role) {
+      prev.parts[0].text = `${prev.parts[0].text}\n\n${text}`;
+    } else {
+      contents.push({ role, parts: [{ text }] });
+    }
+  }
+  if (!contents.length) {
+    contents.push({ role: "user", parts: [{ text: "Return valid JSON." }] });
+  }
+  // Gemini chats should start with a user turn.
+  if (contents[0].role !== "user") {
+    contents.unshift({
+      role: "user",
+      parts: [{ text: "Continue with the JSON response." }],
+    });
+  }
+  return {
+    systemInstruction: systemChunks.length
+      ? systemChunks.join("\n\n")
+      : undefined,
+    contents,
+  };
+}
+
+/**
+ * AI Write JSON completion via Gemini (same return shape as OpenAI chat.completions
+ * so parse / follow-up / taper callers stay unchanged).
+ */
 async function callParseClinicalNoteCompletion(
   messages,
   { timeoutMs = PARSE_NOTE_TIMEOUT_MS, maxTokens = PARSE_NOTE_MAX_TOKENS } = {},
 ) {
-  const payload = {
-    model: PARSE_NOTE_MODEL,
-    messages,
-    max_tokens: maxTokens,
-    temperature: 0.1,
-    top_p: 0.9,
-    response_format: { type: "json_object" },
+  if (!GEMINI_API_KEY) {
+    const err = new Error("GEMINI_API_KEY is not configured");
+    err.status = 503;
+    throw err;
+  }
+
+  const { systemInstruction, contents } = openAiMessagesToGemini(messages);
+  const client = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+
+  const buildConfig = (outputTokens) => {
+    const config = {
+      temperature: 0.1,
+      topP: 0.9,
+      maxOutputTokens: outputTokens,
+      responseMimeType: "application/json",
+      // Keep thinking minimal so the budget goes to chart JSON, not reasoning.
+      thinkingConfig: { thinkingLevel: "minimal" },
+    };
+    if (systemInstruction) {
+      config.systemInstruction = systemInstruction;
+    }
+    return config;
   };
-  try {
-    return await openaiApi.post("/chat/completions", payload, {
-      timeout: timeoutMs,
+
+  const run = (outputTokens) =>
+    client.models.generateContent({
+      model: PARSE_NOTE_MODEL,
+      contents,
+      config: buildConfig(outputTokens),
     });
+
+  const toOpenAiShape = (response) => {
+    const content = String(response?.text || "").trim();
+    if (!content) {
+      throw new Error("Empty response from Gemini");
+    }
+    const finishRaw = String(
+      response?.candidates?.[0]?.finishReason || "STOP",
+    ).toUpperCase();
+    const finish_reason =
+      finishRaw === "MAX_TOKENS" || finishRaw === "LENGTH" ? "length" : "stop";
+    return {
+      data: {
+        model: PARSE_NOTE_MODEL,
+        choices: [
+          {
+            message: { role: "assistant", content },
+            finish_reason,
+          },
+        ],
+      },
+    };
+  };
+
+  try {
+    const response = await withTimeout(run(maxTokens), timeoutMs);
+    return toOpenAiShape(response);
   } catch (firstError) {
     const timedOut =
       firstError?.code === "ECONNABORTED" ||
       /timeout/i.test(String(firstError?.message || ""));
     if (!timedOut) throw firstError;
     console.warn("Parse clinical note timed out; retrying once…");
-    return openaiApi.post("/chat/completions", payload, {
-      timeout: timeoutMs,
-    });
+    const response = await withTimeout(run(maxTokens), timeoutMs);
+    return toOpenAiShape(response);
   }
 }
 
@@ -1743,6 +1858,20 @@ function extractJsonObject(content) {
   return jsonMatch ? jsonMatch[1] : trimmed;
 }
 
+/** Parse chart JSON; repair common Gemini truncations on large consults. */
+function parseClinicalNoteJson(content) {
+  const raw = extractJsonObject(content);
+  try {
+    return JSON.parse(raw);
+  } catch (firstError) {
+    try {
+      return repairTruncatedJsonObject(raw);
+    } catch {
+      throw firstError;
+    }
+  }
+}
+
 function buildPatientContextLine({ age, gender, allergies }) {
   const contextParts = [];
   if (age) contextParts.push(`age ${age}`);
@@ -1954,11 +2083,11 @@ router.post("/parse-clinical-note", async (req, res) => {
       ]);
     } catch (apiError) {
       console.error(
-        "OpenAI API error:",
+        "Gemini AI Write parse error:",
         apiError?.response?.data || apiError.message,
       );
-      return res.status(502).json({
-        error: "Failed to contact OpenAI API",
+      return res.status(apiError?.status === 503 ? 503 : 502).json({
+        error: "Failed to contact Gemini for AI Write",
         details: apiError?.response?.data || apiError.message,
       });
     }
@@ -1969,24 +2098,82 @@ router.post("/parse-clinical-note", async (req, res) => {
     ) {
       return res
         .status(500)
-        .json({ error: "Invalid response from OpenAI API" });
+        .json({ error: "Invalid response from Gemini AI Write" });
     }
 
-    const content = response.data.choices[0].message.content.trim();
+    let content = response.data.choices[0].message.content.trim();
+    let finishReason = String(
+      response.data.choices[0].finish_reason || "",
+    ).toLowerCase();
+
+    let parsed;
+    try {
+      parsed = parseClinicalNoteJson(content);
+    } catch (parseError) {
+      // Truncated mid-medicine JSON on big consults — one higher-budget retry.
+      if (finishReason === "length" || content.length > 2000) {
+        console.warn(
+          "AI Write JSON truncated/invalid; retrying with higher output budget…",
+          parseError.message,
+        );
+        try {
+          response = await callParseClinicalNoteCompletion(
+            [
+              {
+                role: "system",
+                content: PARSE_CLINICAL_NOTE_SYSTEM_PROMPT,
+              },
+              {
+                role: "user",
+                content: `${PARSE_CLINICAL_NOTE_USER_PROMPT(
+                  clinicalNote,
+                  context,
+                  existingContext,
+                  mode,
+                  clinicalSetting,
+                )}\n\nIMPORTANT: Previous answer was truncated. Return COMPLETE valid JSON for the full chart. Prefer compact fields; do not omit medicines/labs that were dictated.`,
+              },
+            ],
+            {
+              timeoutMs: Math.min(PARSE_NOTE_TIMEOUT_MS + 30000, 120000),
+              maxTokens: PARSE_NOTE_RETRY_MAX_TOKENS,
+            },
+          );
+          content = response.data.choices[0].message.content.trim();
+          finishReason = String(
+            response.data.choices[0].finish_reason || "",
+          ).toLowerCase();
+          parsed = parseClinicalNoteJson(content);
+        } catch (retryError) {
+          console.error("Error parsing AI response after retry:", retryError);
+          console.error("AI Response:", content?.slice?.(0, 4000) || content);
+          return res.status(500).json({
+            error:
+              "AI Write response was too large / truncated. Try a shorter note, or try Extract again.",
+            details: retryError.message || parseError.message,
+          });
+        }
+      } else {
+        console.error("Error parsing AI response:", parseError);
+        console.error("AI Response:", content?.slice?.(0, 4000) || content);
+        return res.status(500).json({
+          error: "Failed to parse AI response",
+          details: parseError.message,
+        });
+      }
+    }
 
     try {
-      const parsed = JSON.parse(extractJsonObject(content));
       const withMedicinePasses = await applyAiOnlyMedicinePasses(
         parsed,
         clinicalNote,
       );
       res.json(finalizeParsedClinicalNote(withMedicinePasses, existingContext));
-    } catch (parseError) {
-      console.error("Error parsing AI response:", parseError);
-      console.error("AI Response:", content);
+    } catch (postError) {
+      console.error("Error finalizing clinical note:", postError);
       res.status(500).json({
-        error: "Failed to parse AI response",
-        details: parseError.message,
+        error: "Failed to finalize clinical note",
+        details: postError.message,
       });
     }
   } catch (error) {
@@ -2070,11 +2257,11 @@ router.post("/review-followup", async (req, res) => {
       });
     } catch (apiError) {
       console.error(
-        "OpenAI review follow-up error:",
+        "Gemini review follow-up error:",
         apiError?.response?.data || apiError.message,
       );
-      return res.status(502).json({
-        error: "Failed to contact OpenAI API",
+      return res.status(apiError?.status === 503 ? 503 : 502).json({
+        error: "Failed to contact Gemini for AI Write",
         details: apiError?.response?.data || apiError.message,
       });
     }
@@ -2085,11 +2272,17 @@ router.post("/review-followup", async (req, res) => {
     ) {
       return res
         .status(500)
-        .json({ error: "Invalid response from OpenAI API" });
+        .json({ error: "Invalid response from Gemini AI Write" });
     }
 
     let content = response.data.choices[0].message.content.trim();
-    let finishReason = response.data.choices[0].finish_reason;
+    let finishReason = String(
+      response.data.choices[0].finish_reason || "",
+    ).toLowerCase();
+    // Normalize Gemini finish reasons to the OpenAI-style checks below.
+    if (finishReason === "max_tokens" || finishReason === "length") {
+      finishReason = "length";
+    }
     let delta;
 
     try {
@@ -2271,7 +2464,8 @@ router.post("/review-followup/reply-stream", async (req, res) => {
     upstream = await openaiApi.post(
       "/chat/completions",
       {
-        model: PARSE_NOTE_MODEL,
+        // Tiny UI stream — keep on OpenAI; chart JSON uses Gemini PARSE_NOTE_MODEL.
+        model: OPENAI_MODEL,
         stream: true,
         temperature: 0.2,
         max_tokens: REVIEW_FOLLOWUP_REPLY_MAX_TOKENS,
@@ -2332,7 +2526,8 @@ router.post("/parse-clinical-note/reply-stream", async (req, res) => {
     upstream = await openaiApi.post(
       "/chat/completions",
       {
-        model: PARSE_NOTE_MODEL,
+        // Tiny UI stream — keep on OpenAI; chart JSON uses Gemini PARSE_NOTE_MODEL.
+        model: OPENAI_MODEL,
         stream: true,
         temperature: 0.2,
         max_tokens: REVIEW_FOLLOWUP_REPLY_MAX_TOKENS,
