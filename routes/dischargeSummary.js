@@ -230,7 +230,7 @@ Rules:
 - Short course "days then stop" stays ONE add row (not a taper split into stop).
 - Keep the spoken name on every step (brand if brand was spoken). Leave generic_name "".
 - directions: simple morning/afternoon/evening/night English (no twice/thrice/BD/OD/TDS as patient text).
-- dosages: time, amount, beforeFood; unit "" for Tablet/Capsules else short (ml|IU|drop|puff|app|U|sach).
+- dosages: time, amount, beforeFood; unit "" for Tablet/Capsules/Injection unless IU or ml stated.
 
 Shape example (anonymous):
 Input packed: BrandX 20 bd 5d then 10 3d then 5 3d
@@ -567,6 +567,10 @@ DURATION
 - If duration is stated for a medicine, fill it exactly as stated (keep the mentioned value).
 - If several medicines are ordered in the same clause/list and only one shared duration is stated (e.g. "… bd 5d" covering the group), apply that duration to each med in that group.
 - If no duration is stated anywhere for a medicine, set duration to "5 days" (default). Do not invent other durations.
+- IV fluids / infusions (NS, RL, DNS, Normal Saline, Ringer Lactate, dextrose bags, "IV fluid"): NEVER default to "5 days".
+  - If doctor says over X hours / X hrs → duration "X hours".
+  - If only a rate is stated (e.g. 100 ml/hr) → put rate in directions; duration "Once" (or hours if also stated).
+  - If no duration/rate stated → duration "Once".
 
 DIRECTIONS (LAYMAN ENGLISH — REQUIRED)
 - directions: simple Indian patient English. Never use twice, thrice, BD, OD, TDS, QID, HS, SOS, PRN as the only patient text.
@@ -576,8 +580,9 @@ DIRECTIONS (LAYMAN ENGLISH — REQUIRED)
 DOSAGES GRID (M/A/E/N)
 - For fixed daily schedules fill dosages[] with Morning/Afternoon/Evening/Night as needed.
 - Each dosage object MUST include: time, amount (number), unit, beforeFood (true/false).
-- Tablet or Capsules type: unit MUST be "" (empty). Never put tablet/tab/capsule in unit — grid shows amount only (½, 1, 2…).
-- All other types: unit MUST be a short form only — ml | IU | drop | puff | app | U | sach. Never long words (tablet, millilitre, drops, application, international units).
+- Tablet, Capsules, OR Injection (ampoule/vial count): unit MUST be "" (empty). Never put tablet/tab/capsule/injection/U/unit in unit — grid shows amount only (½, 1, 2…).
+- Exception — only when doctor explicitly said insulin units or ml: use "IU" (insulin) or "ml". Never invent "U" for a plain injection (e.g. Lali B inj → amount 1, unit "").
+- Syrup/liquid: unit "ml". Drops: "drop". Inhaler: "puff". Topical: "app". Sachet: "sach".
 - If doctor says before food / empty stomach → beforeFood true on those slots. After food → beforeFood false and mention after food in directions.
 - Unequal same-day amounts (e.g. morning 10 IU and afternoon 15 IU) → one medicine, two dosage slots with correct amounts and unit "IU".
 - Do NOT invent a daily grid for SOS / weekly / alternate-day / sliding-scale / conditional schedules; leave dosages [] and put clear text in directions.
@@ -607,7 +612,8 @@ FINAL CHECK
 - Explicit stop/delete of a named drug = action "stop" row; course "then stop" stays action "add".
 - name = spoken brand or spoken generic only; generic_name always "".
 - directions are morning/afternoon/evening/night English (no twice/thrice).
-- Tablet/Capsule dosages: unit ""; other forms: short unit only; beforeFood when known.
+- Tablet/Capsule/Injection dosages: unit "" unless insulin IU or ml stated; never invent "U" on plain injections.
+- IV fluids: duration in hours when stated, else "Once" — never default to 5 days.
 - Conditional labs are advice, not duplicate labTests.
 - Procedures never appear in medicines[]; medicines never appear in procedures[].
 - No invented facts.`;
@@ -846,7 +852,7 @@ const CLINICAL_JSON_SHAPE_BLOCK = `Return exactly this JSON shape:
     "strength": "", "dosage": "", "frequency": "", "duration": "",
     "scheduleKind": "fixed_daily|interval|weekly|monthly|alternate_day|prn|sliding_scale|one_time|sequential|device_controlled|free_text",
     "directions": "",
-    "dosages": [{ "time": "Morning|Afternoon|Evening|Night", "amount": 1, "unit": "\\"\\" for Tablet/Capsules else ml|IU|drop|puff|app|U|sach", "beforeFood": false }],
+    "dosages": [{ "time": "Morning|Afternoon|Evening|Night", "amount": 1, "unit": "\\"\\" for Tablet/Capsules/Injection else ml|IU|drop|puff|app|sach", "beforeFood": false }],
     "action": "add|continue|note_only|stop"
   }],
   "labTests": [{"name": "", "action": "add|continue|note_only"}],
@@ -897,7 +903,7 @@ ${modeLine}
 ${context ? `PATIENT: ${context}` : ""}
 ${existingLine}
 
-COMPLETENESS: Keep every clinical fact from CURRENT INPUT. Writing style may vary — expand shorthand into clear English and place each fact by meaning (past→history, symptoms→complaints only never diagnosis, exam→examination, named impression→diagnosis else leave diagnosis empty, plan/follow-up/if-needed→advice, today's drug orders→medicines[], labs→labTests[], this-visit acts/services→procedures[] never medicines[], measured vitals→vitals). noteSections are bullet lists. Medicine name = spoken brand or spoken generic; leave generic_name "". Tapers = multiple medicines[] rows. Explicit stop/delete of a named drug = action stop. Tablet/Capsule unit ""; other forms short unit only; beforeFood when known. Do not drop clauses.
+COMPLETENESS: Keep every clinical fact from CURRENT INPUT. Writing style may vary — expand shorthand into clear English and place each fact by meaning (past→history, symptoms→complaints only never diagnosis, exam→examination, named impression→diagnosis else leave diagnosis empty, plan/follow-up/if-needed→advice, today's drug orders→medicines[], labs→labTests[], this-visit acts/services→procedures[] never medicines[], measured vitals→vitals). noteSections are bullet lists. Medicine name = spoken brand or spoken generic; leave generic_name "". Tapers = multiple medicines[] rows. Explicit stop/delete of a named drug = action stop. Tablet/Capsule/Injection unit "" (IU/ml only when stated); IV fluids duration hours or Once not 5 days; beforeFood when known. Do not drop clauses.
 
 ${CLINICAL_JSON_SHAPE_BLOCK}
 
@@ -978,7 +984,7 @@ Return exactly this JSON shape:
       "name": "", "generic_name": "",
       "type": "Tablet|Capsules|Injection|Syrup|Ointment|Gel|Sachet|Syringe|Drops|Inhaler|Spray|Patch|Suppository|Other",
       "strength": "", "duration": "", "directions": "",
-      "dosages": [{ "time": "Morning|Afternoon|Evening|Night", "amount": 1, "unit": "\\"\\" for Tablet/Capsules else ml|IU|drop|puff|app|U|sach", "beforeFood": false }]
+      "dosages": [{ "time": "Morning|Afternoon|Evening|Night", "amount": 1, "unit": "\\"\\" for Tablet/Capsules/Injection else ml|IU|drop|puff|app|sach", "beforeFood": false }]
     }
   }],
   "labOps": [{ "op": "add|remove|stop", "name": "", "match": "exact existing lab name (remove|stop only)" }],

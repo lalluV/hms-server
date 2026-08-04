@@ -215,6 +215,16 @@ function parseFrequency(freq) {
 
 function parseDuration(duration) {
   const durationLower = String(duration || "5 days").toLowerCase();
+  if (/^(?:once|stat)\b/.test(durationLower)) {
+    return { value: 1, unit: "Days" };
+  }
+  const hoursMatch = durationLower.match(
+    /(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|hr)\b/,
+  );
+  if (hoursMatch) {
+    // Quantity helper uses days — treat short infusions as 1 day bag
+    return { value: 1, unit: "Days" };
+  }
   const daysMatch = durationLower.match(/(\d+)\s*days?/);
   if (daysMatch) {
     return { value: parseInt(daysMatch[1], 10), unit: "Days" };
