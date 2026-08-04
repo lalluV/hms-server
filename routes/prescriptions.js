@@ -44,6 +44,8 @@ function buildPublicPatient(patient) {
     gender: patient.gender,
     UMRNo: patient.UMRNo,
     phone: patient.phone,
+    pastMedicalHistory: patient.pastMedicalHistory || "",
+    allergiesHistory: patient.allergiesHistory || "",
   };
 }
 
@@ -118,6 +120,7 @@ function buildPublicPrescription(prescription) {
     doctorId: prescription.doctorId,
     symptoms: prescription.symptoms || "",
     pastMedicalHistory: prescription.pastMedicalHistory || "",
+    allergiesHistory: prescription.allergiesHistory || "",
     provisionalDiagnosis: prescription.provisionalDiagnosis || "",
     weight: prescription.weight,
     height: prescription.height,
@@ -167,6 +170,8 @@ router.get("/public/:token", async (req, res) => {
           gender: 1,
           UMRNo: 1,
           phone: 1,
+          allergiesHistory: 1,
+          pastMedicalHistory: 1,
           prescriptionsMeta: {
             $map: {
               input: { $ifNull: ["$prescriptions", []] },
@@ -207,6 +212,8 @@ router.get("/public/:token", async (req, res) => {
       gender: patientRow.gender,
       UMRNo: patientRow.UMRNo,
       phone: patientRow.phone,
+      pastMedicalHistory: patientRow.pastMedicalHistory || "",
+      allergiesHistory: patientRow.allergiesHistory || "",
       prescriptions: patientRow.prescriptionsMeta || [],
     };
 
