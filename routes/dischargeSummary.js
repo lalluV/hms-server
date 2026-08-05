@@ -887,9 +887,11 @@ const PARSE_CLINICAL_NOTE_USER_PROMPT = (
   const compactExisting = compactExistingClinicalContext(existingContext);
 
   const settingLine =
-    clinicalSetting === "ipd"
-      ? `SETTING: IPD. "stop" discontinues a medicine.`
-      : `SETTING: OPD. "stop" removes a medicine from this visit prescription.`;
+    clinicalSetting === "era"
+      ? `SETTING: ERA (emergency admission). Split medicines by route: already given/administered in casualty/ER (stat, IV bolus, "given now") → set "eraRoute": "given_in_er". Medicines to continue on the ward → "eraRoute": "continue_on_ward". Default continue_on_ward if unclear. Labs → labTests only (chart pending). Include allergies in note or allergiesHistory field; use NKDA when stated.`
+      : clinicalSetting === "ipd"
+        ? `SETTING: IPD. "stop" discontinues a medicine.`
+        : `SETTING: OPD. "stop" removes a medicine from this visit prescription.`;
   const modeLine =
     mode === "add"
       ? `MODE: add. Return only facts and actions from the current input; never repeat existing chart items as new.`
@@ -967,6 +969,14 @@ Doctor: "Delete everything" →
 
 Doctor: "Add fever with chills to complaints" →
 {"assistantReply":"Added fever with chills under complaints.","noteOps":[{"section":"complaints","action":"add","text":"Fever with chills"}]}
+
+ELABORATE / EXPAND / REWRITE NOTE (HARD — NO DUPLICATES)
+- When the doctor says elaborate / expand / rewrite / flesh out / make detailed (whole note or a section), do NOT addOps the new wording while leaving the short originals — that duplicates.
+- For every bullet you expand: first noteOps remove the exact existing bullet (action "remove", target = exact CURRENT CHART bullet text), then noteOps add the elaborated version (action "add", text = new wording only).
+- Same rule for a whole section: remove each existing bullet in that section, then add only the new elaborated bullets. Never keep both short + elaborated side by side.
+
+Doctor: "Elaborate complaints" (CURRENT has • Fever) →
+{"assistantReply":"Elaborated the complaints.","noteOps":[{"section":"complaints","action":"remove","target":"Fever"},{"section":"complaints","action":"add","text":"High-grade intermittent fever for 3 days, associated with chills"}]}
 
 Return exactly this JSON shape:
 {
@@ -1172,9 +1182,11 @@ const REVIEW_FOLLOWUP_USER_PROMPT = (
 ) => {
   const compactExisting = compactExistingClinicalContext(existingContext);
   const settingLine =
-    clinicalSetting === "ipd"
-      ? `SETTING: IPD. "stop" discontinues a medicine.`
-      : `SETTING: OPD. "stop" removes a medicine from this visit prescription.`;
+    clinicalSetting === "era"
+      ? `SETTING: ERA (emergency admission). Split medicines by route: already given/administered in casualty/ER (stat, IV bolus, "given now") → set "eraRoute": "given_in_er". Medicines to continue on the ward → "eraRoute": "continue_on_ward". Default continue_on_ward if unclear. Labs → labTests only (chart pending). Include allergies in note or allergiesHistory field; use NKDA when stated.`
+      : clinicalSetting === "ipd"
+        ? `SETTING: IPD. "stop" discontinues a medicine.`
+        : `SETTING: OPD. "stop" removes a medicine from this visit prescription.`;
   const existingLine = compactExisting
     ? `OTHER VISIT CONTEXT (reference only, never source):\n${JSON.stringify(compactExisting)}`
     : `OTHER VISIT CONTEXT: none`;
@@ -1190,7 +1202,7 @@ ${JSON.stringify(slimChart)}
 INSTRUCTION:
 ${instruction}
 
-REMINDER: medicineOps/labOps/noteOps only for items named or clearly changed by INSTRUCTION. Unchanged medicines → omit. Empty arrays when unused.`;
+REMINDER: medicineOps/labOps/noteOps only for items named or clearly changed by INSTRUCTION. Unchanged medicines → omit. Empty arrays when unused. Elaborate/expand/rewrite → remove old bullets then add new ones; never leave short originals next to elaborated copies.`;
 };
 
 /** Tiny live-typing reply — separate, non-JSON, streamed call so the doctor sees something immediately. */
