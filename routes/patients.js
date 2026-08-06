@@ -521,7 +521,23 @@ router.post("/", async (req, res) => {
     const newPatient = await patient.save();
     res.status(201).json(newPatient);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error("POST /api/patients failed:", error?.message || error);
+    if (error?.errors) {
+      console.error(
+        "Validation details:",
+        Object.fromEntries(
+          Object.entries(error.errors).map(([k, v]) => [k, v.message]),
+        ),
+      );
+    }
+    res.status(400).json({
+      message: error.message,
+      errors: error?.errors
+        ? Object.fromEntries(
+            Object.entries(error.errors).map(([k, v]) => [k, v.message]),
+          )
+        : undefined,
+    });
   }
 });
 

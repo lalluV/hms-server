@@ -110,6 +110,8 @@ const patientSchema = new mongoose.Schema(
       smoking: { type: Boolean, default: false },
       illicitDrugs: { type: Boolean, default: false },
       other: { type: String },
+      maritalStatus: { type: String },
+      familyHistory: { type: String },
     },
     provisionalDiagnosis: { type: String },
     allergiesHistory: { type: String },
@@ -245,6 +247,14 @@ function registerTenantModels(connection) {
     if (!patientModel.schema.paths.insulinChart) {
       patientModel.schema.add({
         insulinChart: [mongoose.Schema.Types.Mixed],
+      });
+    }
+    // ERA personal history extensions (safe to re-add)
+    const ph = patientModel.schema.path("personalHistory");
+    if (ph?.schema && !ph.schema.paths.maritalStatus) {
+      ph.schema.add({
+        maritalStatus: { type: String },
+        familyHistory: { type: String },
       });
     }
   }

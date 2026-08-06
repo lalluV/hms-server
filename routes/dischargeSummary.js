@@ -722,6 +722,14 @@ function normalizeParsedVitals(raw) {
       "respiration",
     ),
     bloodPressure: pickVitalsField(raw, "bloodPressure", "bp", "BP"),
+    grbs: pickVitalsField(raw, "grbs", "GRBS", "rbs", "RBS", "bloodSugar"),
+    urineOutput: pickVitalsField(
+      raw,
+      "urineOutput",
+      "outputUrine",
+      "urine",
+      "uo",
+    ),
     inputIV: pickVitalsField(raw, "inputIV", "ivInput", "iv"),
     inputOral: pickVitalsField(raw, "inputOral", "oralInput", "oral"),
     inputOthers: pickVitalsField(raw, "inputOthers", "otherInput"),
@@ -735,6 +743,13 @@ function normalizeParsedVitals(raw) {
     outputDrain: pickVitalsField(raw, "outputDrain", "drainOutput", "drain"),
     outputOthers: pickVitalsField(raw, "outputOthers", "otherOutput"),
   };
+
+  if (!vitals.urineOutput && vitals.outputUrine) {
+    vitals.urineOutput = vitals.outputUrine;
+  }
+  if (!vitals.outputUrine && vitals.urineOutput) {
+    vitals.outputUrine = vitals.urineOutput;
+  }
 
   const hasAny = Object.values(vitals).some((value) => Boolean(value));
   return hasAny ? vitals : null;
@@ -859,7 +874,20 @@ const CLINICAL_JSON_SHAPE_BLOCK = `Return exactly this JSON shape:
   "procedures": [{"name": "", "correctedName": "", "inventoryMatch": "", "action": "add|continue|note_only"}],
   "vitals": {
     "weight": "", "height": "", "temperature": "", "spo2": "",
-    "heartRate": "", "respiratoryRate": "", "bloodPressure": ""
+    "heartRate": "", "respiratoryRate": "", "bloodPressure": "",
+    "grbs": "", "urineOutput": ""
+  },
+  "eraManualExam": {
+    "gcs": "E4V5M6",
+    "consciousness": "Alert",
+    "pupils": "",
+    "height": "",
+    "weight": "",
+    "maritalStatus": "",
+    "alcohol": false,
+    "smoking": false,
+    "illicitDrugs": false,
+    "familyHistory": ""
   },
   "noteSections": {
     "complaints": ["one symptom bullet"],
@@ -888,7 +916,7 @@ const PARSE_CLINICAL_NOTE_USER_PROMPT = (
 
   const settingLine =
     clinicalSetting === "era"
-      ? `SETTING: ERA (emergency admission). Split medicines by route: already given/administered in casualty/ER (stat, IV bolus, "given now") → set "eraRoute": "given_in_er". Medicines to continue on the ward → "eraRoute": "continue_on_ward". Default continue_on_ward if unclear. Labs → labTests only (chart pending). Include allergies in note or allergiesHistory field; use NKDA when stated.`
+      ? `SETTING: ERA (emergency admission). Split medicines by route: already given/administered in casualty/ER (stat, IV bolus, "given now") → set "eraRoute": "given_in_er". Medicines to continue on the ward → "eraRoute": "continue_on_ward". Default continue_on_ward if unclear. Labs → labTests only (chart pending). Include allergies in note or allergiesHistory field; use NKDA when stated. Vitals may include grbs (blood sugar) and urineOutput (ml) when mentioned. Fill eraManualExam when mentioned (do not invent): gcs as E#V#M#, consciousness one of Alert|Oriented|Drowsy|Confused|Stuporous|Unconscious, pupils text, height cm, weight kg, maritalStatus, alcohol/smoking/illicitDrugs booleans, familyHistory. Also put the same facts in examination/history note text and vitals.height/weight when stated.`
       : clinicalSetting === "ipd"
         ? `SETTING: IPD. "stop" discontinues a medicine.`
         : `SETTING: OPD. "stop" removes a medicine from this visit prescription.`;
@@ -1183,7 +1211,7 @@ const REVIEW_FOLLOWUP_USER_PROMPT = (
   const compactExisting = compactExistingClinicalContext(existingContext);
   const settingLine =
     clinicalSetting === "era"
-      ? `SETTING: ERA (emergency admission). Split medicines by route: already given/administered in casualty/ER (stat, IV bolus, "given now") → set "eraRoute": "given_in_er". Medicines to continue on the ward → "eraRoute": "continue_on_ward". Default continue_on_ward if unclear. Labs → labTests only (chart pending). Include allergies in note or allergiesHistory field; use NKDA when stated.`
+      ? `SETTING: ERA (emergency admission). Split medicines by route: already given/administered in casualty/ER (stat, IV bolus, "given now") → set "eraRoute": "given_in_er". Medicines to continue on the ward → "eraRoute": "continue_on_ward". Default continue_on_ward if unclear. Labs → labTests only (chart pending). Include allergies in note or allergiesHistory field; use NKDA when stated. Vitals may include grbs (blood sugar) and urineOutput (ml) when mentioned. Fill eraManualExam when mentioned (do not invent): gcs as E#V#M#, consciousness one of Alert|Oriented|Drowsy|Confused|Stuporous|Unconscious, pupils text, height cm, weight kg, maritalStatus, alcohol/smoking/illicitDrugs booleans, familyHistory. Also put the same facts in examination/history note text and vitals.height/weight when stated.`
       : clinicalSetting === "ipd"
         ? `SETTING: IPD. "stop" discontinues a medicine.`
         : `SETTING: OPD. "stop" removes a medicine from this visit prescription.`;

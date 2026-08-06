@@ -122,6 +122,8 @@ const patientSchema = new mongoose.Schema(
       smoking: { type: Boolean, default: false },
       illicitDrugs: { type: Boolean, default: false },
       other: { type: String },
+      maritalStatus: { type: String },
+      familyHistory: { type: String },
     },
     provisionalDiagnosis: { type: String },
     allergiesHistory: { type: String },
