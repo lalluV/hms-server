@@ -519,6 +519,7 @@ TEMPORAL AND SEMANTIC ROUTING
 - Counsel, precautions, follow-up, conditional plans ("if needed", "if not better") → advice.
 - Today's drug orders → medicines[]; labs → labTests[]; this-visit clinical acts/services → procedures[] (never medicines[]); measured vitals → vitals.
 - A finite medicine course that ends afterward remains action "add". action "stop" only when the doctor explicitly discontinues/holds/removes/omits a medicine.
+- action "restart" only when the doctor explicitly restarts/resumes a previously stopped medicine.
 
 COMPLAINTS VS DIAGNOSIS (HARD — UNIVERSAL)
 - complaints / symptoms: ONLY what the patient presents with now (symptoms, complaints, with or without duration). Symptom language stays here regardless of wording style.
@@ -563,6 +564,12 @@ STOP / DELETE MEDICINES (REQUIRED)
 - "3 days then stop" / "od 5d then stop" on a NEW course is NOT a stop action — that is action "add" with "then stop" in directions.
 - Do not invent stops for medicines merely omitted from the note.
 
+RESTART MEDICINES (REQUIRED — especially IPD ward)
+- If the doctor says restart / resume / restart again / start again / continue again a NAMED medicine that was previously stopped → medicines[] with action "restart".
+- Prefer the exact name from existingContext.stoppedMedicineNames when it matches.
+- directions for restart rows: short plain text like "Restart this medicine".
+- Do NOT use restart for medicines that are currently active (those stay continue/add). Do NOT invent restarts.
+
 DURATION
 - If duration is stated for a medicine, fill it exactly as stated (keep the mentioned value).
 - If several medicines are ordered in the same clause/list and only one shared duration is stated (e.g. "… bd 5d" covering the group), apply that duration to each med in that group.
@@ -601,7 +608,7 @@ PROCEDURES VS MEDICINES (HARD)
 - Do not invent a medicine type/dosage/duration for something that is a procedure.
 
 ORDERS AND NOTES
-- action: add | continue | note_only | stop. Do not mark omitted existing items as stopped.
+- action: add | continue | note_only | stop | restart. Do not mark omitted existing items as stopped.
 - Vitals: values only. Empty arrays/fields when unsupported.
 - Labeled notes: use noteSections; leave doctorNotes "". SOAP only when existing format is SOAP.
 - noteOperations: remove only an exact existing bullet the current input clearly corrects.
@@ -610,6 +617,7 @@ FINAL CHECK
 - No complaints/symptoms text in diagnosis; diagnosis empty if no named disease/impression.
 - Tapers = multiple medicines[] rows (never one packed taper object).
 - Explicit stop/delete of a named drug = action "stop" row; course "then stop" stays action "add".
+- Explicit restart/resume of a previously stopped named drug = action "restart" row.
 - name = spoken brand or spoken generic only; generic_name always "".
 - directions are morning/afternoon/evening/night English (no twice/thrice).
 - Tablet/Capsule/Injection dosages: unit "" unless insulin IU or ml stated; never invent "U" on plain injections.
@@ -804,7 +812,24 @@ function compactExistingClinicalContext(existingContext) {
   return {
     noteFormat,
     noteSections,
-    medicineNames: uniqueNames(existingContext.medicines, 80),
+    medicineNames: uniqueNames(
+      Array.isArray(existingContext.medicines)
+        ? existingContext.medicines.filter((m) =>
+            typeof m === "string" ? true : m?.isActive !== false,
+          )
+        : existingContext.medicines,
+      80,
+    ),
+    stoppedMedicineNames: uniqueNames(
+      Array.isArray(existingContext.stoppedMedicines)
+        ? existingContext.stoppedMedicines
+        : Array.isArray(existingContext.medicines)
+          ? existingContext.medicines.filter(
+              (m) => typeof m !== "string" && m?.isActive === false,
+            )
+          : [],
+      80,
+    ),
     labTestNames: uniqueNames(existingContext.labTests, 80),
     procedureNames: uniqueNames(existingContext.procedures, 40),
   };
@@ -868,7 +893,7 @@ const CLINICAL_JSON_SHAPE_BLOCK = `Return exactly this JSON shape:
     "scheduleKind": "fixed_daily|interval|weekly|monthly|alternate_day|prn|sliding_scale|one_time|sequential|device_controlled|free_text",
     "directions": "",
     "dosages": [{ "time": "Morning|Afternoon|Evening|Night", "amount": 1, "unit": "\\"\\" for Tablet/Capsules/Injection else ml|IU|drop|puff|app|sach", "beforeFood": false }],
-    "action": "add|continue|note_only|stop"
+    "action": "add|continue|note_only|stop|restart"
   }],
   "labTests": [{"name": "", "action": "add|continue|note_only"}],
   "procedures": [{"name": "", "correctedName": "", "inventoryMatch": "", "action": "add|continue|note_only"}],
@@ -918,8 +943,8 @@ const PARSE_CLINICAL_NOTE_USER_PROMPT = (
     clinicalSetting === "era"
       ? `SETTING: ERA (emergency admission). Split medicines by route: already given/administered in casualty/ER (stat, IV bolus, "given now") → set "eraRoute": "given_in_er". Medicines to continue on the ward → "eraRoute": "continue_on_ward". Default continue_on_ward if unclear. Labs → labTests only (chart pending). Include allergies in note or allergiesHistory field; use NKDA when stated. Vitals may include grbs (blood sugar) and urineOutput (ml) when mentioned. Fill eraManualExam when mentioned (do not invent): gcs as E#V#M#, consciousness one of Alert|Oriented|Drowsy|Confused|Stuporous|Unconscious, pupils text, height cm, weight kg, maritalStatus, alcohol/smoking/illicitDrugs booleans, familyHistory. Also put the same facts in examination/history note text and vitals.height/weight when stated.`
       : clinicalSetting === "ipd"
-        ? `SETTING: IPD. "stop" discontinues a medicine.`
-        : `SETTING: OPD. "stop" removes a medicine from this visit prescription.`;
+        ? `SETTING: IPD (ward progress note). "stop" discontinues a medicine. "restart" reactivates a previously stopped ward medicine (prefer existingContext.stoppedMedicineNames). DURATION OVERRIDE: do NOT default medicine duration to "5 days". Leave duration "" unless the doctor explicitly stated a course length (e.g. "3 days", "5d"). Ward medicines continue until stopped — never invent a course length. IV fluids still use hours when stated, else "Once". DIRECTIONS (IPD): morning/afternoon/evening/night schedule English WITHOUT a course length (no "for 5 days"). Prefer "Take in the morning and evening" style — do NOT invent per-slot tablet/ml amounts in directions unless the doctor stated an amount. dosages[] times + beforeFood only; leave amount empty or omit when not stated.`
+        : `SETTING: OPD. "stop" removes a medicine from this visit prescription. "restart" is rarely used in OPD — only if the doctor explicitly restarts a stopped chart medicine.`;
   const modeLine =
     mode === "add"
       ? `MODE: add. Return only facts and actions from the current input; never repeat existing chart items as new.`
@@ -933,7 +958,7 @@ ${modeLine}
 ${context ? `PATIENT: ${context}` : ""}
 ${existingLine}
 
-COMPLETENESS: Keep every clinical fact from CURRENT INPUT. Writing style may vary — expand shorthand into clear English and place each fact by meaning (past→history, symptoms→complaints only never diagnosis, exam→examination, named impression→diagnosis else leave diagnosis empty, plan/follow-up/if-needed→advice, today's drug orders→medicines[], labs→labTests[], this-visit acts/services→procedures[] never medicines[], measured vitals→vitals). noteSections are bullet lists. Medicine name = spoken brand or spoken generic; leave generic_name "". Tapers = multiple medicines[] rows. Explicit stop/delete of a named drug = action stop. Tablet/Capsule/Injection unit "" (IU/ml only when stated); IV fluids duration hours or Once not 5 days; beforeFood when known. Do not drop clauses.
+COMPLETENESS: Keep every clinical fact from CURRENT INPUT. Writing style may vary — expand shorthand into clear English and place each fact by meaning (past→history, symptoms→complaints only never diagnosis, exam→examination, named impression→diagnosis else leave diagnosis empty, plan/follow-up/if-needed→advice, today's drug orders→medicines[], labs→labTests[], this-visit acts/services→procedures[] never medicines[], measured vitals→vitals). noteSections are bullet lists. Medicine name = spoken brand or spoken generic; leave generic_name "". Tapers = multiple medicines[] rows. Explicit stop/delete of a named drug = action stop. Explicit restart/resume of a previously stopped named drug = action restart. Tablet/Capsule/Injection unit "" (IU/ml only when stated); IV fluids duration hours or Once not 5 days; beforeFood when known. Do not drop clauses.
 
 ${CLINICAL_JSON_SHAPE_BLOCK}
 
@@ -967,6 +992,11 @@ DELETE / REMOVE / STOP (HARD)
 - origin "visit": use op "stop" for medicines (and for labs/procedures too). This queues Delete-from-this-visit. NEVER use "remove" for visit-origin items.
 - If unsure of origin, read the origin field on the matched CURRENT CHART row.
 
+RESTART (HARD — IPD ward)
+- When the doctor says restart / resume a NAMED medicine that was previously stopped on the ward → medicineOps op "restart" with match = chart name.
+- Prefer stoppedMedicineNames / stopped chart names when provided in context.
+- Do not use "add" for a restart of an already-on-chart stopped medicine.
+
 CLEAR / DELETE EVERYTHING
 - Prefer clear flags instead of listing every name:
   - clearReviewMedicines / clearReviewLabs / clearReviewProcedures / clearNote — wipe Review-added content only (origin review). Does NOT stop visit Rx items.
@@ -982,6 +1012,9 @@ Doctor: "Remove Dolo" (Dolo origin review) →
 
 Doctor: "Delete Pantop" (Pantop origin visit) →
 {"assistantReply":"Okay — Pantop is marked to stop on this visit.","medicineOps":[{"op":"stop","match":"Pantop 40"}]}
+
+Doctor: "Restart Pantop" (Pantop was stopped on ward) →
+{"assistantReply":"Okay — Pantop is marked to restart.","medicineOps":[{"op":"restart","match":"Pantop 40"}]}
 
 Doctor: "Add CBP and remove LFT" (LFT origin review) →
 {"assistantReply":"Added CBP and removed LFT.","labOps":[{"op":"add","name":"CBP"},{"op":"remove","match":"LFT"}]}
@@ -1016,7 +1049,7 @@ Return exactly this JSON shape:
   "stopAllVisitMedicines": false,
   "stopAllVisitLabs": false,
   "medicineOps": [{
-    "op": "add|edit|stop|remove",
+    "op": "add|edit|stop|remove|restart",
     "match": "exact existing medicine name (edit|stop|remove only)",
     "medicine": {
       "name": "", "generic_name": "",
@@ -1213,7 +1246,7 @@ const REVIEW_FOLLOWUP_USER_PROMPT = (
     clinicalSetting === "era"
       ? `SETTING: ERA (emergency admission). Split medicines by route: already given/administered in casualty/ER (stat, IV bolus, "given now") → set "eraRoute": "given_in_er". Medicines to continue on the ward → "eraRoute": "continue_on_ward". Default continue_on_ward if unclear. Labs → labTests only (chart pending). Include allergies in note or allergiesHistory field; use NKDA when stated. Vitals may include grbs (blood sugar) and urineOutput (ml) when mentioned. Fill eraManualExam when mentioned (do not invent): gcs as E#V#M#, consciousness one of Alert|Oriented|Drowsy|Confused|Stuporous|Unconscious, pupils text, height cm, weight kg, maritalStatus, alcohol/smoking/illicitDrugs booleans, familyHistory. Also put the same facts in examination/history note text and vitals.height/weight when stated.`
       : clinicalSetting === "ipd"
-        ? `SETTING: IPD. "stop" discontinues a medicine.`
+        ? `SETTING: IPD (ward progress note). "stop" discontinues a medicine. "restart" reactivates a previously stopped ward medicine. DURATION OVERRIDE: do NOT default medicine duration to "5 days". Leave duration "" unless the doctor explicitly stated a course length. Ward medicines continue until stopped — never invent a course length. IV fluids: hours when stated, else "Once". DIRECTIONS (IPD): schedule English without course length; do not invent per-slot dose amounts unless stated.`
         : `SETTING: OPD. "stop" removes a medicine from this visit prescription.`;
   const existingLine = compactExisting
     ? `OTHER VISIT CONTEXT (reference only, never source):\n${JSON.stringify(compactExisting)}`
@@ -1362,7 +1395,12 @@ function itemOrigin(item) {
   if (raw === "review") return "review";
   // Fallback: stop rows / continue rows are visit; plain adds are review.
   const action = String(item?.action || "add").toLowerCase();
-  if (action === "stop" || action === "continue" || action === "on_visit") {
+  if (
+    action === "stop" ||
+    action === "continue" ||
+    action === "on_visit" ||
+    action === "restart"
+  ) {
     return "visit";
   }
   return "review";
@@ -1497,6 +1535,24 @@ function mergeChartDelta(currentChart, delta) {
           directions: "Stop this medicine",
         });
       }
+    } else if (kind === "restart") {
+      // Drop any pending stop/restart row for this name, then queue restart.
+      medicines = medicines.filter(
+        (m) =>
+          !(
+            nameKey(m) === matchName &&
+            ["stop", "restart"].includes(String(m?.action || "").toLowerCase())
+          ),
+      );
+      medicines.push({
+        ...(op.medicine || { name: op.match }),
+        name:
+          String(op?.medicine?.name || op?.match || "").trim() ||
+          String(op?.match || "").trim(),
+        action: "restart",
+        origin: "visit",
+        directions: "Restart this medicine",
+      });
     } else if (kind === "remove") {
       medicines = medicines.filter((m) => {
         if (nameKey(m) !== matchName) return true;
@@ -1879,6 +1935,9 @@ function finalizeParsedClinicalNote(parsed, existingContext) {
     medicinesToStop: medicines.filter(
       (med) => String(med?.action || "").toLowerCase() === "stop",
     ),
+    medicinesToRestart: medicines.filter(
+      (med) => String(med?.action || "").toLowerCase() === "restart",
+    ),
     labTestsToApply: labTests
       .filter(
         (test) =>
@@ -1931,7 +1990,7 @@ function isChartQuestionOnly(text) {
   const t = String(text || "").trim();
   if (!t) return false;
   if (
-    /\b(fever|cough|pain|advise|adv\b|tab|mg|bd|od|tds|cbc|cbp|lft|post\b|h\/o|k\/c\/o|dolo|remove|add |stop |delete|clear)\b/i.test(
+    /\b(fever|cough|pain|advise|adv\b|tab|mg|bd|od|tds|cbc|cbp|lft|post\b|h\/o|k\/c\/o|dolo|remove|add |stop |restart |delete|clear)\b/i.test(
       t,
     )
   ) {
@@ -1951,7 +2010,7 @@ function isGreetingOnly(text) {
     .trim();
   if (!t || t.length > 48) return false;
   if (
-    /\b(fever|cough|pain|advise|adv\b|tab|mg|bd|od|tds|cbc|cbp|lft|post\b|h\/o|k\/c\/o|dolo|pantop|remove|add |stop |delete|clear|change|update)\b/i.test(
+    /\b(fever|cough|pain|advise|adv\b|tab|mg|bd|od|tds|cbc|cbp|lft|post\b|h\/o|k\/c\/o|dolo|pantop|remove|add |stop |restart |delete|clear|change|update)\b/i.test(
       t,
     )
   ) {
@@ -2015,6 +2074,11 @@ function draftResultFromPayload(draftPayload = {}) {
       : medicines.filter(
           (med) => String(med?.action || "").toLowerCase() === "stop",
         ),
+    medicinesToRestart: Array.isArray(draftPayload.medicinesToRestart)
+      ? draftPayload.medicinesToRestart
+      : medicines.filter(
+          (med) => String(med?.action || "").toLowerCase() === "restart",
+        ),
     labTestsToApply: labTests
       .filter((test) => String(test?.action || "add").toLowerCase() === "add")
       .map((test) => test.name),
@@ -2053,6 +2117,7 @@ function buildExtractionReply(result, latestUserText) {
   const medCount = (result.medicinesToApply || []).length;
   const labCount = (result.labTestsToApply || []).length;
   const stopCount = (result.medicinesToStop || []).length;
+  const restartCount = (result.medicinesToRestart || []).length;
   if (medCount) {
     parts.push(
       `${medCount} medicine${medCount === 1 ? "" : "s"}: ${(
@@ -2069,6 +2134,14 @@ function buildExtractionReply(result, latestUserText) {
   if (stopCount) {
     parts.push(
       `Stop: ${(result.medicinesToStop || [])
+        .map((med) => med.description || med.name)
+        .filter(Boolean)
+        .join(", ")}`,
+    );
+  }
+  if (restartCount) {
+    parts.push(
+      `Restart: ${(result.medicinesToRestart || [])
         .map((med) => med.description || med.name)
         .filter(Boolean)
         .join(", ")}`,
