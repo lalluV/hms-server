@@ -1,0 +1,157 @@
+[
+  {
+    "name": "Complete Blood Count",
+    "aliases": ["cbc", "complete blood count", "complete haemogram", "complete hemogram", "cbp", "complete blood picture"],
+    "parameters": [
+      "Hemoglobin",
+      "Red Blood Cell Count",
+      "Hematocrit",
+      "Mean Corpuscular Volume",
+      "Mean Corpuscular Hemoglobin",
+      "Mean Corpuscular Hemoglobin Concentration",
+      "Red Cell Distribution Width",
+      "Total Leukocyte Count",
+      "Neutrophils",
+      "Lymphocytes",
+      "Monocytes",
+      "Eosinophils",
+      "Basophils",
+      "Platelet Count"
+    ],
+    "confidence": "high"
+  },
+  {
+    "name": "Liver Function Test",
+    "aliases": ["lft", "liver function test", "liver function test with proteins", "lft with proteins"],
+    "parameters": [
+      "Total Bilirubin",
+      "Direct Bilirubin",
+      "Indirect Bilirubin",
+      "Aspartate Aminotransferase",
+      "Alanine Aminotransferase",
+      "Alkaline Phosphatase",
+      "Gamma-Glutamyl Transferase",
+      "Total Protein",
+      "Albumin",
+      "Globulin",
+      "Albumin Globulin Ratio"
+    ],
+    "confidence": "medium"
+  },
+  {
+    "name": "Liver Function Test Without Proteins",
+    "aliases": ["lft without proteins", "liver function test without proteins"],
+    "parameters": [
+      "Total Bilirubin",
+      "Direct Bilirubin",
+      "Indirect Bilirubin",
+      "Aspartate Aminotransferase",
+      "Alanine Aminotransferase",
+      "Alkaline Phosphatase",
+      "Gamma-Glutamyl Transferase"
+    ],
+    "confidence": "medium"
+  },
+  {
+    "name": "Renal Function Test",
+    "aliases": ["rft", "renal function test", "renal functional test", "kidney function test", "kft"],
+    "parameters": [
+      "Blood Urea",
+      "Blood Urea Nitrogen",
+      "Serum Creatinine",
+      "Uric Acid",
+      "Sodium",
+      "Potassium",
+      "Chloride"
+    ],
+    "confidence": "medium",
+    "notes": "Panel composition varies by laboratory."
+  },
+  {
+    "name": "Lipid Profile",
+    "aliases": ["lipid profile", "lipid panel"],
+    "parameters": [
+      "Total Cholesterol",
+      "Triglycerides",
+      "HDL Cholesterol",
+      "LDL Cholesterol",
+      "VLDL Cholesterol"
+    ],
+    "confidence": "high"
+  },
+  {
+    "name": "Thyroid Profile",
+    "aliases": ["thyroid profile", "thyroid function test", "tft", "thyroid panel"],
+    "parameters": [
+      "Total Triiodothyronine",
+      "Total Thyroxine",
+      "Thyroid Stimulating Hormone"
+    ],
+    "confidence": "medium"
+  },
+  {
+    "name": "Free Thyroid Profile",
+    "aliases": ["free thyroid profile", "ft3 ft4 tsh", "free t3 free t4 tsh"],
+    "parameters": [
+      "Free Triiodothyronine",
+      "Free Thyroxine",
+      "Thyroid Stimulating Hormone"
+    ],
+    "confidence": "medium"
+  },
+  {
+    "name": "Iron Profile",
+    "aliases": ["iron profile", "iron studies"],
+    "parameters": [
+      "Serum Iron",
+      "Total Iron Binding Capacity",
+      "Transferrin Saturation",
+      "Ferritin"
+    ],
+    "confidence": "medium"
+  },
+  {
+    "name": "Electrolyte Panel",
+    "aliases": ["electrolytes", "serum electrolytes", "electrolyte panel"],
+    "parameters": ["Sodium", "Potassium", "Chloride", "Bicarbonate"],
+    "confidence": "high"
+  },
+  {
+    "name": "Coagulation Profile",
+    "aliases": ["coagulation profile", "coagulation screen", "coagulogram"],
+    "parameters": [
+      "Prothrombin Time",
+      "International Normalized Ratio",
+      "Activated Partial Thromboplastin Time"
+    ],
+    "confidence": "medium"
+  },
+  {
+    "name": "Diabetes Profile",
+    "aliases": ["diabetes profile", "diabetic profile"],
+    "parameters": [
+      "Fasting Plasma Glucose",
+      "Postprandial Plasma Glucose",
+      "Glycated Hemoglobin"
+    ],
+    "confidence": "medium"
+  },
+  {
+    "name": "Arterial Blood Gas",
+    "aliases": ["abg", "arterial blood gas", "blood gas analysis"],
+    "parameters": [
+      "Arterial pH",
+      "Arterial pCO2",
+      "Arterial pO2",
+      "Bicarbonate",
+      "Oxygen Saturation"
+    ],
+    "confidence": "medium"
+  },
+  {
+    "name": "Dengue NS1 IgG IgM",
+    "aliases": ["dengue ns1 igg igm", "dengue ns1,igg & igm", "dengue profile"],
+    "parameters": ["Dengue NS1 Antigen", "Dengue IgM Antibody", "Dengue IgG Antibody"],
+    "confidence": "medium"
+  }
+]

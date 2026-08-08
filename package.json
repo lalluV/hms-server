@@ -6,7 +6,10 @@
     "test": "node --test test/**/*.test.js",
     "start": "node server.js",
     "seed": "node seed.js",
-    "seed:portal-staff": "node scripts/seedPortalStaff.js"
+    "seed:portal-staff": "node scripts/seedPortalStaff.js",
+    "catalog:build": "node scripts/buildMasterLabCatalog.js",
+    "catalog:validate": "node scripts/buildMasterLabCatalog.js --validate-only",
+    "catalog:apply": "node scripts/applyMasterLabCatalog.js"
   },
   "keywords": [],
   "author": "",
@@ -20,6 +23,7 @@
     "cors": "^2.8.5",
     "dayjs": "^1.11.19",
     "dotenv": "^16.5.0",
+    "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
     "meilisearch": "^0.45.0",

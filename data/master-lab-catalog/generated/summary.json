@@ -1,0 +1,25 @@
+{
+  "generatedAt": "2026-08-08T01:44:57.201Z",
+  "catalogHash": "e29baeb8ebff80f844cf561bf4b23d4186e882a59ee6cc78cc8110a0e027bf5c",
+  "sourceCounts": {
+    "parameterRows": 1309,
+    "formatRows": 960,
+    "templateRows": 463,
+    "sampleRows": 449,
+    "specimenRows": 36
+  },
+  "validation": {
+    "parameters": 1160,
+    "diagnostics": 701,
+    "linkedDiagnostics": 172,
+    "totalLinks": 239,
+    "errors": 0,
+    "reviewItems": 1012,
+    "lowConfidenceParameters": 214,
+    "lowConfidenceDiagnostics": 253,
+    "narrativeDiagnostics": 276
+  },
+  "valid": true,
+  "clinicalReviewRequired": true,
+  "disclaimer": "Reference ranges, critical values and inferred links are best-effort candidates and must be approved by the laboratory director against local methods, instruments and population."
+}

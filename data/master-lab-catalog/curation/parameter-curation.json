@@ -1,0 +1,644 @@
+[
+  {
+    "name": "Hemoglobin",
+    "aliases": ["haemoglobin", "hemoglobin", "hb"],
+    "units": "g/dL",
+    "normalRange": { "adult_male": "12.3-17.0", "adult_female": "9.9-14.3", "child": "11.0-16.0" },
+    "criticalValues": { "low": "<7.0", "high": ">20.0" },
+    "confidence": "medium",
+    "notes": "Ranges vary with age, pregnancy and altitude."
+  },
+  {
+    "name": "Hematocrit",
+    "aliases": ["hematocrit", "haematocrit", "hct", "pcv", "packed cell volume"],
+    "units": "%",
+    "normalRange": { "adult_male": "40-54", "adult_female": "36-48", "child": "32-44" },
+    "criticalValues": { "low": "<20", "high": ">60" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Red Blood Cell Count",
+    "aliases": ["rbc", "rbc count", "red blood cell count", "total rbc count"],
+    "units": "millions/cumm",
+    "normalRange": { "adult_male": "4.5-5.5", "adult_female": "4.0-5.0", "child": "4.0-5.5" },
+    "criticalValues": { "low": "<2.0", "high": ">7.0" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Total Leukocyte Count",
+    "aliases": ["wbc", "wbc count", "white blood cell count", "total leukocyte count", "total leucocyte count", "tlc"],
+    "units": "cells/cumm",
+    "normalRange": { "adult_male": "4200-9800", "adult_female": "4000-10400", "child": "5000-15000" },
+    "criticalValues": { "low": "<2000", "high": ">50000" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Platelet Count",
+    "aliases": ["platelet", "platelets", "platelet count", "plt"],
+    "units": "lakhs/cumm",
+    "normalRange": { "adult_male": "1.3-3.8", "adult_female": "1.3-4.2", "child": "1.5-4.5" },
+    "criticalValues": { "low": "<0.20", "high": ">10.0" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Neutrophils",
+    "aliases": ["neutrophils", "neutrophil"],
+    "units": "%",
+    "normalRange": { "adult_male": "40-75", "adult_female": "40-75", "child": "30-70" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Lymphocytes",
+    "aliases": ["lymphocytes", "lymphocyte"],
+    "units": "%",
+    "normalRange": { "adult_male": "20-45", "adult_female": "20-45", "child": "25-60" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Monocytes",
+    "aliases": ["monocytes", "monocyte"],
+    "units": "%",
+    "normalRange": { "adult_male": "2-10", "adult_female": "2-10", "child": "2-10" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Eosinophils",
+    "aliases": ["eosinophils", "eosinophil"],
+    "units": "%",
+    "normalRange": { "adult_male": "1-4", "adult_female": "1-4", "child": "1-4" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Basophils",
+    "aliases": ["basophils", "basophil"],
+    "units": "%",
+    "normalRange": { "adult_male": "0-2", "adult_female": "0-2", "child": "0-2" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Mean Corpuscular Volume",
+    "aliases": ["mcv", "m c v", "mean corpuscular volume", "mean cell volume", "mean cell volume mcv"],
+    "units": "fL",
+    "normalRange": { "adult_male": "80-100", "adult_female": "80-100", "child": "75-95" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Mean Corpuscular Hemoglobin",
+    "aliases": ["mch", "m c h", "mean corpuscular hemoglobin", "mean corpuscular haemoglobin", "mean cell haemoglobin", "mean cell hemoglobin", "mean cell haemoglobin mch", "mean cell hemoglobin mch"],
+    "units": "pg",
+    "normalRange": { "adult_male": "27-33", "adult_female": "27-33", "child": "24-33" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Mean Corpuscular Hemoglobin Concentration",
+    "aliases": ["mchc", "m c h c", "mean corpuscular hemoglobin concentration", "mean corpuscular haemoglobin concentration", "mean cell haemoglobin concentration", "mean cell hemoglobin concentration", "mean cell haemoglobin concentration mchc", "mean cell hemoglobin concentration mchc"],
+    "units": "g/dL",
+    "normalRange": { "adult_male": "32-36", "adult_female": "32-36", "child": "32-36" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Red Cell Distribution Width",
+    "aliases": ["rdw", "r d w", "rdw cv", "red cell distribution width"],
+    "units": "%",
+    "normalRange": { "adult_male": "11.5-14.5", "adult_female": "11.5-14.5", "child": "11.5-14.5" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Erythrocyte Sedimentation Rate",
+    "aliases": ["esr", "erythrocyte sedimentation rate"],
+    "units": "mm/hr",
+    "normalRange": { "adult_male": "0-15", "adult_female": "0-20", "child": "0-10" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low",
+    "notes": "Strongly age- and method-dependent."
+  },
+  {
+    "name": "Fasting Plasma Glucose",
+    "aliases": ["fasting blood sugar", "fasting blood glucose", "fasting plasma glucose", "fbs", "glucose fasting"],
+    "units": "mg/dL",
+    "normalRange": { "adult_male": "70-110", "adult_female": "70-110", "child": "70-110" },
+    "criticalValues": { "low": "<40", "high": ">500" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Postprandial Plasma Glucose",
+    "aliases": ["post prandial blood sugar", "postprandial blood sugar", "post prandial glucose", "postprandial glucose", "ppbs", "glucose pp"],
+    "units": "mg/dL",
+    "normalRange": { "adult_male": "<140", "adult_female": "<140", "child": "<140" },
+    "criticalValues": { "low": "<40", "high": ">500" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Random Plasma Glucose",
+    "aliases": ["random blood sugar", "random blood glucose", "random plasma glucose", "rbs", "g rbs", "glucose random"],
+    "units": "mg/dL",
+    "normalRange": { "adult_male": "70-140", "adult_female": "70-140", "child": "70-140" },
+    "criticalValues": { "low": "<40", "high": ">500" },
+    "confidence": "low",
+    "notes": "Interpretation depends on timing of last meal and clinical context."
+  },
+  {
+    "name": "Glycated Hemoglobin",
+    "aliases": ["hba1c", "hb a1c", "glycated hemoglobin", "glycosylated haemoglobin", "glycosylated hemoglobin"],
+    "units": "%",
+    "normalRange": { "adult_male": "4.0-5.6", "adult_female": "4.0-5.6", "child": "4.0-5.6" },
+    "criticalValues": { "low": "", "high": ">14.0" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Blood Urea",
+    "aliases": ["urea", "blood urea", "serum urea"],
+    "units": "mg/dL",
+    "normalRange": { "adult_male": "15-40", "adult_female": "15-40", "child": "10-40" },
+    "criticalValues": { "low": "", "high": ">200" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Blood Urea Nitrogen",
+    "aliases": ["bun", "blood urea nitrogen", "blood urea nitrogen bun"],
+    "units": "mg/dL",
+    "normalRange": { "adult_male": "8-20", "adult_female": "8-20", "child": "5-18" },
+    "criticalValues": { "low": "", "high": ">100" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Serum Creatinine",
+    "aliases": ["creatinine", "serum creatinine"],
+    "units": "mg/dL",
+    "normalRange": { "adult_male": "0.7-1.3", "adult_female": "0.5-1.1", "child": "0.3-1.0" },
+    "criticalValues": { "low": "", "high": ">10.0" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Uric Acid",
+    "aliases": ["uric acid", "serum uric acid"],
+    "units": "mg/dL",
+    "normalRange": { "adult_male": "3.5-8.2", "adult_female": "2.4-6.0", "child": "2.0-5.5" },
+    "criticalValues": { "low": "", "high": ">13.0" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Sodium",
+    "aliases": ["sodium", "serum sodium", "na", "na+"],
+    "units": "mEq/L",
+    "normalRange": { "adult_male": "136-145", "adult_female": "136-145", "child": "136-145" },
+    "criticalValues": { "low": "<120", "high": ">160" },
+    "confidence": "high"
+  },
+  {
+    "name": "Potassium",
+    "aliases": ["potassium", "serum potassium", "k", "k+"],
+    "units": "mEq/L",
+    "normalRange": { "adult_male": "3.5-5.0", "adult_female": "3.5-5.0", "child": "3.5-5.0" },
+    "criticalValues": { "low": "<2.5", "high": ">6.5" },
+    "confidence": "high"
+  },
+  {
+    "name": "Chloride",
+    "aliases": ["chloride", "serum chloride", "cl", "cl-"],
+    "units": "mEq/L",
+    "normalRange": { "adult_male": "98-106", "adult_female": "98-106", "child": "98-106" },
+    "criticalValues": { "low": "<80", "high": ">120" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Bicarbonate",
+    "aliases": ["bicarbonate", "serum bicarbonate", "hco3", "hco3-"],
+    "units": "mEq/L",
+    "normalRange": { "adult_male": "23-28", "adult_female": "23-28", "child": "20-28" },
+    "criticalValues": { "low": "<10", "high": ">40" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Total Calcium",
+    "aliases": ["calcium", "serum calcium", "total calcium"],
+    "units": "mg/dL",
+    "normalRange": { "adult_male": "8.6-10.2", "adult_female": "8.6-10.2", "child": "8.8-10.8" },
+    "criticalValues": { "low": "<6.5", "high": ">13.0" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Ionized Calcium",
+    "aliases": ["ionised calcium", "ionized calcium", "ca++"],
+    "units": "mmol/L",
+    "normalRange": { "adult_male": "1.12-1.32", "adult_female": "1.12-1.32", "child": "1.12-1.32" },
+    "criticalValues": { "low": "<0.80", "high": ">1.60" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Phosphorus",
+    "aliases": ["phosphorus", "phosphate", "serum phosphorus"],
+    "units": "mg/dL",
+    "normalRange": { "adult_male": "2.5-4.5", "adult_female": "2.5-4.5", "child": "4.0-7.0" },
+    "criticalValues": { "low": "<1.0", "high": ">9.0" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Magnesium",
+    "aliases": ["magnesium", "serum magnesium"],
+    "units": "mg/dL",
+    "normalRange": { "adult_male": "1.5-2.5", "adult_female": "1.5-2.5", "child": "1.5-2.3" },
+    "criticalValues": { "low": "<1.0", "high": ">4.0" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Total Bilirubin",
+    "aliases": ["bilirubin total", "total bilirubin", "serum bilirubin total"],
+    "units": "mg/dL",
+    "normalRange": { "adult_male": "0.2-1.2", "adult_female": "0.2-1.2", "child": "0.2-1.0" },
+    "criticalValues": { "low": "", "high": ">15.0" },
+    "confidence": "medium",
+    "notes": "Neonatal ranges are age-in-hours dependent and are not represented here."
+  },
+  {
+    "name": "Direct Bilirubin",
+    "aliases": ["bilirubin direct", "direct bilirubin", "conjugated bilirubin"],
+    "units": "mg/dL",
+    "normalRange": { "adult_male": "0.0-0.3", "adult_female": "0.0-0.3", "child": "0.0-0.3" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Indirect Bilirubin",
+    "aliases": ["bilirubin indirect", "indirect bilirubin", "unconjugated bilirubin"],
+    "units": "mg/dL",
+    "normalRange": { "adult_male": "0.2-0.9", "adult_female": "0.2-0.9", "child": "0.2-0.9" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low"
+  },
+  {
+    "name": "Aspartate Aminotransferase",
+    "aliases": ["ast", "s g o t", "sgot", "sgot ast", "aspartate aminotransferase"],
+    "units": "IU/L",
+    "normalRange": { "adult_male": "10-40", "adult_female": "7-35", "child": "10-40" },
+    "criticalValues": { "low": "", "high": ">1000" },
+    "confidence": "low",
+    "notes": "Strongly method- and laboratory-dependent."
+  },
+  {
+    "name": "Alanine Aminotransferase",
+    "aliases": ["alt", "s g p t", "sgpt", "sgpt alt", "alanine aminotransferase"],
+    "units": "IU/L",
+    "normalRange": { "adult_male": "7-56", "adult_female": "7-35", "child": "10-40" },
+    "criticalValues": { "low": "", "high": ">1000" },
+    "confidence": "low",
+    "notes": "Strongly method- and laboratory-dependent."
+  },
+  {
+    "name": "Alkaline Phosphatase",
+    "aliases": ["alp", "alkaline phosphatase"],
+    "units": "IU/L",
+    "normalRange": { "adult_male": "44-147", "adult_female": "35-105", "child": "100-400" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low"
+  },
+  {
+    "name": "Gamma-Glutamyl Transferase",
+    "aliases": ["ggt", "gamma gt", "gamma glutamyl transferase"],
+    "units": "IU/L",
+    "normalRange": { "adult_male": "13-61", "adult_female": "6-42", "child": "9-48" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low"
+  },
+  {
+    "name": "Total Protein",
+    "aliases": ["total protein", "serum total protein"],
+    "units": "g/dL",
+    "normalRange": { "adult_male": "6.0-8.0", "adult_female": "6.0-8.0", "child": "6.0-8.0" },
+    "criticalValues": { "low": "<4.0", "high": ">12.0" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Albumin",
+    "aliases": ["albumin", "serum albumin"],
+    "units": "g/dL",
+    "normalRange": { "adult_male": "3.5-5.0", "adult_female": "3.5-5.0", "child": "3.5-5.0" },
+    "criticalValues": { "low": "<1.5", "high": "" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Globulin",
+    "aliases": ["globulin", "serum globulin"],
+    "units": "g/dL",
+    "normalRange": { "adult_male": "2.0-3.5", "adult_female": "2.0-3.5", "child": "2.0-3.5" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low"
+  },
+  {
+    "name": "Albumin Globulin Ratio",
+    "aliases": ["a g ratio", "ag ratio", "albumin globulin ratio", "a/g ratio"],
+    "units": "ratio",
+    "normalRange": { "adult_male": "1.0-2.5", "adult_female": "1.0-2.5", "child": "1.0-2.5" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low"
+  },
+  {
+    "name": "Total Cholesterol",
+    "aliases": ["cholesterol", "total cholesterol", "serum cholesterol"],
+    "units": "mg/dL",
+    "normalRange": { "adult_male": "<200", "adult_female": "<200", "child": "<170" },
+    "criticalValues": { "low": "", "high": ">500" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Triglycerides",
+    "aliases": ["triglyceride", "triglycerides", "serum triglycerides"],
+    "units": "mg/dL",
+    "normalRange": { "adult_male": "<150", "adult_female": "<150", "child": "<90" },
+    "criticalValues": { "low": "", "high": ">1000" },
+    "confidence": "medium"
+  },
+  {
+    "name": "HDL Cholesterol",
+    "aliases": ["hdl", "hdl cholesterol", "high density lipoprotein cholesterol"],
+    "units": "mg/dL",
+    "normalRange": { "adult_male": ">=40", "adult_female": ">=50", "child": ">45" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "medium"
+  },
+  {
+    "name": "LDL Cholesterol",
+    "aliases": ["ldl", "ldl cholesterol", "low density lipoprotein cholesterol"],
+    "units": "mg/dL",
+    "normalRange": { "adult_male": "<100", "adult_female": "<100", "child": "<110" },
+    "criticalValues": { "low": "", "high": ">300" },
+    "confidence": "medium"
+  },
+  {
+    "name": "VLDL Cholesterol",
+    "aliases": ["vldl", "vldl cholesterol", "very low density lipoprotein"],
+    "units": "mg/dL",
+    "normalRange": { "adult_male": "5-40", "adult_female": "5-40", "child": "5-30" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low"
+  },
+  {
+    "name": "Thyroid Stimulating Hormone",
+    "aliases": ["tsh", "thyroid stimulating hormone", "thyrotropin"],
+    "units": "µIU/mL",
+    "normalRange": { "adult_male": "0.5-4.0", "adult_female": "0.5-4.0", "child": "0.7-6.0" },
+    "criticalValues": { "low": "<0.01", "high": ">100" },
+    "confidence": "medium",
+    "notes": "ABIM 2026 adult reference 0.5-4.0 µIU/mL; assay- and pregnancy-dependent."
+  },
+  {
+    "name": "Total Triiodothyronine",
+    "aliases": ["t3", "total t3", "triiodothyronine"],
+    "units": "ng/dL",
+    "normalRange": { "adult_male": "80-200", "adult_female": "80-200", "child": "Age-dependent" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low"
+  },
+  {
+    "name": "Total Thyroxine",
+    "aliases": ["t4", "total t4", "thyroxine"],
+    "units": "µg/dL",
+    "normalRange": { "adult_male": "4.5-12.5", "adult_female": "4.5-12.5", "child": "Age-dependent" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low"
+  },
+  {
+    "name": "Free Triiodothyronine",
+    "aliases": ["ft3", "free t3"],
+    "units": "pg/mL",
+    "normalRange": { "adult_male": "2.0-4.4", "adult_female": "2.0-4.4", "child": "Age-dependent" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low"
+  },
+  {
+    "name": "Free Thyroxine",
+    "aliases": ["ft4", "free t4"],
+    "units": "ng/dL",
+    "normalRange": { "adult_male": "0.8-1.8", "adult_female": "0.8-1.8", "child": "Age-dependent" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low"
+  },
+  {
+    "name": "Serum Iron",
+    "aliases": ["iron", "serum iron"],
+    "units": "µg/dL",
+    "normalRange": { "adult_male": "65-175", "adult_female": "50-170", "child": "50-120" },
+    "criticalValues": { "low": "", "high": ">500" },
+    "confidence": "low"
+  },
+  {
+    "name": "Total Iron Binding Capacity",
+    "aliases": ["tibc", "total iron binding capacity"],
+    "units": "µg/dL",
+    "normalRange": { "adult_male": "250-450", "adult_female": "250-450", "child": "250-450" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low"
+  },
+  {
+    "name": "Transferrin Saturation",
+    "aliases": ["transferrin saturation", "iron saturation"],
+    "units": "%",
+    "normalRange": { "adult_male": "20-50", "adult_female": "15-50", "child": "15-50" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low"
+  },
+  {
+    "name": "Ferritin",
+    "aliases": ["ferritin", "serum ferritin"],
+    "units": "ng/mL",
+    "normalRange": { "adult_male": "30-400", "adult_female": "15-150", "child": "Age-dependent" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low",
+    "notes": "Assay-, age- and inflammation-dependent."
+  },
+  {
+    "name": "C-Reactive Protein",
+    "aliases": ["crp", "c reactive protein"],
+    "units": "mg/L",
+    "normalRange": { "adult_male": "<10", "adult_female": "<10", "child": "<10" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low",
+    "notes": "Method and clinical-use dependent."
+  },
+  {
+    "name": "High-Sensitivity C-Reactive Protein",
+    "aliases": ["hs crp", "hs-crp", "high sensitivity crp", "high sensitivity c reactive protein"],
+    "units": "mg/L",
+    "normalRange": { "adult_male": "<3.0", "adult_female": "<3.0", "child": "" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low"
+  },
+  {
+    "name": "Amylase",
+    "aliases": ["amylase", "serum amylase"],
+    "units": "IU/L",
+    "normalRange": { "adult_male": "30-110", "adult_female": "30-110", "child": "Age-dependent" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low"
+  },
+  {
+    "name": "Lipase",
+    "aliases": ["lipase", "serum lipase"],
+    "units": "IU/L",
+    "normalRange": { "adult_male": "13-60", "adult_female": "13-60", "child": "Age-dependent" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low"
+  },
+  {
+    "name": "Lactate Dehydrogenase",
+    "aliases": ["ldh", "lactate dehydrogenase"],
+    "units": "IU/L",
+    "normalRange": { "adult_male": "135-225", "adult_female": "135-225", "child": "Age-dependent" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low"
+  },
+  {
+    "name": "Prothrombin Time",
+    "aliases": ["pt", "prothrombin time"],
+    "units": "Sec",
+    "normalRange": { "adult_male": "11-14", "adult_female": "11-14", "child": "11-14" },
+    "criticalValues": { "low": "", "high": ">30" },
+    "confidence": "low",
+    "notes": "Reagent-dependent; INR is preferred for anticoagulation monitoring."
+  },
+  {
+    "name": "International Normalized Ratio",
+    "aliases": ["inr", "international normalized ratio"],
+    "units": "ratio",
+    "normalRange": { "adult_male": "0.8-1.2", "adult_female": "0.8-1.2", "child": "0.8-1.2" },
+    "criticalValues": { "low": "", "high": ">5.0" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Activated Partial Thromboplastin Time",
+    "aliases": ["aptt", "activated partial thromboplastin time", "ptt"],
+    "units": "Sec",
+    "normalRange": { "adult_male": "25-35", "adult_female": "25-35", "child": "25-35" },
+    "criticalValues": { "low": "", "high": ">100" },
+    "confidence": "low",
+    "notes": "Reagent-dependent."
+  },
+  {
+    "name": "D-Dimer",
+    "aliases": ["d dimer", "d-dimer"],
+    "units": "ng/mL FEU",
+    "normalRange": { "adult_male": "<500", "adult_female": "<500", "child": "Assay-dependent" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low",
+    "notes": "Assay units and age-adjusted interpretation must be confirmed locally."
+  },
+  {
+    "name": "Vitamin B12",
+    "aliases": ["vitamin b12", "b12", "cobalamin"],
+    "units": "pg/mL",
+    "normalRange": { "adult_male": "200-900", "adult_female": "200-900", "child": "Age-dependent" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low"
+  },
+  {
+    "name": "25-Hydroxy Vitamin D",
+    "aliases": ["vitamin d", "25 oh vitamin d", "25 hydroxy vitamin d", "vitamin d total"],
+    "units": "ng/mL",
+    "normalRange": { "adult_male": "30-100", "adult_female": "30-100", "child": "30-100" },
+    "criticalValues": { "low": "", "high": ">150" },
+    "confidence": "low"
+  },
+  {
+    "name": "Arterial pH",
+    "aliases": ["ph arterial", "arterial ph", "ph"],
+    "units": "pH units",
+    "normalRange": { "adult_male": "7.35-7.45", "adult_female": "7.35-7.45", "child": "7.35-7.45" },
+    "criticalValues": { "low": "<7.20", "high": ">7.60" },
+    "confidence": "low",
+    "notes": "Only valid for arterial blood gas context; generic pH rows require review."
+  },
+  {
+    "name": "Arterial pCO2",
+    "aliases": ["pco2", "arterial pco2"],
+    "units": "mmHg",
+    "normalRange": { "adult_male": "35-45", "adult_female": "35-45", "child": "35-45" },
+    "criticalValues": { "low": "<20", "high": ">70" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Arterial pO2",
+    "aliases": ["po2", "arterial po2"],
+    "units": "mmHg",
+    "normalRange": { "adult_male": "80-100", "adult_female": "80-100", "child": "80-100" },
+    "criticalValues": { "low": "<40", "high": "" },
+    "confidence": "low",
+    "notes": "Age and inspired oxygen dependent."
+  },
+  {
+    "name": "Oxygen Saturation",
+    "aliases": ["so2", "oxygen saturation", "o2 saturation"],
+    "units": "%",
+    "normalRange": { "adult_male": "95-100", "adult_female": "95-100", "child": "95-100" },
+    "criticalValues": { "low": "<80", "high": "" },
+    "confidence": "low",
+    "notes": "Interpret with sample type and oxygen therapy."
+  },
+  {
+    "name": "Dengue NS1 Antigen",
+    "aliases": ["ns1", "dengue ns1", "dengue ns1 antigen"],
+    "units": "-",
+    "normalRange": { "adult_male": "Negative", "adult_female": "Negative", "child": "Negative" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "medium",
+    "notes": "Interpret according to day of illness and assay instructions."
+  },
+  {
+    "name": "Dengue IgM Antibody",
+    "aliases": ["anti dengue igm", "dengue igm", "dengue igm antibody"],
+    "units": "-",
+    "normalRange": { "adult_male": "Negative", "adult_female": "Negative", "child": "Negative" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "medium",
+    "notes": "Interpret according to day of illness and assay instructions."
+  },
+  {
+    "name": "Dengue IgG Antibody",
+    "aliases": ["anti dengue igg", "dengue igg", "dengue igg antibody"],
+    "units": "-",
+    "normalRange": { "adult_male": "Negative", "adult_female": "Negative", "child": "Negative" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "medium",
+    "notes": "Interpret according to day of illness and assay instructions."
+  },
+  {
+    "name": "Urine pH",
+    "aliases": ["urine ph"],
+    "units": "pH units",
+    "normalRange": { "adult_male": "4.5-8.0", "adult_female": "4.5-8.0", "child": "4.5-8.0" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "medium"
+  },
+  {
+    "name": "Urine Specific Gravity",
+    "aliases": ["specific gravity", "urine specific gravity", "sp gravity"],
+    "units": "ratio",
+    "normalRange": { "adult_male": "1.005-1.030", "adult_female": "1.005-1.030", "child": "1.005-1.030" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "medium"
+  },
+  {
+    "name": "24-Hour Urine Protein",
+    "aliases": ["24 hrs urinary proteins", "24 hour urine protein", "24 hrs urine protein"],
+    "units": "mg/24 h",
+    "normalRange": { "adult_male": "<150", "adult_female": "<150", "child": "<100" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low"
+  },
+  {
+    "name": "Total Urine Volume",
+    "aliases": ["total volume of urine", "24 hour urine volume", "urine volume"],
+    "units": "mL/24 h",
+    "normalRange": { "adult_male": "800-2000", "adult_female": "800-2000", "child": "Age/weight-dependent" },
+    "criticalValues": { "low": "", "high": "" },
+    "confidence": "low"
+  }
+]

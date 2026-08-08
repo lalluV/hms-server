@@ -27,11 +27,12 @@ router.get("/", async (req, res) => {
 
     // Search filter
     if (search) {
+      const safe = String(search).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       query.$or = [
-        { parameter_code: { $regex: search, $options: "i" } },
-        { name: { $regex: search, $options: "i" } },
-        { units: { $regex: search, $options: "i" } },
-        { category: { $regex: search, $options: "i" } },
+        { parameter_code: { $regex: safe, $options: "i" } },
+        { name: { $regex: safe, $options: "i" } },
+        { units: { $regex: safe, $options: "i" } },
+        { category: { $regex: safe, $options: "i" } },
       ];
     }
 
@@ -342,18 +343,20 @@ router.get("/search/autocomplete", async (req, res) => {
     }
 
     // Fallback to MongoDB if Meilisearch fails or returns no results
+    const safeQ = String(q).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const query = {
       active: active === "true" || active === true,
       $or: [
-        { parameter_code: { $regex: q, $options: "i" } },
-        { name: { $regex: q, $options: "i" } },
-        { units: { $regex: q, $options: "i" } },
-        { category: { $regex: q, $options: "i" } },
+        { parameter_code: { $regex: safeQ, $options: "i" } },
+        { name: { $regex: safeQ, $options: "i" } },
+        { units: { $regex: safeQ, $options: "i" } },
+        { category: { $regex: safeQ, $options: "i" } },
       ],
     };
 
     if (category) {
-      query.category = { $regex: category, $options: "i" };
+      const safeCat = String(category).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      query.category = { $regex: safeCat, $options: "i" };
     }
 
     const parameters = await MasterParameter.find(query)

@@ -14,7 +14,7 @@ const axios = require("axios");
  *   WHATSAPP_TEMPLATE_APPOINTMENT_CONFIRMED
  *   WHATSAPP_TEMPLATE_APPOINTMENT_RESCHEDULED
  *   WHATSAPP_TEMPLATE_APPOINTMENT_CANCELLED
- *   WHATSAPP_TEMPLATE_LAB_REPORT_READY
+ *   WHATSAPP_TEMPLATE_LAB_REPORT_READY  (URL button → /view/report/{{1}}, language: en)
  */
 
 const GRAPH_API_VERSION = process.env.WHATSAPP_API_VERSION || "v21.0";
@@ -53,9 +53,11 @@ const TEMPLATE_CATALOG = {
   },
   lab_report_ready: {
     envKey: "WHATSAPP_TEMPLATE_LAB_REPORT_READY",
-    defaultName: "lab_report_ready",
+    defaultName: "labr_report_ready",
+    /** Meta language for this template (prescription uses en_US; lab uses en) */
+    defaultLanguage: "en",
     /** body: patient, hospital, testsSummary */
-    hasUrlButton: false,
+    hasUrlButton: true,
   },
 };
 
@@ -94,9 +96,17 @@ function resolveTemplate(templateKey) {
     error.code = "WHATSAPP_UNKNOWN_TEMPLATE";
     throw error;
   }
+  const perTemplateLanguage = process.env[`${entry.envKey}_LANGUAGE`];
+  const templateLanguage =
+    perTemplateLanguage ||
+    entry.defaultLanguage ||
+    process.env.WHATSAPP_TEMPLATE_LANGUAGE ||
+    "en";
+
   return {
     name: process.env[entry.envKey] || entry.defaultName,
     hasUrlButton: entry.hasUrlButton,
+    language: templateLanguage,
   };
 }
 
@@ -115,7 +125,7 @@ async function sendWhatsAppTemplate({
   bodyParams = [],
   buttonUrlSuffix,
 }) {
-  const { accessToken, phoneNumberId, templateLanguage } = getCredentials();
+  const { accessToken, phoneNumberId } = getCredentials();
 
   if (!accessToken || !phoneNumberId) {
     const error = new Error(
@@ -125,7 +135,11 @@ async function sendWhatsAppTemplate({
     throw error;
   }
 
-  const { name: templateName, hasUrlButton } = resolveTemplate(templateKey);
+  const {
+    name: templateName,
+    hasUrlButton,
+    language: templateLanguage,
+  } = resolveTemplate(templateKey);
 
   const destination = normalizeDestination(phone);
   if (!destination) {
@@ -265,12 +279,13 @@ async function sendAppointmentWhatsApp({
   });
 }
 
-/** Lab / diagnostics report ready (no URL button — collect at hospital / app) */
+/** Lab / diagnostics report ready — URL button suffix = public report token */
 async function sendLabReportWhatsApp({
   phone,
   patientName,
   hospitalName,
   testsSummary,
+  token,
 }) {
   return sendWhatsAppTemplate({
     phone,
@@ -280,6 +295,7 @@ async function sendLabReportWhatsApp({
       hospitalName || "Clinic",
       testsSummary || "your tests",
     ],
+    buttonUrlSuffix: token,
   });
 }
 

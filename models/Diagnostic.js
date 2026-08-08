@@ -27,6 +27,12 @@ const diagnosticSchema = new mongoose.Schema(
     visitType: { type: String },
     /** For type === "Package": catalog tests included in this package */
     includedTests: [mongoose.Schema.Types.Mixed],
+    /**
+     * Preferred storage: [{ parameterId, order }] linking hospital Parameter.
+     * Routes normalize on write and hydrate live Parameter fields on read so
+     * Lab Inventory edits reflect on every test. Legacy full snapshots still load.
+     * Kept as Mixed for backward compatibility with embedded snapshots.
+     */
     parameters: [mongoose.Schema.Types.Mixed],
     testInstructions: [String],
     active: { type: Boolean, default: true },

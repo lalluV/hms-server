@@ -1,7 +1,12 @@
 const express = require("express");
 const router = express.Router();
 const MasterDiagnostic = require("../models/MasterDiagnostic");
+const MasterParameter = require("../models/MasterParameter");
 const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
+const {
+  resolveDiagnosticBodyForHospital,
+  hydrateDiagnostics,
+} = require("../utils/hydrateDiagnosticParameters");
 
 applyTenantEntitlements(router, { moduleKey: "lab" });
 
@@ -9,6 +14,7 @@ applyTenantEntitlements(router, { moduleKey: "lab" });
 router.get("/", async (req, res) => {
   try {
     const Diagnostic = req.tenantDb.model("Diagnostic");
+    const Parameter = req.tenantDb.model("Parameter");
 
     const { search, page = 1, limit } = req.query;
 
@@ -27,6 +33,7 @@ router.get("/", async (req, res) => {
         { subdeptname: { $regex: search, $options: "i" } },
         { type: { $regex: search, $options: "i" } },
         { visitType: { $regex: search, $options: "i" } },
+        // legacy embedded snapshots
         { "parameters.name": { $regex: search, $options: "i" } },
         { "parameters.category": { $regex: search, $options: "i" } },
         { "includedTests.name": { $regex: search, $options: "i" } },
@@ -40,25 +47,24 @@ router.get("/", async (req, res) => {
     // Get total count for pagination info
     const totalDiagnostics = await Diagnostic.countDocuments(searchQuery);
 
-    // Fetch diagnostics with pagination and search, populate master diagnostic if exists
+    // Do not populate diagnosticId → MasterDiagnostic (lives on master DB, not tenant)
     const diagnostics = await Diagnostic.find(searchQuery)
-      .populate(
-        "diagnosticId",
-        "test_code name deptname subdeptname description",
-      )
       .sort({ createdAt: -1 }) // Sort by newest first
       .skip(skip)
       .limit(actualLimit);
 
     // Calculate pagination info
-    const totalPages = Math.ceil(totalDiagnostics / actualLimit);
-    const hasNextPage = page < totalPages;
-    const hasPrevPage = page > 1;
+    const pageNum = parseInt(page, 10) || 1;
+    const totalPages = Math.ceil(totalDiagnostics / actualLimit) || 0;
+    const hasNextPage = pageNum < totalPages;
+    const hasPrevPage = pageNum > 1;
+
+    const hydrated = await hydrateDiagnostics(Parameter, diagnostics);
 
     res.json({
-      diagnostics,
+      diagnostics: hydrated,
       pagination: {
-        currentPage: parseInt(page),
+        currentPage: pageNum,
         totalPages,
         totalDiagnostics,
         hasNextPage,
@@ -69,6 +75,7 @@ router.get("/", async (req, res) => {
       },
     });
   } catch (error) {
+    console.error("Error listing diagnostics:", error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -77,6 +84,7 @@ router.get("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const Diagnostic = req.tenantDb.model("Diagnostic");
+    const Parameter = req.tenantDb.model("Parameter");
     const diagnostic = await Diagnostic.findOne({
       _id: req.params.id,
       hospitalId: req.hospitalId,
@@ -84,7 +92,8 @@ router.get("/:id", async (req, res) => {
     if (!diagnostic) {
       return res.status(404).json({ message: "Diagnostic not found" });
     }
-    res.json(diagnostic);
+    const hydrated = await hydrateDiagnostics(Parameter, diagnostic);
+    res.json(hydrated);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -94,6 +103,7 @@ router.get("/:id", async (req, res) => {
 router.post("/from-master/:masterId", async (req, res) => {
   try {
     const Diagnostic = req.tenantDb.model("Diagnostic");
+    const Parameter = req.tenantDb.model("Parameter");
 
     const masterDiagnostic = await MasterDiagnostic.findById(
       req.params.masterId,
@@ -103,17 +113,104 @@ router.post("/from-master/:masterId", async (req, res) => {
       return res.status(404).json({ message: "Master diagnostic not found" });
     }
 
-    // Check if hospital already has this diagnostic
-    const existing = await Diagnostic.findOne({
-      hospitalId: req.hospitalId,
-      diagnosticId: masterDiagnostic._id,
-    });
+    const normalized = await resolveDiagnosticBodyForHospital(
+      Parameter,
+      req.hospitalId,
+      req.body || {},
+    );
 
-    if (existing) {
-      return res.status(400).json({
-        message: "Diagnostic already exists from this master",
-        diagnostic: existing,
-      });
+    // Ensure suggested master parameters exist in hospital Parameter catalog
+    const hospitalFilter = {
+      $or: [
+        { hospitalId: req.hospitalId },
+        { hospitalId: String(req.hospitalId) },
+      ],
+    };
+    const ensureFromMaster = async (masterParamDoc, order = 0) => {
+      if (!masterParamDoc?._id && !masterParamDoc?.name) return null;
+      const masterId = masterParamDoc._id;
+      let hospitalParam = null;
+      if (masterId) {
+        hospitalParam = await Parameter.findOne({
+          ...hospitalFilter,
+          parameterId: masterId,
+        });
+      }
+      if (!hospitalParam && masterParamDoc.name) {
+        hospitalParam = await Parameter.findOne({
+          ...hospitalFilter,
+          name: new RegExp(
+            `^${String(masterParamDoc.name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+            "i",
+          ),
+        });
+      }
+      if (!hospitalParam) {
+        hospitalParam = await Parameter.create({
+          hospitalId: req.hospitalId,
+          parameterId: masterId || undefined,
+          name: masterParamDoc.name,
+          units: masterParamDoc.units || "-",
+          normal_range: masterParamDoc.default_normal_range || {},
+          critical_values: masterParamDoc.default_critical_values || {},
+          category: masterParamDoc.category || "",
+          isCustom: !masterId,
+          active: true,
+        });
+      } else if (masterId && !hospitalParam.parameterId) {
+        hospitalParam.parameterId = masterId;
+        hospitalParam.isCustom = false;
+        await hospitalParam.save();
+      }
+      return { parameterId: hospitalParam._id, order };
+    };
+
+    let parameterLinks = Array.isArray(normalized.parameters)
+      ? normalized.parameters.filter((p) => p?.parameterId)
+      : [];
+
+    // If client sent no valid refs, build from master suggested_parameters
+    if (
+      parameterLinks.length === 0 &&
+      Array.isArray(masterDiagnostic.suggested_parameters)
+    ) {
+      const built = [];
+      for (let i = 0; i < masterDiagnostic.suggested_parameters.length; i++) {
+        const sp = masterDiagnostic.suggested_parameters[i];
+        const masterParam =
+          sp.parameterId && typeof sp.parameterId === "object"
+            ? sp.parameterId
+            : null;
+        if (!masterParam) continue;
+        const link = await ensureFromMaster(masterParam, i);
+        if (link) built.push(link);
+      }
+      parameterLinks = built;
+    } else if (parameterLinks.length > 0) {
+      // Make sure each linked id exists; if a master id was sent, create hospital param
+      const resolved = [];
+      for (let i = 0; i < parameterLinks.length; i++) {
+        const link = parameterLinks[i];
+        const oid = link.parameterId;
+        const asHospital = await Parameter.findOne({
+          ...hospitalFilter,
+          _id: oid,
+        });
+        if (asHospital) {
+          resolved.push({
+            parameterId: asHospital._id,
+            order: typeof link.order === "number" ? link.order : i,
+          });
+          continue;
+        }
+        // Maybe client passed a master Parameter id
+        const masterParam = await MasterParameter.findById(oid);
+        if (masterParam) {
+          const created = await ensureFromMaster(masterParam, i);
+          if (created) resolved.push(created);
+        }
+      }
+      parameterLinks = resolved;
     }
 
     // Create hospital diagnostic from master with defaults
@@ -121,44 +218,33 @@ router.post("/from-master/:masterId", async (req, res) => {
       hospitalId: req.hospitalId,
       diagnosticId: masterDiagnostic._id,
       code: req.body.code || "", // Hospital-specific code (not from master)
-      name: masterDiagnostic.name,
-      deptname: masterDiagnostic.deptname,
-      subdeptname: masterDiagnostic.subdeptname,
-      description: masterDiagnostic.description,
-      fasting: masterDiagnostic.default_fasting || "Not Required",
-      reportsIn: masterDiagnostic.default_reportsIn || "Same Day",
-      testInstructions: masterDiagnostic.default_testInstructions || [],
+      name: req.body.name || masterDiagnostic.name,
+      deptname: req.body.deptname || masterDiagnostic.deptname,
+      subdeptname: req.body.subdeptname || masterDiagnostic.subdeptname,
+      description: req.body.description || masterDiagnostic.description,
+      fasting:
+        req.body.fasting || masterDiagnostic.default_fasting || "Not Required",
+      reportsIn:
+        req.body.reportsIn || masterDiagnostic.default_reportsIn || "Same Day",
+      testInstructions:
+        req.body.testInstructions ||
+        masterDiagnostic.default_testInstructions ||
+        [],
       type: req.body.type || "Test",
-      visitType: "Center",
+      visitType: req.body.visitType || "Center",
       active: req.body.active !== false,
       isCustom: false, // Created from master
       // Pricing must be set by hospital
       mrp: req.body.mrp || 0,
       price: req.body.price || 0,
-      // Parameters will be set from hospital's own parameters
-      parameters: req.body.parameters || [],
-      includedTests: req.body.includedTests || [],
+      // Parameter refs only (normalized)
+      parameters: parameterLinks,
+      includedTests: normalized.includedTests || [],
     });
 
-    // Allow overriding defaults from request body
-    if (req.body.code) hospitalDiagnostic.code = req.body.code;
-    if (req.body.name) hospitalDiagnostic.name = req.body.name;
-    if (req.body.deptname) hospitalDiagnostic.deptname = req.body.deptname;
-    if (req.body.subdeptname)
-      hospitalDiagnostic.subdeptname = req.body.subdeptname;
-    if (req.body.description)
-      hospitalDiagnostic.description = req.body.description;
-    if (req.body.fasting) hospitalDiagnostic.fasting = req.body.fasting;
-    if (req.body.reportsIn) hospitalDiagnostic.reportsIn = req.body.reportsIn;
-    if (req.body.testInstructions)
-      hospitalDiagnostic.testInstructions = req.body.testInstructions;
-    if (req.body.visitType) hospitalDiagnostic.visitType = req.body.visitType;
-    if (req.body.type) hospitalDiagnostic.type = req.body.type;
-    if (req.body.includedTests)
-      hospitalDiagnostic.includedTests = req.body.includedTests;
-
     const newDiagnostic = await hospitalDiagnostic.save();
-    res.status(201).json(newDiagnostic);
+    const hydrated = await hydrateDiagnostics(Parameter, newDiagnostic);
+    res.status(201).json(hydrated);
   } catch (error) {
     console.error("Error creating diagnostic from master:", error);
     res.status(400).json({ message: error.message });
@@ -169,6 +255,7 @@ router.post("/from-master/:masterId", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const Diagnostic = req.tenantDb.model("Diagnostic");
+    const Parameter = req.tenantDb.model("Parameter");
 
     // If diagnosticId is provided, verify it exists
     if (req.body.diagnosticId) {
@@ -178,13 +265,20 @@ router.post("/", async (req, res) => {
       }
     }
 
+    const normalized = await resolveDiagnosticBodyForHospital(
+      Parameter,
+      req.hospitalId,
+      req.body || {},
+    );
+
     const diagnostic = new Diagnostic({
-      ...req.body,
+      ...normalized,
       hospitalId: req.hospitalId,
       isCustom: !req.body.diagnosticId, // Custom if no master reference
     });
     const newDiagnostic = await diagnostic.save();
-    res.status(201).json(newDiagnostic);
+    const hydrated = await hydrateDiagnostics(Parameter, newDiagnostic);
+    res.status(201).json(hydrated);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -194,15 +288,23 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const Diagnostic = req.tenantDb.model("Diagnostic");
-    const diagnostic = await Diagnostic.findOneAndUpdate(
-      { _id: req.params.id, hospitalId: req.hospitalId },
-      req.body,
-      { new: true },
+    const Parameter = req.tenantDb.model("Parameter");
+    const normalized = await resolveDiagnosticBodyForHospital(
+      Parameter,
+      req.hospitalId,
+      req.body || {},
     );
-    if (!diagnostic) {
+    const hospitalKey = String(req.hospitalId);
+
+    let diagnostic = await Diagnostic.findById(req.params.id);
+    if (!diagnostic || String(diagnostic.hospitalId) !== hospitalKey) {
       return res.status(404).json({ message: "Diagnostic not found" });
     }
-    res.json(diagnostic);
+
+    Object.assign(diagnostic, normalized);
+    await diagnostic.save();
+    const hydrated = await hydrateDiagnostics(Parameter, diagnostic);
+    res.json(hydrated);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -212,15 +314,27 @@ router.put("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   try {
     const Diagnostic = req.tenantDb.model("Diagnostic");
-    const diagnostic = await Diagnostic.findOneAndDelete({
-      _id: req.params.id,
-      hospitalId: req.hospitalId,
-    });
+    const id = req.params.id;
+    const hospitalKey = String(req.hospitalId);
+
+    // Prefer hospital document _id; fall back to master diagnosticId
+    // (UI sometimes sends diagnosticId when _id is missing from cached rows)
+    let diagnostic = await Diagnostic.findById(id);
     if (!diagnostic) {
-      return res.status(404).json({ message: "Diagnostic not found" });
+      diagnostic = await Diagnostic.findOne({ diagnosticId: id });
     }
-    res.json({ message: "Diagnostic deleted" });
+
+    if (!diagnostic || String(diagnostic.hospitalId) !== hospitalKey) {
+      return res.status(404).json({
+        message: "Diagnostic not found",
+        id,
+      });
+    }
+
+    await diagnostic.deleteOne();
+    res.json({ message: "Diagnostic deleted", id: diagnostic._id });
   } catch (error) {
+    console.error("Error deleting diagnostic:", error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -229,11 +343,13 @@ router.delete("/:id", async (req, res) => {
 router.get("/patient/:patientId", async (req, res) => {
   try {
     const Diagnostic = req.tenantDb.model("Diagnostic");
+    const Parameter = req.tenantDb.model("Parameter");
     const diagnostics = await Diagnostic.find({
       patientId: req.params.patientId,
       hospitalId: req.hospitalId,
     });
-    res.json(diagnostics);
+    const hydrated = await hydrateDiagnostics(Parameter, diagnostics);
+    res.json(hydrated);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -243,11 +359,13 @@ router.get("/patient/:patientId", async (req, res) => {
 router.get("/doctor/:doctorId", async (req, res) => {
   try {
     const Diagnostic = req.tenantDb.model("Diagnostic");
+    const Parameter = req.tenantDb.model("Parameter");
     const diagnostics = await Diagnostic.find({
       doctorId: req.params.doctorId,
       hospitalId: req.hospitalId,
     });
-    res.json(diagnostics);
+    const hydrated = await hydrateDiagnostics(Parameter, diagnostics);
+    res.json(hydrated);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

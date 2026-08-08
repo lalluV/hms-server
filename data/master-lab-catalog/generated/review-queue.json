@@ -1,0 +1,4927 @@
+[
+  {
+    "type": "parameter",
+    "code": "P-MIC-HIVII",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-DENGNS",
+    "highestSeverity": "review",
+    "messages": [
+      "Interpret according to day of illness and assay instructions."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-RBS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Interpretation depends on timing of last meal and clinical context."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-PAT-LIPASE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-HB",
+    "highestSeverity": "review",
+    "messages": [
+      "Ranges vary with age, pregnancy and altitude."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-HPT-AST",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Strongly method- and laboratory-dependent."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-PAT-CLOTTI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-ANI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-PAT-AEC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-PAT-ANC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-HBF",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-HBA2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-PAT-OCCULT",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-URINVO",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-PAT-HJBOPS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-24HUP",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-PAT-INDIBI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-PAT-PSA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-GCT",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-PAT-APTT",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reagent-dependent."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-PAT-HB",
+    "highestSeverity": "review",
+    "messages": [
+      "Ranges vary with age, pregnancy and altitude."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-TOTAL-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-HPT-LIPASE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-AMH",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-PAT-AST",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Strongly method- and laboratory-dependent."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BLD-RHTIT",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-FREETR",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-ARTEPH",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Only valid for arterial blood gas context; generic pH rows require review."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-ARTEPO",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Age and inspired oxygen dependent."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-OXYGSA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Interpret with sample type and oxygen therapy."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-FO2HBE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-FHHBE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-CTHB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-CTO2E",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-ECF",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-CBASC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-CCAC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-ADA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-GFR",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-NEONBI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-INDIBI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-ALKAPH",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-BETAHC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-ANTIIG-3",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-ANTIIG",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-ANTIGB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-ACIDPH-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-GLOBUL",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-ANTICE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-S70I",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-RFIGM",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-24HUVM",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-CHIKIG",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-HCVII",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-GGT",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-ECI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-ECI-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-EEI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-ENI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-AQUA4",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-CPK",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-PAT-BLEETI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-MASS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-LACTDE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-DENGIG",
+    "highestSeverity": "review",
+    "messages": [
+      "Interpret according to day of illness and assay instructions."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-DENGIG-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Interpret according to day of illness and assay instructions."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MOB-DCI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-PAT-PSS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-DENGIG-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Interpret according to day of illness and assay instructions."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-DENGIG",
+    "highestSeverity": "review",
+    "messages": [
+      "Interpret according to day of illness and assay instructions."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-GLOBUL",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-CA125",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-CHOLIN",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-CERULO",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-HPT-GLOBUL",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-AMMONI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found.",
+      "Critical values requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-CORTIS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-CYT-LIPASE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-CYT-AST",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Strongly method- and laboratory-dependent."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-PROCAL",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-LUPUAN",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-24HUC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-PAT-ESR",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-PAT-RETICO",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-AMYLAS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-CRP",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Method and clinical-use dependent."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-CRYPTO",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-LKM",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-AST",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Strongly method- and laboratory-dependent."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-PAT-SPERCO",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-AST",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Strongly method- and laboratory-dependent."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-PREGNA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-FIBRIN",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found.",
+      "Critical values requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-ALT",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Strongly method- and laboratory-dependent."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-CARBAM",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-URINOS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-TRANSA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-AGR",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-LIPASE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-PHOSPH",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found.",
+      "Critical values requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-ACE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-DHEAS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-FDP",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-VZIA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-C153",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-C199",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-CEA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-AEI-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-AEI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MOB-CCR",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-FREETH",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-FSH",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-G6PD",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-CLAC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-PAT-URINOC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-PAT-ALT",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Strongly method- and laboratory-dependent."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-BBI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-BBI-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-MEASIG",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-COPPER",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-LEPTIG-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-PANC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-RUB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-RUB-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-PPG",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found.",
+      "Critical values requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-URINPR",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-WBHIV",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-CANC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-RAFAC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-ATPA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-III",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-IGE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-VLDLCH",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-HAPTOG",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-TOTAL",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-BILIRU",
+    "highestSeverity": "review",
+    "messages": [
+      "Neonatal ranges are age-in-hours dependent and are not represented here."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-IRON",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-FACTVI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-IBC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-CMVIGG",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-FERRIT",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Assay-, age- and inflammation-dependent."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-CMVIGM",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-BRUCIG",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-BRUCIG-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-TOXOIG",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-TOXOIG-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-CYSTIG",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-5HIAA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-TSH",
+    "highestSeverity": "review",
+    "messages": [
+      "ABIM 2026 adult reference 0.5-4.0 µIU/mL; assay- and pregnancy-dependent."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-CYSTC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-TROPI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-PAT-ALC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-PAT-ABC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-FKLC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-FLLC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-KLR",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-C3",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-C4",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-RENIN",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-ALDOST",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-AMA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-SMITH",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-PTHINT",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-PHENYT",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-VDRL",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-ADDNAD",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-HAV",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-IGM",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-HBEAG",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-AHBST",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-ANTINU",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-ASM",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-PAT-IRON",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-EAI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-24HUC-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-H12I",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-H12I-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-NPB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-24HUM",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-TTH",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found.",
+      "Critical values requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-RO",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-LA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-CPEP",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-ACP",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-TRIIOD",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-CCPANT",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-ACR",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-ANTIHB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-THYROX",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-OSMOLA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-CPKMB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found.",
+      "Critical values requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-DDIM",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Assay units and age-adjusted interpretation must be confirmed locally."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-ANTIIG-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-P5OE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-HPT-IRON",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-E2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-HEV",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-FREE-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-MYOGLO",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-25HVD",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-HIVI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-HBSAG",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-HCVI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-PAT-KETOBO",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-24HUP-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-ACTH",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-LEPTIG",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-HSCRP",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-GH",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-HOMOCYS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-INSULI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-LH",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-LIPOPR",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-LITHIU",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-PROLAC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-PROGES",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-PROTS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-FREE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Generic qualitative normal value requires method-specific verification."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-B12",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-DIGOXI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-BIO-FOLIAC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-HPT-ALKAPH",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment."
+    ]
+  },
+  {
+    "type": "parameter",
+    "code": "P-MIC-ANTIHB-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence clinical enrichment.",
+      "Reference range requested by source but no safe chat-curated match was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-RFT",
+    "highestSeverity": "review",
+    "messages": [
+      "Panel composition varies by laboratory."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-HBA1C",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-XRY-BMFT",
+    "highestSeverity": "review",
+    "messages": [
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-XRY-BARSW",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-GH",
+    "highestSeverity": "review",
+    "messages": [
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-LACTATE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-PROTC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-FREE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-UPCR",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-PTH",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-OSMOL",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-HPT-SKIN",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-HPT-RADIRES",
+    "highestSeverity": "review",
+    "messages": [
+      "22 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-CUE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-CBP-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-STOOL",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-TCDC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-PSMEAR",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "4 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-MP",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-DUPLREP",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-LAPSCO",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-OSMOFRA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-DIGOXIN",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-FOLATE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-PROTELE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-UREA",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-CREATINI",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-POTASIUM",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-SUC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-SUC-4",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-SUP-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-SUS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-UBJP",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-HPT-BMS",
+    "highestSeverity": "review",
+    "messages": [
+      "16 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-HPT-BLS",
+    "highestSeverity": "review",
+    "messages": [
+      "23 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-PLS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-CALCIUM",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-URICACI",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NGACS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "3 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-USG",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-HPT-NIMM",
+    "highestSeverity": "review",
+    "messages": [
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-MICROFIL",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-ATIII",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-IIII",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NGPCS-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-MANTOUX",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-CYT-NPS",
+    "highestSeverity": "review",
+    "messages": [
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-IBCTIBC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-24HUP-3",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-24HUC-4",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-HCG",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-CORTISOL",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-ELCTROPH",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-APA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BLD-GROURH",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-24HUC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-AFP",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-DHESO4",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-FDP",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-BIOCHEMI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-24HUUA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-24HUS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-ACIDPHO",
+    "highestSeverity": "review",
+    "messages": [
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-NHE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-RADOM",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-ALBUMIN",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-TOTAL-2",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-TROPI",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-ESR",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-ANC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-CCAB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-STOOFAT",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-UAS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-UKB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-URINMIC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "3 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-UBSBP",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-SEMEREP",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-RBCIND",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-URINCHY",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-URINHEM",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-URINPH",
+    "highestSeverity": "review",
+    "messages": [
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-URINPOR",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-DNA",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-AHBE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-HLAB27",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-FVL",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-FIP",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-MTHFMUT",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-CTS-CNICA",
+    "highestSeverity": "review",
+    "messages": [
+      "4 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-CTS-CNICB",
+    "highestSeverity": "review",
+    "messages": [
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-CTS-CTPEL",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-LDH",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-AMALYSE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-CRP-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-FLC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MRI-ACMRI",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MRI-MRI",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-MPS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-24HU5HIA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-DLC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-HPT-NFA",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-URINPRE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NGCS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NGFCS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-ATP",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-24HUC-3",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NTCS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-BIM",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-TPH",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-ASA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-AMA",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-MIXIEXP",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MRI-MRIMB",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MRI-MRIBC",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MRI-MRILS-2",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MRI-2PARTS-2",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MRI-MRISCSR",
+    "highestSeverity": "review",
+    "messages": [
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MRI-MRIWA",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-CYT-AFSS",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-LDH-2",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-XRY-PTC",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-XRY-RGU",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-XRY-SIALOGRA",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-XRY-XRA",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-TRANSFER",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-UHA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-STOOMIC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-STOOOCC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-CIAB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-SCREEN",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-17HP",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-HPT-EPR",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-HEMOPCV",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-CMV",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-EDI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-EDI-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-HBEAG",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-HSV",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-HSV-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-AFB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NGCSFCS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-CMV-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NGCS-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-GRAMSTA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MRI-MRIRA",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-HPT-NCB",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-CTS-CCAC",
+    "highestSeverity": "review",
+    "messages": [
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-BCT",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-ENDOBRU",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-AFS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-SYNOAFB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-SGS-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-SFS-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-PDGS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-BWA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-BWGS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-BWFS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NGPCS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NGSCS-4",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "3 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NGPDCS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-ATAB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NGVSC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-BDDBF",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-24HUP-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-NCBF",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-HPT-SPECSTA",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-PTINR",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-CTS-CTSPI",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-ULS-BIOPHY",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-ULS-FOLLICUL",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-XRY-BARIENE",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-XRY-BARIMEA",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-SPUTAFB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-SGS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-SFS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NGSCS-3",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "4 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-TBCUL",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NGTSCS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-TORCH",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-URINAFB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-UGS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NGUCS-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NWBHIV",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-ANA-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-VALPACI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-24HRSUMN",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-HAV",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NHI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-HHCV",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-PROCAL",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-ASO",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-WIDAL",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-ACRA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-AHBETA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-AHBSB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-EIA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-HIVII",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-TOXO-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-TOXO",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-VDRL",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-A1AT",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-SSBIGG",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-GTT",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-LIPOA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-CSFAFB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-CSFGS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-CSFFS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-PLEUAFB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-PGS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-PFS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-ASCIAFB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-AGS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-24HUCC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-ACA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-CYT-CBF",
+    "highestSeverity": "review",
+    "messages": [
+      "4 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-HPT-FROZSEC",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-HPT-OUTSIDE",
+    "highestSeverity": "review",
+    "messages": [
+      "7 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-XRY-XRBSJO",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MRI-BRAIN",
+    "highestSeverity": "review",
+    "messages": [
+      "Duplicate canonical test names were merged."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MRI-MRCHE",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MRI-MRIC10M",
+    "highestSeverity": "review",
+    "messages": [
+      "3 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-BAQ",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-MYOSITIS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NGETSCS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NGCTCS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-TROPT",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-HPT-CCB",
+    "highestSeverity": "review",
+    "messages": [
+      "3 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-BMAC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NGBWCS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-HPT-BSSS",
+    "highestSeverity": "review",
+    "messages": [
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-KOHMOU",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-HCVQUA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NGSCS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NGSCS-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-XRY-HSG",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-AGABG",
+    "highestSeverity": "review",
+    "messages": [
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-SUC-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-AEC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-PAGR",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-SSAIGG",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NGTCS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-TACROMIL",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-HDNAPCR-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-CDNAPCR",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-HDNAPCR",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-INDIINK",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-HPT-SSOB",
+    "highestSeverity": "review",
+    "messages": [
+      "3 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-TG",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-TB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-TIII",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-STONE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-URINELE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-HCVQUA-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-CMVQUA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-HBVQUA-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-HIVQUA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-ABC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-PCDMP",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-MDNAPCR",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-ULS-ABDODOP",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-ULS-OBSTDOP",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-ULS-RENADOP",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-ULS-SCRODOP",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-ULS-TRANDOP",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-ULS-TRD",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-BBI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-BBI-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-PFV",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-HPT-BSS",
+    "highestSeverity": "review",
+    "messages": [
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-AHBCI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-HPT-TBP",
+    "highestSeverity": "review",
+    "messages": [
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-CTS-CTDRA",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-THYROGLO",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-ACA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-RIA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-H1N1SWAB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-CHLAPCR",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-MONOSPO",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-HCVGEN",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-J1A",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-125DVD",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-FGF23",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-CCC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-HLABHLAB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-ANA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-XRY-XRWSA",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-XRY-XRWSAL",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-WEILFEL",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-O7CCMT",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-ALC",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-HPT-KIDNEY",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-GLUCCHA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-XRY-XRKTV",
+    "highestSeverity": "review",
+    "messages": [
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-XRY-XRM",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-FUNGSTA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-CRYPTOCO",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-ULS-ULTRPCN",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-NIFE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-5DRUG",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-LKMANT",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-GASTRIN",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-PARADIS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-GMSSTA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-CRYOGLOB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-MICRFIL",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NGUCS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "2 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-URINPRO",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-EBVII",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-HCVPCRD",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-FCS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-LBP",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-PWVD",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-WATEAFB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-HCV",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-HBVQUA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-HAINS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-BMB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-ULS-FST",
+    "highestSeverity": "review",
+    "messages": [
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-RBCFOL",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-SCS",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-ASMA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-CHIKIGM",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-RS370",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "3 alternate report format(s) were collapsed into the preferred format."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-CHROMOSO",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-ROTAVIR",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-UDSP",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-PAT-METHEM",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-VZIA",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MOB-BAQ-2",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-NEONATAL",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-IFEURI",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-24HUC-5",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-PERIEQU",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-BIO-PERIADE",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-AHT",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found."
+    ]
+  },
+  {
+    "type": "diagnostic",
+    "code": "T-MIC-NGCBB",
+    "highestSeverity": "review",
+    "messages": [
+      "Low-confidence test enrichment or linking.",
+      "No deterministic parameter link was found.",
+      "1 alternate report format(s) were collapsed into the preferred format."
+    ]
+  }
+]

@@ -1,35 +1,73 @@
 const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
 const MasterParameter = require("../models/MasterParameter");
 const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
 
 applyTenantEntitlements(router, { moduleKey: "lab" });
 
+/** Match hospitalId whether stored as ObjectId or string */
+function hospitalIdFilter(hospitalId) {
+  const key = String(hospitalId);
+  return { $or: [{ hospitalId }, { hospitalId: key }] };
+}
+
+function escapeRegex(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Count hospital diagnostics that reference this Parameter id */
+async function countTestsUsingParameter(Diagnostic, hospitalId, parameterId) {
+  const idStr = String(parameterId);
+  const ids = [idStr];
+  if (mongoose.Types.ObjectId.isValid(idStr)) {
+    ids.push(new mongoose.Types.ObjectId(idStr));
+  }
+  return Diagnostic.countDocuments({
+    $and: [
+      hospitalIdFilter(hospitalId),
+      {
+        $or: [
+          { "parameters.parameterId": { $in: ids } },
+          { "includedTests.parameters.parameterId": { $in: ids } },
+        ],
+      },
+    ],
+  });
+}
+
 // Get all parameters with pagination and search
 router.get("/", async (req, res) => {
   try {
     const Parameter = req.tenantDb.model("Parameter");
-    
+
     const { search, page = 1, limit } = req.query;
 
     // Use different limits based on whether search is active
     const defaultLimit = search ? 10 : 50;
     const actualLimit = limit ? parseInt(limit) : defaultLimit;
 
-    // Build search query
-    let searchQuery = { hospitalId: req.hospitalId };
+    // Build search query (flexible hospitalId for legacy docs)
+    let searchQuery = hospitalIdFilter(req.hospitalId);
     if (search) {
-      searchQuery.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { category: { $regex: search, $options: "i" } },
-        { units: { $regex: search, $options: "i" } },
-        { id: { $regex: search, $options: "i" } },
-        { "normal_range.adult_male": { $regex: search, $options: "i" } },
-        { "normal_range.adult_female": { $regex: search, $options: "i" } },
-        { "normal_range.child": { $regex: search, $options: "i" } },
-        { "critical_values.low": { $regex: search, $options: "i" } },
-        { "critical_values.high": { $regex: search, $options: "i" } },
+      const safe = escapeRegex(String(search).trim());
+      const orClauses = [
+        { name: { $regex: safe, $options: "i" } },
+        { category: { $regex: safe, $options: "i" } },
+        { units: { $regex: safe, $options: "i" } },
+        { "normal_range.adult_male": { $regex: safe, $options: "i" } },
+        { "normal_range.adult_female": { $regex: safe, $options: "i" } },
+        { "normal_range.child": { $regex: safe, $options: "i" } },
+        { "critical_values.low": { $regex: safe, $options: "i" } },
+        { "critical_values.high": { $regex: safe, $options: "i" } },
       ];
+      // Allow lookup by hospital Parameter ObjectId
+      if (/^[a-fA-F0-9]{24}$/.test(String(search).trim())) {
+        orClauses.push({ _id: String(search).trim() });
+      }
+      searchQuery = {
+        $and: [hospitalIdFilter(req.hospitalId), { $or: orClauses }],
+      };
     }
 
     // Calculate skip value for pagination
@@ -38,22 +76,23 @@ router.get("/", async (req, res) => {
     // Get total count for pagination info
     const totalParameters = await Parameter.countDocuments(searchQuery);
 
-    // Fetch parameters with pagination and search, populate master parameter if exists
+    // Fetch parameters with pagination and search (no populate —
+    // MasterParameter lives on the master DB, not the tenant connection)
     const parameters = await Parameter.find(searchQuery)
-      .populate("parameterId", "parameter_code name units category default_normal_range default_critical_values")
-      .sort({ updatedAt: -1 }) // Sort by most recently updated
+      .sort({ updatedAt: -1 })
       .skip(skip)
       .limit(actualLimit);
 
     // Calculate pagination info
-    const totalPages = Math.ceil(totalParameters / actualLimit);
-    const hasNextPage = page < totalPages;
-    const hasPrevPage = page > 1;
+    const pageNum = parseInt(page, 10) || 1;
+    const totalPages = Math.ceil(totalParameters / actualLimit) || 0;
+    const hasNextPage = pageNum < totalPages;
+    const hasPrevPage = pageNum > 1;
 
     res.json({
       parameters,
       pagination: {
-        currentPage: parseInt(page),
+        currentPage: pageNum,
         totalPages,
         totalParameters,
         hasNextPage,
@@ -68,13 +107,38 @@ router.get("/", async (req, res) => {
   }
 });
 
+// How many tests reference this parameter
+router.get("/:id/usage", async (req, res) => {
+  try {
+    const Parameter = req.tenantDb.model("Parameter");
+    const Diagnostic = req.tenantDb.model("Diagnostic");
+
+    const parameter = await Parameter.findOne({
+      _id: req.params.id,
+      ...hospitalIdFilter(req.hospitalId),
+    }).select("_id");
+    if (!parameter) {
+      return res.status(404).json({ message: "Parameter not found" });
+    }
+
+    const testCount = await countTestsUsingParameter(
+      Diagnostic,
+      req.hospitalId,
+      req.params.id,
+    );
+    res.json({ testCount });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Get parameter by ID
 router.get("/:id", async (req, res) => {
   try {
     const Parameter = req.tenantDb.model("Parameter");
     const parameter = await Parameter.findOne({
       _id: req.params.id,
-      hospitalId: req.hospitalId,
+      ...hospitalIdFilter(req.hospitalId),
     });
     if (!parameter) {
       return res.status(404).json({ message: "Parameter not found" });
@@ -89,23 +153,34 @@ router.get("/:id", async (req, res) => {
 router.post("/from-master/:masterId", async (req, res) => {
   try {
     const Parameter = req.tenantDb.model("Parameter");
-    
+
     const masterParameter = await MasterParameter.findById(req.params.masterId);
     if (!masterParameter) {
       return res.status(404).json({ message: "Master parameter not found" });
     }
 
-    // Check if hospital already has this parameter
+    // Check if hospital already has this parameter (by master ref or name)
     const existing = await Parameter.findOne({
-      hospitalId: req.hospitalId,
+      ...hospitalIdFilter(req.hospitalId),
       parameterId: masterParameter._id,
     });
 
     if (existing) {
-      return res.status(400).json({
-        message: "Parameter already exists from this master",
-        parameter: existing,
-      });
+      return res.status(200).json(existing);
+    }
+
+    const existingByName = await Parameter.findOne({
+      ...hospitalIdFilter(req.hospitalId),
+      name: new RegExp(`^${escapeRegex(masterParameter.name)}$`, "i"),
+    });
+    if (existingByName) {
+      // Link to master if not already linked
+      if (!existingByName.parameterId) {
+        existingByName.parameterId = masterParameter._id;
+        existingByName.isCustom = false;
+        await existingByName.save();
+      }
+      return res.status(200).json(existingByName);
     }
 
     // Create hospital parameter from master with defaults
@@ -113,7 +188,7 @@ router.post("/from-master/:masterId", async (req, res) => {
       hospitalId: req.hospitalId,
       parameterId: masterParameter._id,
       name: masterParameter.name,
-      units: masterParameter.units,
+      units: masterParameter.units || "-",
       normal_range: masterParameter.default_normal_range || {},
       critical_values: masterParameter.default_critical_values || {},
       category: masterParameter.category,
@@ -144,7 +219,7 @@ router.post("/from-master/:masterId", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const Parameter = req.tenantDb.model("Parameter");
-    
+
     // If parameterId is provided, verify it exists
     if (req.body.parameterId) {
       const masterParam = await MasterParameter.findById(req.body.parameterId);
@@ -153,10 +228,30 @@ router.post("/", async (req, res) => {
       }
     }
 
+    const name = String(req.body.name || "").trim();
+    if (!name) {
+      return res.status(400).json({ message: "Parameter name is required" });
+    }
+
+    // Reuse existing hospital param with same name (case-insensitive)
+    const existingByName = await Parameter.findOne({
+      ...hospitalIdFilter(req.hospitalId),
+      name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"),
+    });
+    if (existingByName) {
+      return res.status(200).json(existingByName);
+    }
+
     const parameter = new Parameter({
-      ...req.body,
+      name,
+      units: String(req.body.units || "").trim() || "-",
+      normal_range: req.body.normal_range || {},
+      critical_values: req.body.critical_values || {},
+      category: req.body.category || "",
+      parameterId: req.body.parameterId || undefined,
       hospitalId: req.hospitalId,
-      isCustom: !req.body.parameterId, // Custom if no master reference
+      isCustom: !req.body.parameterId,
+      active: req.body.active !== false,
     });
 
     const newParameter = await parameter.save();
@@ -170,10 +265,27 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const Parameter = req.tenantDb.model("Parameter");
+    const body = { ...req.body };
+    if (body.units !== undefined && !String(body.units || "").trim()) {
+      body.units = "-";
+    }
     const parameter = await Parameter.findOneAndUpdate(
-      { _id: req.params.id, hospitalId: req.hospitalId },
-      req.body,
-      { new: true }
+      {
+        $and: [{ _id: req.params.id }, hospitalIdFilter(req.hospitalId)],
+      },
+      {
+        ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.units !== undefined ? { units: body.units } : {}),
+        ...(body.category !== undefined ? { category: body.category } : {}),
+        ...(body.normal_range !== undefined
+          ? { normal_range: body.normal_range }
+          : {}),
+        ...(body.critical_values !== undefined
+          ? { critical_values: body.critical_values }
+          : {}),
+        ...(body.active !== undefined ? { active: body.active } : {}),
+      },
+      { new: true },
     );
     if (!parameter) {
       return res.status(404).json({ message: "Parameter not found" });
@@ -188,9 +300,22 @@ router.put("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   try {
     const Parameter = req.tenantDb.model("Parameter");
+    const Diagnostic = req.tenantDb.model("Diagnostic");
+
+    const testCount = await countTestsUsingParameter(
+      Diagnostic,
+      req.hospitalId,
+      req.params.id,
+    );
+    if (testCount > 0) {
+      return res.status(409).json({
+        message: "Parameter is used in tests and cannot be deleted",
+        testCount,
+      });
+    }
+
     const parameter = await Parameter.findOneAndDelete({
-      _id: req.params.id,
-      hospitalId: req.hospitalId,
+      $and: [{ _id: req.params.id }, hospitalIdFilter(req.hospitalId)],
     });
     if (!parameter) {
       return res.status(404).json({ message: "Parameter not found" });
@@ -207,7 +332,7 @@ router.get("/category/:category", async (req, res) => {
     const Parameter = req.tenantDb.model("Parameter");
     const parameters = await Parameter.find({
       category: req.params.category,
-      hospitalId: req.hospitalId,
+      ...hospitalIdFilter(req.hospitalId),
     });
     res.json(parameters);
   } catch (error) {

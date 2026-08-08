@@ -1,0 +1,74 @@
+[
+  {
+    "aliases": ["lipid profile", "lipid panel"],
+    "name": "Lipid Profile",
+    "default_fasting": "8-12 hours",
+    "instructions": ["Fast for 8-12 hours; water is permitted unless otherwise instructed."]
+  },
+  {
+    "aliases": ["fasting blood sugar", "fasting blood glucose", "fbs"],
+    "name": "Fasting Plasma Glucose",
+    "default_fasting": "8-10 hours",
+    "instructions": ["Fast for 8-10 hours; water is permitted."]
+  },
+  {
+    "aliases": ["post prandial blood sugar", "postprandial blood sugar", "ppbs"],
+    "name": "Postprandial Plasma Glucose",
+    "default_fasting": "Not Required",
+    "instructions": ["Collect the sample 2 hours after the start of the meal unless the clinician specifies otherwise."]
+  },
+  {
+    "aliases": ["hba1c", "glycosylated haemoglobin", "glycated hemoglobin"],
+    "name": "Glycated Hemoglobin (HbA1c)",
+    "default_fasting": "Not Required",
+    "instructions": ["No fasting is required."]
+  },
+  {
+    "aliases": ["lft without proteins", "liver function test without proteins"],
+    "name": "Liver Function Test Without Proteins",
+    "default_fasting": "Preferred 8 hours",
+    "instructions": ["Fasting is preferred when performed with other metabolic tests."]
+  },
+  {
+    "aliases": ["lft with proteins", "liver function test with proteins"],
+    "name": "Liver Function Test With Proteins",
+    "default_fasting": "Preferred 8 hours",
+    "instructions": ["Fasting is preferred when performed with other metabolic or lipid tests."]
+  },
+  {
+    "aliases": ["lft", "liver function test"],
+    "name": "Liver Function Test",
+    "default_fasting": "Preferred 8 hours",
+    "instructions": ["Fasting is preferred when performed with other metabolic or lipid tests."]
+  },
+  {
+    "aliases": ["rft", "renal function test", "renal functional test", "kidney function test"],
+    "name": "Renal Function Test",
+    "default_fasting": "Not Required",
+    "instructions": ["Follow clinician instructions regarding hydration and medicines."]
+  },
+  {
+    "aliases": ["thyroid profile", "thyroid function test", "tft"],
+    "name": "Thyroid Profile",
+    "default_fasting": "Not Required",
+    "instructions": ["For patients taking thyroid medicine, collect before the daily dose when clinically requested."]
+  },
+  {
+    "aliases": ["iron profile", "iron studies"],
+    "name": "Iron Profile",
+    "default_fasting": "8-12 hours preferred",
+    "instructions": ["Morning fasting collection is preferred; collect before iron supplementation when clinically appropriate."]
+  },
+  {
+    "aliases": ["prothrombin time", "pt inr", "pt/inr"],
+    "name": "Prothrombin Time and INR",
+    "default_fasting": "Not Required",
+    "instructions": ["Record anticoagulant medicine and last dose time."]
+  },
+  {
+    "aliases": ["dengue ns1 igg igm", "dengue ns1,igg & igm", "dengue profile"],
+    "name": "Dengue NS1 Antigen, IgM and IgG",
+    "default_fasting": "Not Required",
+    "instructions": ["Interpret in relation to day of illness and clinical findings."]
+  }
+]

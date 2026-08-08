@@ -1,18 +1,198 @@
 const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
 const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
+const { getTenantConnection } = require("../utils/tenantDb");
 const Hospital = require("../models/Hospital");
 const {
   sendLabReportWhatsApp,
   mapWhatsAppHttpError,
 } = require("../utils/whatsappCloud");
+const {
+  createLabReportToken,
+  verifyLabReportToken,
+} = require("../utils/labReportToken");
+const {
+  hydrateReceipts,
+  normalizeReceiptItemsForStorage,
+} = require("../utils/hydrateDiagnosticParameters");
+
+async function resolveReceiptPatientPhone(req, receipt) {
+  if (!receipt) return null;
+
+  // Live patient record is source of truth (same as prescription WhatsApp).
+  if (receipt.patientId) {
+    try {
+      const Patient = req.tenantDb.model("Patient");
+      const patient = await Patient.findOne({
+        UMRNo: receipt.patientId,
+        hospitalId: req.hospitalId,
+      })
+        .select("phone")
+        .lean();
+      if (patient?.phone) {
+        return patient.phone;
+      }
+    } catch (err) {
+      console.warn("Could not load patient phone for lab WhatsApp:", err);
+    }
+  }
+
+  if (receipt.patientPhone) {
+    return receipt.patientPhone;
+  }
+
+  if (receipt.patientData?.phone) {
+    return receipt.patientData.phone;
+  }
+
+  return null;
+}
+
+function buildPublicHospital(hospital) {
+  if (!hospital) return null;
+  return {
+    name: hospital.name,
+    address: hospital.address,
+    city: hospital.city,
+    state: hospital.state,
+    zipCode: hospital.zipCode,
+    phone: hospital.phone,
+    logoUrl: hospital.logoUrl,
+  };
+}
+
+function hasResultValue(value) {
+  if (value == null) return false;
+  if (typeof value === "string" && !value.trim()) return false;
+  return true;
+}
+
+function buildPublicReceipt(receipt) {
+  if (!receipt) return null;
+
+  const items = (Array.isArray(receipt.items) ? receipt.items : [])
+    .filter((item) => item.deptname !== "Radiology")
+    .map((item) => ({
+      name: item.name,
+      code: item.code,
+      deptname: item.deptname,
+      resultStatus: item.resultStatus,
+      completedAt: item.completedAt,
+      parameters: (item.parameters || [])
+        .filter((param) => hasResultValue(param.result))
+        .map((param) => ({
+          name: param.name,
+          result: param.result,
+          units: param.units,
+          normal_range: param.normal_range,
+          isAbnormal: param.isAbnormal,
+          remarks: param.remarks,
+        })),
+    }))
+    .filter((item) => item.parameters.length > 0);
+
+  return {
+    receiptId: receipt.receiptId,
+    patientName: receipt.patientName,
+    patientPhone: receipt.patientPhone,
+    createdAt: receipt.createdAt,
+    items,
+  };
+}
+
+/**
+ * PUBLIC (no auth): view a lab report via a signed token.
+ * GET /api/diagnostics-receipts/public/:token
+ */
+router.get("/public/:token", async (req, res) => {
+  try {
+    let decoded;
+    try {
+      decoded = verifyLabReportToken(req.params.token);
+    } catch {
+      return res.status(400).json({ message: "Invalid or expired link." });
+    }
+
+    const { hospitalId, receiptId } = decoded;
+    if (!mongoose.Types.ObjectId.isValid(hospitalId)) {
+      return res.status(400).json({ message: "Invalid or expired link." });
+    }
+
+    const hospitalObjectId = new mongoose.Types.ObjectId(hospitalId);
+    const connection = await getTenantConnection(hospitalId);
+    if (!connection) {
+      return res.status(500).json({ message: "Unable to load lab report." });
+    }
+
+    const DiagnosticsReceipt = connection.model("DiagnosticsReceipt");
+    const Parameter = connection.model("Parameter");
+
+    let receipt = null;
+    if (mongoose.Types.ObjectId.isValid(String(receiptId))) {
+      receipt = await DiagnosticsReceipt.findOne({
+        _id: receiptId,
+        hospitalId: hospitalObjectId,
+      }).lean();
+    }
+    if (!receipt) {
+      receipt = await DiagnosticsReceipt.findOne({
+        receiptId: String(receiptId),
+        hospitalId: hospitalObjectId,
+      }).lean();
+    }
+
+    if (!receipt) {
+      return res.status(404).json({ message: "Lab report not found." });
+    }
+
+    const [hydrated] = await hydrateReceipts(
+      Parameter,
+      hospitalObjectId,
+      [receipt],
+    );
+    const publicReceipt = buildPublicReceipt(hydrated);
+    if (!publicReceipt?.items?.length) {
+      return res
+        .status(404)
+        .json({ message: "No lab results are available for this report yet." });
+    }
+
+    const hospital = await Hospital.findById(hospitalId)
+      .select("name address city state zipCode phone logoUrl")
+      .lean();
+
+    return res.json({
+      hospital: buildPublicHospital(hospital),
+      receipt: publicReceipt,
+    });
+  } catch (error) {
+    console.error("Public lab report view error:", error);
+    return res.status(500).json({ message: "Unable to load lab report." });
+  }
+});
 
 applyTenantEntitlements(router, { moduleKey: "lab" });
+
+async function withLiveParameters(req, receipts) {
+  const Parameter = req.tenantDb.model("Parameter");
+  return hydrateReceipts(Parameter, req.hospitalId, receipts);
+}
+
+async function findReceiptByIdOrNumber(DiagnosticsReceipt, hospitalId, id) {
+  if (id && mongoose.Types.ObjectId.isValid(String(id))) {
+    const byOid = await DiagnosticsReceipt.findOne({
+      _id: id,
+      hospitalId,
+    });
+    if (byOid) return byOid;
+  }
+  return DiagnosticsReceipt.findOne({ receiptId: id, hospitalId });
+}
 
 // Get all diagnostics receipts with pagination support
 router.get("/", async (req, res) => {
   try {
-    // Get DiagnosticsReceipt model from tenant database
     const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
 
     const {
@@ -26,31 +206,24 @@ router.get("/", async (req, res) => {
       endDate = "",
     } = req.query;
 
-    // Build query
     const query = { hospitalId: req.hospitalId };
 
-    // Filter by type (supports single type or comma-separated multiple types)
     if (type) {
       if (type.includes(",")) {
-        // Multiple types - use $in operator
         query.type = { $in: type.split(",").map((t) => t.trim()) };
       } else {
-        // Single type
         query.type = type;
       }
     }
 
-    // Filter by status
     if (status) {
       query.status = status;
     }
 
-    // Filter by patient ID
     if (patientId) {
       query.patientId = patientId;
     }
 
-    // Filter by date range
     if (startDate && endDate) {
       query.createdAt = {
         $gte: new Date(startDate),
@@ -62,7 +235,6 @@ router.get("/", async (req, res) => {
       query.createdAt = { $lte: new Date(endDate) };
     }
 
-    // Search filter
     if (search && search.length >= 2) {
       query.$or = [
         { receiptId: { $regex: search, $options: "i" } },
@@ -72,22 +244,21 @@ router.get("/", async (req, res) => {
       ];
     }
 
-    // Calculate pagination
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
 
-    // Get total count
     const total = await DiagnosticsReceipt.countDocuments(query);
 
-    // Get paginated receipts
     const receipts = await DiagnosticsReceipt.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum);
 
+    const hydrated = await withLiveParameters(req, receipts);
+
     res.json({
-      receipts: receipts,
+      receipts: hydrated,
       pagination: {
         currentPage: pageNum,
         totalPages: Math.ceil(total / limitNum),
@@ -106,14 +277,16 @@ router.get("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
-    const receipt = await DiagnosticsReceipt.findOne({
-      _id: req.params.id,
-      hospitalId: req.hospitalId,
-    });
+    const receipt = await findReceiptByIdOrNumber(
+      DiagnosticsReceipt,
+      req.hospitalId,
+      req.params.id,
+    );
     if (!receipt) {
       return res.status(404).json({ message: "Diagnostics receipt not found" });
     }
-    res.json(receipt);
+    const hydrated = await withLiveParameters(req, receipt);
+    res.json(hydrated);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -123,12 +296,17 @@ router.get("/:id", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
+    const body = { ...req.body };
+    if (Array.isArray(body.items)) {
+      body.items = normalizeReceiptItemsForStorage(body.items);
+    }
     const receipt = new DiagnosticsReceipt({
-      ...req.body,
+      ...body,
       hospitalId: req.hospitalId,
     });
     const newReceipt = await receipt.save();
-    res.status(201).json(newReceipt);
+    const hydrated = await withLiveParameters(req, newReceipt);
+    res.status(201).json(hydrated);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -138,15 +316,20 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
+    const body = { ...req.body };
+    if (Array.isArray(body.items)) {
+      body.items = normalizeReceiptItemsForStorage(body.items);
+    }
     const receipt = await DiagnosticsReceipt.findOneAndUpdate(
       { _id: req.params.id, hospitalId: req.hospitalId },
-      req.body,
-      { new: true }
+      body,
+      { new: true },
     );
     if (!receipt) {
       return res.status(404).json({ message: "Diagnostics receipt not found" });
     }
-    res.json(receipt);
+    const hydrated = await withLiveParameters(req, receipt);
+    res.json(hydrated);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -155,9 +338,17 @@ router.put("/:id", async (req, res) => {
 /**
  * AUTHENTICATED: notify patient that lab reports are ready via WhatsApp.
  * POST /api/diagnostics-receipts/:id/send-whatsapp
+ * Body: { viewBaseUrl: string }
  */
 router.post("/:id/send-whatsapp", async (req, res) => {
   try {
+    const { viewBaseUrl } = req.body || {};
+    if (!viewBaseUrl) {
+      return res
+        .status(400)
+        .json({ message: "viewBaseUrl is required to build the view link." });
+    }
+
     const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
     const receipt = await DiagnosticsReceipt.findOne({
       _id: req.params.id,
@@ -168,11 +359,11 @@ router.post("/:id/send-whatsapp", async (req, res) => {
       return res.status(404).json({ message: "Diagnostics receipt not found" });
     }
 
-    const phone = receipt.patientPhone || receipt.accountPhone;
+    const phone = await resolveReceiptPatientPhone(req, receipt);
     if (!phone) {
       return res
         .status(400)
-        .json({ message: "Receipt does not have a patient mobile number." });
+        .json({ message: "Patient does not have a mobile number on file." });
     }
 
     const items = Array.isArray(receipt.items) ? receipt.items : [];
@@ -184,15 +375,27 @@ router.post("/:id/send-whatsapp", async (req, res) => {
         .join(", ") || "your lab tests";
 
     const hospital = await Hospital.findById(req.hospitalId).lean();
+    const hospitalName = hospital?.name || "Your Clinic";
+
+    const token = createLabReportToken({
+      hospitalId: String(req.hospitalId),
+      receiptId: String(receipt._id),
+    });
+
+    const cleanBase = String(viewBaseUrl).replace(/\/+$/, "");
+    const viewUrl = `${cleanBase}/view/report/${token}`;
+
     const result = await sendLabReportWhatsApp({
       phone,
       patientName: receipt.patientName,
-      hospitalName: hospital?.name || "Your Clinic",
+      hospitalName,
       testsSummary,
+      token,
     });
 
     return res.json({
       success: true,
+      viewUrl,
       destination: result.destination,
       testsSummary,
     });
@@ -231,7 +434,8 @@ router.get("/patient/:patientId", async (req, res) => {
       patientId: req.params.patientId,
       hospitalId: req.hospitalId,
     });
-    res.json(receipts);
+    const hydrated = await withLiveParameters(req, receipts);
+    res.json(hydrated);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -245,7 +449,8 @@ router.get("/type/:type", async (req, res) => {
       type: req.params.type,
       hospitalId: req.hospitalId,
     });
-    res.json(receipts);
+    const hydrated = await withLiveParameters(req, receipts);
+    res.json(hydrated);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -259,29 +464,28 @@ router.get("/status/:status", async (req, res) => {
       status: req.params.status,
       hospitalId: req.hospitalId,
     });
-    res.json(receipts);
+    const hydrated = await withLiveParameters(req, receipts);
+    res.json(hydrated);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
 // Get diagnostics receipts by account phone (for mobile app)
-// Receipts use patientPhone (same as account phone) or patientId (UMR from Patient)
-// DiagnosticsReceipt schema has patientPhone, patientId - NOT accountPhone
 router.get("/account/:accountPhone", async (req, res) => {
   try {
     const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
     const Patient = req.tenantDb.model("Patient");
     const accountPhone = req.params.accountPhone;
 
-    // Get all patients linked to this account phone (OP/IP with same phone)
     const patients = await Patient.find({
       phone: accountPhone,
       hospitalId: req.hospitalId,
     });
-    const patientIds = patients.map((p) => p.UMRNo || p.patientId).filter(Boolean);
+    const patientIds = patients
+      .map((p) => p.UMRNo || p.patientId)
+      .filter(Boolean);
 
-    // Find receipts: by patientPhone (mobile app) OR by patientId (HMS lab)
     const query = {
       hospitalId: req.hospitalId,
       $or: [{ patientPhone: accountPhone }],
@@ -293,7 +497,8 @@ router.get("/account/:accountPhone", async (req, res) => {
     const receipts = await DiagnosticsReceipt.find(query).sort({
       createdAt: -1,
     });
-    res.json(receipts);
+    const hydrated = await withLiveParameters(req, receipts);
+    res.json(hydrated);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
