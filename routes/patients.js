@@ -29,6 +29,7 @@ const {
   normalizeAge,
   normalizeGender,
 } = require("../utils/publicOpRegistration");
+const { syncClinicalCasesFromPatient } = require("../utils/doctorMemory");
 
 /**
  * PUBLIC (no auth): hospital branding for the self-registration page.
@@ -588,6 +589,13 @@ router.put("/:id", async (req, res) => {
     );
     if (!patient) {
       return res.status(404).json({ message: "Patient not found" });
+    }
+    if (Array.isArray(req.body?.prescriptions)) {
+      syncClinicalCasesFromPatient(req.tenantDb, req.hospitalId, patient).catch(
+        (err) => {
+          console.warn("Clinical case sync failed:", err?.message || err);
+        },
+      );
     }
     res.json(patient);
   } catch (error) {

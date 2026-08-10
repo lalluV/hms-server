@@ -930,6 +930,68 @@ const CLINICAL_JSON_SHAPE_BLOCK = `Return exactly this JSON shape:
   "assistantReply": "one short sentence confirming what changed (follow-up mode only; leave empty otherwise)"
 }`;
 
+const DISCHARGE_JSON_SHAPE_BLOCK = `Return exactly this JSON shape:
+{
+  "dischargeFields": {
+    "finalDiagnosis": "confirmed diagnosis at discharge (plain text or • bullets)",
+    "dischargeInstructions": "counselling, precautions, lifestyle, medication adherence, warning signs",
+    "followUpPlan": "follow-up appointments, repeat tests, when to return"
+  },
+  "medicines": [{
+    "sourceText": "",
+    "name": "spoken brand or spoken generic (+ strength)",
+    "generic_name": "",
+    "type": "Tablet|Capsules|Injection|Syrup|Ointment|Gel|Sachet|Syringe|Drops|Inhaler|Spray|Patch|Suppository|Other",
+    "strength": "", "dosage": "", "frequency": "", "duration": "",
+    "scheduleKind": "fixed_daily|interval|weekly|monthly|alternate_day|prn|sliding_scale|one_time|sequential|device_controlled|free_text",
+    "directions": "",
+    "dosages": [{ "time": "Morning|Afternoon|Evening|Night", "amount": 1, "unit": "\\"\\" for Tablet/Capsules/Injection else ml|IU|drop|puff|app|sach", "beforeFood": false }],
+    "action": "add"
+  }],
+  "labTests": [],
+  "procedures": [],
+  "vitals": {},
+  "noteSections": {},
+  "doctorNotes": "",
+  "assistantReply": "one short sentence confirming what changed (follow-up mode only; leave empty otherwise)"
+}`;
+
+function normalizeDischargeFields(parsed = {}, noteSections = null) {
+  const raw = parsed.dischargeFields || parsed.discharge_fields || {};
+  const adviceItems = noteSections?.advice || [];
+  const adviceJoined = adviceItems
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .join("\n");
+  const followFromAdvice = adviceItems
+    .filter((item) =>
+      /\b(follow[\s-]?up|review|revisit|return|come back|OPD|after \d+)\b/i.test(
+        String(item || ""),
+      ),
+    )
+    .join("\n");
+  return {
+    finalDiagnosis: String(
+      raw.finalDiagnosis ||
+        raw.final_diagnosis ||
+        parsed.provisionalDiagnosis ||
+        parsed.diagnosis ||
+        "",
+    ).trim(),
+    dischargeInstructions: String(
+      raw.dischargeInstructions ||
+        raw.discharge_instructions ||
+        raw.counselling ||
+        raw.counseling ||
+        adviceJoined ||
+        "",
+    ).trim(),
+    followUpPlan: String(
+      raw.followUpPlan || raw.follow_up_plan || followFromAdvice || "",
+    ).trim(),
+  };
+}
+
 const PARSE_CLINICAL_NOTE_USER_PROMPT = (
   clinicalNote,
   context,
@@ -940,11 +1002,13 @@ const PARSE_CLINICAL_NOTE_USER_PROMPT = (
   const compactExisting = compactExistingClinicalContext(existingContext);
 
   const settingLine =
-    clinicalSetting === "era"
-      ? `SETTING: ERA (emergency admission). Split medicines by route: already given/administered in casualty/ER (stat, IV bolus, "given now") → set "eraRoute": "given_in_er". Medicines to continue on the ward → "eraRoute": "continue_on_ward". Default continue_on_ward if unclear. Labs → labTests only (chart pending). Include allergies in note or allergiesHistory field; use NKDA when stated. Vitals may include grbs (blood sugar) and urineOutput (ml) when mentioned. Fill eraManualExam when mentioned (do not invent): gcs as E#V#M#, consciousness one of Alert|Oriented|Drowsy|Confused|Stuporous|Unconscious, pupils text, height cm, weight kg, maritalStatus, alcohol/smoking/illicitDrugs booleans, familyHistory. Also put the same facts in examination/history note text and vitals.height/weight when stated.`
-      : clinicalSetting === "ipd"
-        ? `SETTING: IPD (ward progress note). "stop" discontinues a medicine. "restart" reactivates a previously stopped ward medicine (prefer existingContext.stoppedMedicineNames). DURATION OVERRIDE: do NOT default medicine duration to "5 days". Leave duration "" unless the doctor explicitly stated a course length (e.g. "3 days", "5d"). Ward medicines continue until stopped — never invent a course length. IV fluids still use hours when stated, else "Once". DIRECTIONS (IPD): morning/afternoon/evening/night schedule English WITHOUT a course length (no "for 5 days"). Prefer "Take in the morning and evening" style — do NOT invent per-slot tablet/ml amounts in directions unless the doctor stated an amount. dosages[] times + beforeFood only; leave amount empty or omit when not stated.`
-        : `SETTING: OPD. "stop" removes a medicine from this visit prescription. "restart" is rarely used in OPD — only if the doctor explicitly restarts a stopped chart medicine.`;
+    clinicalSetting === "discharge"
+      ? `SETTING: DISCHARGE SUMMARY. Extract ONLY discharge-relevant content from the doctor's dictation. Fill dischargeFields.finalDiagnosis (confirmed diagnosis at discharge), dischargeFields.dischargeInstructions (counselling, precautions, diet, activity, warning signs, medication adherence), dischargeFields.followUpPlan (appointments, repeat tests, when to return). Discharge medicines the patient takes home → medicines[] with action "add" only (never stop/restart). Do NOT create labTests or procedures unless explicitly ordered at discharge. Leave doctorNotes and noteSections empty unless the doctor dictated extra narrative not captured in dischargeFields.`
+      : clinicalSetting === "era"
+        ? `SETTING: ERA (emergency admission). Split medicines by route: already given/administered in casualty/ER (stat, IV bolus, "given now") → set "eraRoute": "given_in_er". Medicines to continue on the ward → "eraRoute": "continue_on_ward". Default continue_on_ward if unclear. Labs → labTests only (chart pending). Include allergies in note or allergiesHistory field; use NKDA when stated. Vitals may include grbs (blood sugar) and urineOutput (ml) when mentioned. Fill eraManualExam when mentioned (do not invent): gcs as E#V#M#, consciousness one of Alert|Oriented|Drowsy|Confused|Stuporous|Unconscious, pupils text, height cm, weight kg, maritalStatus, alcohol/smoking/illicitDrugs booleans, familyHistory. Also put the same facts in examination/history note text and vitals.height/weight when stated.`
+        : clinicalSetting === "ipd"
+          ? `SETTING: IPD (ward progress note). "stop" discontinues a medicine. "restart" reactivates a previously stopped ward medicine (prefer existingContext.stoppedMedicineNames). DURATION OVERRIDE: do NOT default medicine duration to "5 days". Leave duration "" unless the doctor explicitly stated a course length (e.g. "3 days", "5d"). Ward medicines continue until stopped — never invent a course length. IV fluids still use hours when stated, else "Once". DIRECTIONS (IPD): morning/afternoon/evening/night schedule English WITHOUT a course length (no "for 5 days"). Prefer "Take in the morning and evening" style — do NOT invent per-slot tablet/ml amounts in directions unless the doctor stated an amount. dosages[] times + beforeFood only; leave amount empty or omit when not stated.`
+          : `SETTING: OPD. "stop" removes a medicine from this visit prescription. "restart" is rarely used in OPD — only if the doctor explicitly restarts a stopped chart medicine.`;
   const modeLine =
     mode === "add"
       ? `MODE: add. Return only facts and actions from the current input; never repeat existing chart items as new.`
@@ -960,7 +1024,7 @@ ${existingLine}
 
 COMPLETENESS: Keep every clinical fact from CURRENT INPUT. Writing style may vary — expand shorthand into clear English and place each fact by meaning (past→history, symptoms→complaints only never diagnosis, exam→examination, named impression→diagnosis else leave diagnosis empty, plan/follow-up/if-needed→advice, today's drug orders→medicines[], labs→labTests[], this-visit acts/services→procedures[] never medicines[], measured vitals→vitals). noteSections are bullet lists. Medicine name = spoken brand or spoken generic; leave generic_name "". Tapers = multiple medicines[] rows. Explicit stop/delete of a named drug = action stop. Explicit restart/resume of a previously stopped named drug = action restart. Tablet/Capsule/Injection unit "" (IU/ml only when stated); IV fluids duration hours or Once not 5 days; beforeFood when known. Do not drop clauses.
 
-${CLINICAL_JSON_SHAPE_BLOCK}
+${clinicalSetting === "discharge" ? DISCHARGE_JSON_SHAPE_BLOCK : CLINICAL_JSON_SHAPE_BLOCK}
 
 CURRENT INPUT:
 ${clinicalNote}`;
@@ -1095,6 +1159,7 @@ function compactChartForFollowUpPrompt(chart) {
   };
   return {
     doctorNotes: String(c.doctorNotes || "").slice(0, 2500),
+    dischargeFields: c.dischargeFields || {},
     medicines: (Array.isArray(c.medicines) ? c.medicines : []).map(slimMed),
     labTests: (Array.isArray(c.labTests) ? c.labTests : []).map((t) =>
       slimNamed(t),
@@ -1243,11 +1308,13 @@ const REVIEW_FOLLOWUP_USER_PROMPT = (
 ) => {
   const compactExisting = compactExistingClinicalContext(existingContext);
   const settingLine =
-    clinicalSetting === "era"
-      ? `SETTING: ERA (emergency admission). Split medicines by route: already given/administered in casualty/ER (stat, IV bolus, "given now") → set "eraRoute": "given_in_er". Medicines to continue on the ward → "eraRoute": "continue_on_ward". Default continue_on_ward if unclear. Labs → labTests only (chart pending). Include allergies in note or allergiesHistory field; use NKDA when stated. Vitals may include grbs (blood sugar) and urineOutput (ml) when mentioned. Fill eraManualExam when mentioned (do not invent): gcs as E#V#M#, consciousness one of Alert|Oriented|Drowsy|Confused|Stuporous|Unconscious, pupils text, height cm, weight kg, maritalStatus, alcohol/smoking/illicitDrugs booleans, familyHistory. Also put the same facts in examination/history note text and vitals.height/weight when stated.`
-      : clinicalSetting === "ipd"
-        ? `SETTING: IPD (ward progress note). "stop" discontinues a medicine. "restart" reactivates a previously stopped ward medicine. DURATION OVERRIDE: do NOT default medicine duration to "5 days". Leave duration "" unless the doctor explicitly stated a course length. Ward medicines continue until stopped — never invent a course length. IV fluids: hours when stated, else "Once". DIRECTIONS (IPD): schedule English without course length; do not invent per-slot dose amounts unless stated.`
-        : `SETTING: OPD. "stop" removes a medicine from this visit prescription.`;
+    clinicalSetting === "discharge"
+      ? `SETTING: DISCHARGE SUMMARY follow-up. Patch only dischargeFields (finalDiagnosis, dischargeInstructions, followUpPlan) and discharge medicines[] — no labs/procedures/vitals.`
+      : clinicalSetting === "era"
+        ? `SETTING: ERA (emergency admission). Split medicines by route: already given/administered in casualty/ER (stat, IV bolus, "given now") → set "eraRoute": "given_in_er". Medicines to continue on the ward → "eraRoute": "continue_on_ward". Default continue_on_ward if unclear. Labs → labTests only (chart pending). Include allergies in note or allergiesHistory field; use NKDA when stated. Vitals may include grbs (blood sugar) and urineOutput (ml) when mentioned. Fill eraManualExam when mentioned (do not invent): gcs as E#V#M#, consciousness one of Alert|Oriented|Drowsy|Confused|Stuporous|Unconscious, pupils text, height cm, weight kg, maritalStatus, alcohol/smoking/illicitDrugs booleans, familyHistory. Also put the same facts in examination/history note text and vitals.height/weight when stated.`
+        : clinicalSetting === "ipd"
+          ? `SETTING: IPD (ward progress note). "stop" discontinues a medicine. "restart" reactivates a previously stopped ward medicine. DURATION OVERRIDE: do NOT default medicine duration to "5 days". Leave duration "" unless the doctor explicitly stated a course length. Ward medicines continue until stopped — never invent a course length. IV fluids: hours when stated, else "Once". DIRECTIONS (IPD): schedule English without course length; do not invent per-slot dose amounts unless stated.`
+          : `SETTING: OPD. "stop" removes a medicine from this visit prescription.`;
   const existingLine = compactExisting
     ? `OTHER VISIT CONTEXT (reference only, never source):\n${JSON.stringify(compactExisting)}`
     : `OTHER VISIT CONTEXT: none`;
@@ -1954,6 +2021,7 @@ function finalizeParsedClinicalNote(parsed, existingContext) {
     ),
     doctorNotes: isSoapNote && freeTextNote ? freeTextNote : sectionNote,
     noteSections,
+    dischargeFields: normalizeDischargeFields(parsed, noteSections),
   };
 }
 
@@ -2087,6 +2155,11 @@ function draftResultFromPayload(draftPayload = {}) {
     ),
     noteOperations: [],
     doctorNotes,
+    dischargeFields: draftPayload.dischargeFields || {
+      finalDiagnosis: "",
+      dischargeInstructions: "",
+      followUpPlan: "",
+    },
   };
 }
 

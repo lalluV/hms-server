@@ -104,8 +104,9 @@ app.use("/api/consents", require("./routes/consentRoutes"));
 app.use("/api/consent-templates", require("./routes/consentTemplateRoutes"));
 app.use(
   "/api/clinical-order-packages",
-  require("./routes/clinicalOrderPackageRoutes")
+  require("./routes/clinicalOrderPackageRoutes"),
 );
+app.use("/api/doctor-memory", require("./routes/doctorMemory"));
 app.use("/api/stamps", require("./routes/stamps"));
 app.use("/api/upload", require("./routes/upload"));
 app.use("/api/diagnostics-users", require("./routes/diagnosticsUsers"));
