@@ -14,6 +14,12 @@ const consultationSchema = new mongoose.Schema(
     },
     patientName: { type: String },
     patientPhone: { type: String },
+
+    // Visit / stay scope (Phase B)
+    visitType: { type: String, default: null },
+    prescriptionId: { type: String, default: null },
+    admissionId: { type: String, default: null },
+
     items: [mongoose.Schema.Types.Mixed],
     totalAmount: { type: Number },
     baseTotalAmount: { type: Number },

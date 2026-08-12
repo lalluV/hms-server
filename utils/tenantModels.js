@@ -37,8 +37,21 @@ const patientSchema = new mongoose.Schema(
     emergency_contact_relationship: { type: String },
     emergency_phone: { type: String },
     emergency_signature: { type: String },
-    patient_type: { type: String, default: "OP" },
-    patient_status: { type: String },
+
+    // Permanent Baseline Medical History
+    allergiesHistory: { type: String },
+    pastMedicalHistory: { type: String },
+    pastMedications: { type: String },
+    personalHistory: {
+      alcohol: { type: Boolean, default: false },
+      smoking: { type: Boolean, default: false },
+      illicitDrugs: { type: Boolean, default: false },
+      other: { type: String },
+      maritalStatus: { type: String },
+      familyHistory: { type: String },
+    },
+
+    // Saved Default Insurance Profile
     paymentMethod: { type: String, default: "Personal" },
     insurance_provider: { type: String },
     insurance_providerId: { type: String },
@@ -48,82 +61,40 @@ const patientSchema = new mongoose.Schema(
     coPayType: { type: String, default: "percentage" },
     coverage: { type: String },
     expiry_date: { type: String },
+
+    // Current State & Pointers
+    patient_type: {
+      type: String,
+      enum: ["OP", "IP", "OPtoIP"],
+      default: "OP",
+    },
     active: { type: Boolean, default: true },
-    registered_by: { type: String },
-    registration_date: { type: String },
-    /** Deterministic identity for public OP self-registration dedupe */
-    publicRegistrationKey: { type: String },
-    appointment_date: { type: String },
+    activeAdmissionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "IPAdmission",
+      default: null,
+    },
+
+    weight: { type: String },
+    height: { type: String },
+
+    // Denormalized from active IP admission (list filters)
     admissionDate: { type: String },
     admissionTime: { type: String },
-    mlcNo: { type: String },
-    consultantDoctor: { type: String },
-    doctorId: { type: String },
-    medicalOfficerName: { type: String },
-    medicalOfficerId: { type: String },
-    consultantHistory: [
-      {
-        consultantId: String,
-        consultantName: String,
-        role: String,
-        startDate: String,
-        endDate: String,
-        reason: String,
-      },
-    ],
-    patientRepresentiveOfficer: { type: String },
     wardName: { type: String },
     wardId: { type: String },
     selectedBed: { type: String },
-    dischargeTo: { type: String },
-    transfers: [
-      {
-        price: Number,
-        transferDate: String,
-        wardId: String,
-        wardName: String,
-      },
-    ],
-    commissionEarnerType: { type: String },
-    commissionEarnerId: { type: String },
-    commissionEarnerName: { type: String },
-    commissionRates: {
-      consultation: { type: Number },
-      surgery: { type: Number },
-      pharmacy: { type: Number },
-      lab: { type: Number },
-    },
-    vitals: [mongoose.Schema.Types.Mixed],
-    chiefComplaintsPresentIllnessHistory: { type: String },
-    pastMedicalHistory: { type: String },
-    pastMedications: { type: String },
-    consciousness: { type: String },
-    gcs: { type: String },
-    pupils: { type: String },
-    height: { type: String },
-    weight: { type: String },
-    doctorNotes: [mongoose.Schema.Types.Mixed],
-    nurseNotes: [mongoose.Schema.Types.Mixed],
-    systemicExamination: { type: String },
-    personalHistory: {
-      alcohol: { type: Boolean, default: false },
-      smoking: { type: Boolean, default: false },
-      illicitDrugs: { type: Boolean, default: false },
-      other: { type: String },
-      maritalStatus: { type: String },
-      familyHistory: { type: String },
-    },
-    provisionalDiagnosis: { type: String },
-    allergiesHistory: { type: String },
-    investigations: [mongoose.Schema.Types.Mixed],
-    procedures: [mongoose.Schema.Types.Mixed],
-    treatment: [mongoose.Schema.Types.Mixed],
-    casualtyTreatment: [mongoose.Schema.Types.Mixed],
-    insulinChart: [mongoose.Schema.Types.Mixed],
-    dischargeOrders: { type: String },
-    counselling: { type: String },
-    symptoms: [String],
-    prescriptions: [mongoose.Schema.Types.Mixed],
+    consultantDoctor: { type: String },
+    doctorId: { type: String },
+    patient_status: { type: String },
+    dischargeDate: { type: String },
+    dischargedAt: { type: String },
+
+    // Registration & Audit
+    registered_by: { type: String },
+    registration_date: { type: String },
+    publicRegistrationKey: { type: String },
+    appointment_date: { type: String },
     modifiedBy: [
       {
         user: String,
@@ -135,6 +106,9 @@ const patientSchema = new mongoose.Schema(
   { strict: true, timestamps: true },
 );
 
+patientSchema.index({ hospitalId: 1, phone: 1 });
+patientSchema.index({ hospitalId: 1, UMRNo: 1 }, { unique: true });
+patientSchema.index({ hospitalId: 1, active: 1, patient_type: 1 });
 patientSchema.index(
   { hospitalId: 1, publicRegistrationKey: 1 },
   {
@@ -305,7 +279,8 @@ function registerTenantModels(connection) {
     { name: "DiagnosticsUser", path: "../models/DiagnosticsUser" },
     { name: "PatientCommissionLink", path: "../models/PatientCommissionLink" },
     { name: "Parameter", path: "../models/Parameter" },
-    // DischargeSummary model doesn't exist yet - will be added when created
+    { name: "Prescription", path: "../models/Prescription" },
+    { name: "IPAdmission", path: "../models/IPAdmission" },
   ];
 
   // Register each model if not already registered
@@ -372,6 +347,8 @@ const TENANT_MODELS = [
   "DiagnosticsUser",
   "PatientCommissionLink",
   "Parameter",
+  "Prescription",
+  "IPAdmission",
 ];
 
 /**
@@ -403,5 +380,7 @@ module.exports = {
     counterSchema,
     patientSchema,
     staffSchema,
+    prescriptionSchema: require("../models/Prescription").schema,
+    ipAdmissionSchema: require("../models/IPAdmission").schema,
   },
 };

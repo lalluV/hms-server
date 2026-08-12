@@ -45,7 +45,11 @@ router.get("/:id", async (req, res) => {
 // @access  SuperAdmin
 router.post("/", async (req, res) => {
   try {
-    const { name, code, address, city, phone, email, autoProvision = true } = req.body;
+    const {
+      name, code, address, city, phone, email,
+      tenancyMode: requestedMode,
+      autoProvision = true,
+    } = req.body;
 
     // Validate required fields
     if (!name || !code) {
@@ -81,21 +85,35 @@ router.post("/", async (req, res) => {
         .json({ message: "Hospital with this code already exists" });
     }
 
-    // Create Hospital with database fields
+    // Determine tenancy mode: default to "shared" for new clinics
+    const tenancyMode = requestedMode === "isolated" ? "isolated" : "shared";
+
+    // Create Hospital with tenancy-aware fields
     const hospital = new Hospital({
       name,
-      code: normalizedCode, // Use normalized code for subdomain compatibility
+      code: normalizedCode,
       address,
       city,
       phone,
       email,
       createdBy: ownerId,
-      databaseStatus: "pending",
+      tenancyMode,
+      // Shared hospitals are instantly ready; isolated need provisioning
+      databaseName: tenancyMode === "shared" ? "hms_shared" : undefined,
+      databaseStatus: tenancyMode === "shared" ? "active" : "pending",
     });
     
     await hospital.save();
 
-    // Provision tenant database if autoProvision is enabled
+    // Shared-tier: no provisioning needed — hospital is immediately ready
+    if (tenancyMode === "shared") {
+      return res.status(201).json({
+        hospital,
+        message: "Hospital created with shared tenancy — ready immediately",
+      });
+    }
+
+    // Isolated-tier: provision dedicated database if autoProvision is enabled
     if (autoProvision) {
       try {
         // Update status to provisioning
@@ -198,6 +216,7 @@ router.get("/:id/database-status", async (req, res) => {
     res.json({
       hospitalId: hospital._id,
       hospitalName: hospital.name,
+      tenancyMode: hospital.tenancyMode || "isolated",
       databaseName: hospital.databaseName,
       databaseStatus: hospital.databaseStatus,
       databaseProvisionedAt: hospital.databaseProvisionedAt,
@@ -254,6 +273,35 @@ router.post("/:id/provision-database", async (req, res) => {
   } catch (err) {
     console.error(err.message);
     res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// @route   POST api/hospitals/:id/migrate-tenancy
+// @desc    Migrate hospital between Shared and Isolated database tiers
+// @access  SuperAdmin
+router.post("/:id/migrate-tenancy", async (req, res) => {
+  try {
+    const { targetMode, dropSourceDb = false } = req.body;
+
+    if (!targetMode || !["shared", "isolated"].includes(targetMode)) {
+      return res.status(400).json({
+        message: 'Valid targetMode is required ("shared" or "isolated")',
+      });
+    }
+
+    const { migrateHospitalTenancy } = require("../services/tenancyMigrationService");
+    const result = await migrateHospitalTenancy(req.params.id, targetMode, {
+      cleanupSource: true,
+      dropSourceDb,
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error("Migration error:", err);
+    res.status(500).json({
+      message: "Tenancy migration failed",
+      error: err.message,
+    });
   }
 });
 

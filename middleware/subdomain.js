@@ -181,7 +181,12 @@ async function extractSubdomain(req, res, next) {
         }
 
         // Check if database is provisioned and active
-        if (hospital.databaseStatus !== "active") {
+        // Shared-tier hospitals use hms_shared which is always ready;
+        // only isolated-tier hospitals need the provisioning status check.
+        if (
+          hospital.tenancyMode !== "shared" &&
+          hospital.databaseStatus !== "active"
+        ) {
           return res.status(503).json({
             message: `Hospital database is not yet ready. Status: ${hospital.databaseStatus}. Please contact administrator.`,
             subdomain: hospitalCode,

@@ -36,12 +36,8 @@ function stripPassword(staff) {
   return obj;
 }
 
-function canViewLoginCredentials(req, targetStaff) {
-  const actor = req.actor || { type: req.user?.type, isMasterAdmin: false };
-  if (actor.isMasterAdmin) return true;
-  if (!hasPermission(actor.type, "staff.password.reset")) return false;
-  return canManageTargetRole(actor.type, targetStaff?.type);
-}
+// NOTE: canViewLoginCredentials removed — plaintext passwords are no longer stored.
+// Admins should use the reset-password endpoint to issue new passwords.
 
 function requireRoleEnabledByPlan(roleFromRequest = (req) => req.body?.type) {
   return (req, res, next) => {
@@ -98,20 +94,7 @@ router.get("/employee/:employeeId", requirePermission("staff.read"), async (req,
       return res.status(404).json({ message: "Staff member not found" });
     }
 
-    const payload =
-      typeof staff.toObject === "function" ? staff.toObject() : { ...staff };
-
-    if (canViewLoginCredentials(req, staff)) {
-      const creds = await Staff.findOne({
-        id: req.params.employeeId,
-        hospitalId: req.hospitalId,
-      }).select("loginPassword");
-      if (creds?.loginPassword) {
-        payload.loginPassword = creds.loginPassword;
-      }
-    }
-
-    res.json(payload);
+    res.json(typeof staff.toObject === "function" ? staff.toObject() : { ...staff });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -141,7 +124,6 @@ router.post(
       if (password) {
         const salt = await bcrypt.genSalt(10);
         staffData.password = await bcrypt.hash(password, salt);
-        staffData.loginPassword = password;
       }
 
       const staff = new Staff({ ...staffData, hospitalId: req.hospitalId });
@@ -174,7 +156,7 @@ router.put(
       const hashedPassword = await bcrypt.hash(nextPassword, salt);
       const staff = await Staff.findOneAndUpdate(
         { id: req.params.id, hospitalId: req.hospitalId },
-        { $set: { password: hashedPassword, loginPassword: nextPassword } },
+        { $set: { password: hashedPassword }, $unset: { loginPassword: 1 } },
         { new: true },
       ).select("-password -loginPassword");
 

@@ -1,9 +1,11 @@
-const { getTenantConnection } = require("../utils/tenantDb");
+const { resolveTenantConnection } = require("../utils/tenantRouter");
 
 /**
  * Tenant Database Middleware
- * Attaches tenant database connection to the request object
- * Requires auth middleware to run first to get hospitalId
+ * Attaches tenant database connection to the request object.
+ * Routes to shared (hms_shared) or isolated (hms_hospital_{id}) DB
+ * based on hospital tenancyMode.
+ * Requires auth middleware to run first to get hospitalId.
  */
 async function tenantDbMiddleware(req, res, next) {
   try {
@@ -27,8 +29,8 @@ async function tenantDbMiddleware(req, res, next) {
     // Update req.hospitalId for consistency
     req.hospitalId = hospitalId;
 
-    // Get tenant database connection
-    const tenantConnection = await getTenantConnection(hospitalId);
+    // Get tenant database connection (shared or isolated, based on tenancyMode)
+    const tenantConnection = await resolveTenantConnection(hospitalId);
 
     if (!tenantConnection) {
       return res.status(500).json({

@@ -266,7 +266,7 @@ const ACTION_TOOL_DEFINITIONS = [
     function: {
       name: "execute_create_prescription",
       description:
-        "Execute READY pending create_prescription after user Confirm. Creates visit on patient.prescriptions.",
+        "Execute READY pending create_prescription after user Confirm. Creates a Prescription visit document.",
       parameters: {
         type: "object",
         properties: { actionId: { type: "string" } },
@@ -479,7 +479,17 @@ async function resolvePatientRef(ctx, ref) {
     if (list.length === 1) patient = list[0];
     else if (list.length > 1) return { ambiguous: list.map((p) => ({ id: p._id, UMRNo: p.UMRNo, name: p.name })) };
   }
-  return patient;
+  if (!patient) return null;
+
+  const Prescription = ctx.tenantDb.model("Prescription");
+  const prescriptions = await Prescription.find({
+    hospitalId: ctx.hospitalId,
+    $or: [{ patientId: patient._id }, { UMRNo: patient.UMRNo }],
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  return { ...patient, prescriptions };
 }
 
 async function prepare_register_patient(ctx, args) {
@@ -1347,6 +1357,7 @@ async function execute_create_prescription(ctx, args) {
   }
 
   const Patient = ctx.tenantDb.model("Patient");
+  const Prescription = ctx.tenantDb.model("Prescription");
   const patient = await Patient.findOne({
     _id: pending.payload.patientId,
     hospitalId: ctx.hospitalId,
@@ -1355,12 +1366,15 @@ async function execute_create_prescription(ctx, args) {
     return { error: "Patient not found" };
   }
 
-  // Idempotency: if this prescriptionId already exists, don't duplicate
-  const existing = Array.isArray(patient.prescriptions)
-    ? patient.prescriptions
-    : [];
   const newRx = pending.payload.prescription;
-  const already = existing.find(
+  const existingList = await Prescription.find({
+    hospitalId: ctx.hospitalId,
+    $or: [{ patientId: patient._id }, { UMRNo: patient.UMRNo }],
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const already = existingList.find(
     (rx) => String(rx.prescriptionId) === String(newRx.prescriptionId),
   );
   if (already) {
@@ -1394,7 +1408,7 @@ async function execute_create_prescription(ctx, args) {
     pending.collected?.forceNew === true ||
     String(pending.collected?.forceNew || "").toLowerCase() === "true";
   if (!forceNew) {
-    const reusable = findReusableVisit(existing, {
+    const reusable = findReusableVisit(existingList, {
       doctorId: newRx.doctorId,
       consultantDoctor: newRx.consultantDoctor,
     });
@@ -1409,9 +1423,15 @@ async function execute_create_prescription(ctx, args) {
     }
   }
 
-  patient.prescriptions = [newRx, ...existing];
-  patient.markModified("prescriptions");
-  await patient.save();
+  await Prescription.create({
+    ...newRx,
+    hospitalId: ctx.hospitalId,
+    patientId: patient._id,
+    UMRNo: patient.UMRNo,
+    doctorName: newRx.doctorName || newRx.consultantDoctor || "",
+    consultantDoctor: newRx.consultantDoctor || newRx.doctorName || "",
+    pharmacyStatus: newRx.pharmacyStatus || "pending",
+  });
   clearDraft(ctx.hospitalId, actorId(ctx));
 
   const path = `/consultation/${patient.UMRNo}/prescription/${newRx.prescriptionId}`;
@@ -1827,6 +1847,7 @@ async function execute_update_prescription(ctx, args) {
   }
 
   const Patient = ctx.tenantDb.model("Patient");
+  const Prescription = ctx.tenantDb.model("Prescription");
   const patient = await Patient.findOne({
     _id: pending.payload.patientId,
     hospitalId: ctx.hospitalId,
@@ -1834,41 +1855,39 @@ async function execute_update_prescription(ctx, args) {
   if (!patient) return { error: "Patient not found" };
 
   const rxId = pending.payload.prescriptionId;
-  const list = Array.isArray(patient.prescriptions)
-    ? patient.prescriptions
-    : [];
-  const idx = list.findIndex(
-    (rx) => String(rx.prescriptionId) === String(rxId),
-  );
-  if (idx < 0) {
+  const current = await Prescription.findOne({
+    hospitalId: ctx.hospitalId,
+    prescriptionId: rxId,
+  });
+  if (!current) {
     return {
       error: "Visit prescription no longer exists. Create a new visit first.",
     };
   }
 
   const patch = pending.payload.patch || {};
-  const current = list[idx];
-  list[idx] = {
-    ...current,
-    medicineData: patch.medicineData ?? current.medicineData,
-    diagnosticData: patch.diagnosticData ?? current.diagnosticData,
-    doctorNotes: patch.doctorNotes ?? current.doctorNotes,
-    symptoms:
-      patch.symptoms !== undefined ? patch.symptoms : current.symptoms,
-    provisionalDiagnosis:
-      patch.provisionalDiagnosis !== undefined
-        ? patch.provisionalDiagnosis
-        : current.provisionalDiagnosis,
-    vitals: patch.vitals ?? current.vitals,
-    weight: patch.weight !== undefined ? patch.weight : current.weight,
-    height: patch.height !== undefined ? patch.height : current.height,
-  };
-  patient.prescriptions = list;
-  patient.markModified("prescriptions");
-  await patient.save();
+  const updated = await Prescription.findOneAndUpdate(
+    { _id: current._id },
+    {
+      $set: {
+        medicineData: patch.medicineData ?? current.medicineData,
+        diagnosticData: patch.diagnosticData ?? current.diagnosticData,
+        doctorNotes: patch.doctorNotes ?? current.doctorNotes,
+        symptoms:
+          patch.symptoms !== undefined ? patch.symptoms : current.symptoms,
+        provisionalDiagnosis:
+          patch.provisionalDiagnosis !== undefined
+            ? patch.provisionalDiagnosis
+            : current.provisionalDiagnosis,
+        vitals: patch.vitals ?? current.vitals,
+        weight: patch.weight !== undefined ? patch.weight : current.weight,
+        height: patch.height !== undefined ? patch.height : current.height,
+      },
+    },
+    { new: true },
+  ).lean();
   clearDraft(ctx.hospitalId, actorId(ctx));
 
-  const updated = list[idx];
   const path = `/consultation/${patient.UMRNo}/prescription/${rxId}`;
   const completionGaps = analyzePrescriptionGaps({
     ...updated,

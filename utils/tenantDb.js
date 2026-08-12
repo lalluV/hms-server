@@ -4,9 +4,29 @@ const { registerTenantModels } = require("./tenantModels");
 
 // Cache for tenant database connections
 const tenantConnections = new Map();
+const tenantLastAccessed = new Map();
+
+// Evict isolated tenant connections idle for more than 5 minutes
+const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+const evictionInterval = setInterval(async () => {
+  const now = Date.now();
+  for (const [hospitalId, lastAccess] of tenantLastAccessed.entries()) {
+    if (now - lastAccess > IDLE_TIMEOUT_MS) {
+      console.log(`🧹 Evicting idle connection for hospital ${hospitalId}`);
+      await closeTenantConnection(hospitalId);
+    }
+  }
+}, 2 * 60 * 1000);
+
+if (evictionInterval.unref) {
+  evictionInterval.unref();
+}
 
 // Shared master database connection (default mongoose connection)
 let masterConnection = null;
+
+// Shared multi-tenant database connection (hms_shared)
+let sharedConnection = null;
 
 /**
  * Initialize the master database connection
@@ -56,6 +76,7 @@ async function getTenantConnection(hospitalId) {
 
       // Verify connection is still alive
       if (connection.readyState === 1) {
+        tenantLastAccessed.set(hospitalId, Date.now());
         return connection;
       } else {
         // Connection is dead, remove from cache and recreate
@@ -63,6 +84,7 @@ async function getTenantConnection(hospitalId) {
           `⚠️  Connection for hospital ${hospitalId} is dead, reconnecting...`,
         );
         tenantConnections.delete(hospitalId);
+        tenantLastAccessed.delete(hospitalId);
       }
     }
 
@@ -83,8 +105,9 @@ async function getTenantConnection(hospitalId) {
     const connection = await mongoose.createConnection(tenantUri, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      maxPoolSize: 10, // Connection pool size per tenant
-      minPoolSize: 2,
+      maxPoolSize: 3, // Small pool per isolated tenant to prevent connection blowup
+      minPoolSize: 0, // Allow scaling down to 0 when idle
+      maxIdleTimeMS: 60000, // Close idle pool connections after 1 min
       socketTimeoutMS: 45000,
       serverSelectionTimeoutMS: 5000,
     });
@@ -102,13 +125,15 @@ async function getTenantConnection(hospitalId) {
       console.warn(`⚠️  Tenant database disconnected: ${dbName}`);
       // Remove from cache on disconnect
       tenantConnections.delete(hospitalId);
+      tenantLastAccessed.delete(hospitalId);
     });
 
     // Register tenant models with this connection
     registerTenantModels(connection);
 
-    // Cache the connection
+    // Cache the connection and update last accessed timestamp
     tenantConnections.set(hospitalId, connection);
+    tenantLastAccessed.set(hospitalId, Date.now());
 
     return connection;
   } catch (error) {
@@ -130,6 +155,7 @@ async function closeTenantConnection(hospitalId) {
       const connection = tenantConnections.get(hospitalId);
       await connection.close();
       tenantConnections.delete(hospitalId);
+      tenantLastAccessed.delete(hospitalId);
       console.log(`✅ Closed tenant connection for hospital ${hospitalId}`);
     }
   } catch (error) {
@@ -203,6 +229,50 @@ async function tenantDatabaseExists(hospitalId) {
 }
 
 /**
+ * Get or create the shared multi-tenant database connection (hms_shared).
+ * All shared-tier hospitals use this single pool instead of per-tenant DBs.
+ * @returns {Promise<mongoose.Connection>} Shared database connection
+ */
+async function getSharedConnection() {
+  // Return existing healthy connection
+  if (sharedConnection && sharedConnection.readyState === 1) {
+    return sharedConnection;
+  }
+
+  const baseUri =
+    process.env.MONGO_URI_TENANT_BASE || "mongodb://localhost:27017";
+  const cleanBaseUri = baseUri.replace(/\/$/, "");
+  const sharedUri = `${cleanBaseUri}/hms_shared?authSource=admin`;
+
+  console.log("📡 Creating shared multi-tenant connection to hms_shared");
+
+  sharedConnection = await mongoose.createConnection(sharedUri, {
+    maxPoolSize: 20, // shared pool serves many tenants
+    minPoolSize: 2,
+    socketTimeoutMS: 45000,
+    serverSelectionTimeoutMS: 5000,
+  });
+
+  sharedConnection.on("connected", () => {
+    console.log("✅ Shared multi-tenant database connected: hms_shared");
+  });
+
+  sharedConnection.on("error", (err) => {
+    console.error("❌ Shared multi-tenant database error:", err);
+  });
+
+  sharedConnection.on("disconnected", () => {
+    console.warn("⚠️  Shared multi-tenant database disconnected: hms_shared");
+    sharedConnection = null;
+  });
+
+  // Register tenant models on shared connection
+  registerTenantModels(sharedConnection);
+
+  return sharedConnection;
+}
+
+/**
  * Get master database connection
  * @returns {mongoose.Connection} Master database connection
  */
@@ -214,6 +284,10 @@ function getMasterConnection() {
 process.on("SIGINT", async () => {
   console.log("🛑 Received SIGINT, closing database connections...");
   await closeAllTenantConnections();
+  if (sharedConnection) {
+    await sharedConnection.close();
+    console.log("✅ Shared multi-tenant connection closed");
+  }
   if (masterConnection) {
     await mongoose.disconnect();
     console.log("✅ Master database connection closed");
@@ -224,6 +298,10 @@ process.on("SIGINT", async () => {
 process.on("SIGTERM", async () => {
   console.log("🛑 Received SIGTERM, closing database connections...");
   await closeAllTenantConnections();
+  if (sharedConnection) {
+    await sharedConnection.close();
+    console.log("✅ Shared multi-tenant connection closed");
+  }
   if (masterConnection) {
     await mongoose.disconnect();
     console.log("✅ Master database connection closed");
@@ -234,6 +312,7 @@ process.on("SIGTERM", async () => {
 module.exports = {
   initializeMasterDatabase,
   getTenantConnection,
+  getSharedConnection,
   getTenantDatabaseName,
   closeTenantConnection,
   closeAllTenantConnections,

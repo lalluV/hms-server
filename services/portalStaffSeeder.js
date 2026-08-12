@@ -27,7 +27,6 @@ async function upsertStaff(Staff, hospitalId, entry, index, force = false) {
     id: existing?.id || buildStaffId(entry.type, index),
     userId: entry.userId,
     password: hashedPassword,
-    loginPassword: entry.password,
     name: entry.name,
     email: entry.email,
     phone: entry.phone,

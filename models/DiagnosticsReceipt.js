@@ -12,6 +12,12 @@ const diagnosticsReceiptSchema = new mongoose.Schema(
     patientName: { type: String },
     patientPhone: { type: String },
     doctorData: { type: Object },
+
+    // Visit / stay scope (Phase B)
+    visitType: { type: String, default: null },
+    prescriptionId: { type: String, default: null },
+    admissionId: { type: String, default: null },
+
     items: [mongoose.Schema.Types.Mixed], // Flexible schema to support both lab-sale and lab-purchase items
     totalAmount: { type: Number },
     baseTotalAmount: { type: Number },

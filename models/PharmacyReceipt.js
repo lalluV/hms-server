@@ -34,6 +34,11 @@ const pharmacyReceiptSchema = new mongoose.Schema(
     patientPhone: { type: String },
     doctorData: { type: mongoose.Schema.Types.Mixed },
 
+    // Visit / stay scope (Phase B)
+    visitType: { type: String, default: null },
+    prescriptionId: { type: String, default: null },
+    admissionId: { type: String, default: null },
+
     modifiedBy: [
       {
         user: String,

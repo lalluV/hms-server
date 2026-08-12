@@ -16,6 +16,11 @@ const advanceReceiptSchema = new mongoose.Schema(
     remarks: { type: String },
     paymentStatus: { type: String },
     type: { type: String, default: "advance" },
+
+    // Visit / stay scope (Phase B) — advances usually attach to IP stay
+    visitType: { type: String, default: null },
+    prescriptionId: { type: String, default: null },
+    admissionId: { type: String, default: null },
     modifiedBy: [
       {
         user: String,

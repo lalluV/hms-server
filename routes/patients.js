@@ -30,6 +30,52 @@ const {
   normalizeGender,
 } = require("../utils/publicOpRegistration");
 const { syncClinicalCasesFromPatient } = require("../utils/doctorMemory");
+const mongoose = require("mongoose");
+
+async function findPatientByIdOrUMR(Patient, idOrUmr, hospitalId) {
+  if (!idOrUmr) return null;
+  const decodedId = decodeURIComponent(String(idOrUmr).trim());
+  let patient = null;
+
+  // 1. Try by ObjectId if valid
+  if (mongoose.Types.ObjectId.isValid(decodedId)) {
+    if (hospitalId) {
+      patient = await Patient.findOne({ _id: decodedId, hospitalId });
+    }
+    if (!patient) {
+      patient = await Patient.findById(decodedId);
+    }
+  }
+
+  // 2. Try by exact UMRNo
+  if (!patient) {
+    if (hospitalId) {
+      patient = await Patient.findOne({ UMRNo: decodedId, hospitalId });
+    }
+    if (!patient) {
+      patient = await Patient.findOne({ UMRNo: decodedId });
+    }
+  }
+
+  // 3. Try case-insensitive UMRNo regex match
+  if (!patient) {
+    patient = await Patient.findOne({
+      UMRNo: {
+        $regex: new RegExp(
+          `^${decodedId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+          "i",
+        ),
+      },
+    });
+  }
+
+  // 4. Try by phone as fallback
+  if (!patient) {
+    patient = await Patient.findOne({ phone: decodedId });
+  }
+
+  return patient;
+}
 
 /**
  * PUBLIC (no auth): hospital branding for the self-registration page.
@@ -182,9 +228,9 @@ router.post(
       }
     } catch (error) {
       console.error("Public OP registration error:", error);
-      return res
-        .status(500)
-        .json({ message: "Unable to complete registration. Please try again." });
+      return res.status(500).json({
+        message: "Unable to complete registration. Please try again.",
+      });
     }
   },
 );
@@ -368,9 +414,7 @@ router.get("/", async (req, res) => {
     }
 
     if (fromDate || toDate) {
-      const start = fromDate
-        ? dayjs(fromDate).format("YYYY-MM-DD")
-        : null;
+      const start = fromDate ? dayjs(fromDate).format("YYYY-MM-DD") : null;
       const end = toDate ? dayjs(toDate).format("YYYY-MM-DD") : null;
       const dateRange = {};
       if (start) dateRange.$gte = start;
@@ -378,10 +422,7 @@ router.get("/", async (req, res) => {
       if (end) dateRange.$lte = `${end}T23:59:59.999Z`;
       if (Object.keys(dateRange).length > 0) {
         andConditions.push({
-          $or: [
-            { registration_date: dateRange },
-            { admissionDate: dateRange },
-          ],
+          $or: [{ registration_date: dateRange }, { admissionDate: dateRange }],
         });
       }
     }
@@ -399,7 +440,34 @@ router.get("/", async (req, res) => {
     // Doctors: only assigned consultant patients OR patients with their visit.
     if (isDoctorRole(req)) {
       const doctorIds = await resolveRequestDoctorIds(req);
-      andConditions.push(doctorPatientVisibilityClauseFromIds(doctorIds));
+      const visibility = doctorPatientVisibilityClauseFromIds(doctorIds);
+      const Prescription = req.tenantDb.model("Prescription");
+      const rxRows = await Prescription.find({
+        hospitalId: req.hospitalId,
+        doctorId: { $in: doctorIds },
+      })
+        .select("patientId")
+        .lean();
+      const rxPatientIds = [
+        ...new Set(
+          rxRows
+            .map((row) => String(row.patientId || ""))
+            .filter(Boolean),
+        ),
+      ];
+      if (rxPatientIds.length) {
+        const objectIds = rxPatientIds
+          .filter((id) => mongoose.Types.ObjectId.isValid(id))
+          .map((id) => new mongoose.Types.ObjectId(id));
+        andConditions.push({
+          $or: [
+            visibility,
+            { _id: { $in: objectIds } },
+          ],
+        });
+      } else {
+        andConditions.push(visibility);
+      }
     }
 
     const query =
@@ -461,24 +529,41 @@ router.get("/phone/:phoneNumber", async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const Patient = req.tenantDb.model("Patient");
-    const patient = await Patient.findOne({
-      UMRNo: req.params.id,
-      hospitalId: req.hospitalId,
-    });
+    const patient = await findPatientByIdOrUMR(
+      Patient,
+      req.params.id,
+      req.hospitalId,
+    );
     if (!patient) {
       return res.status(404).json({ message: "Patient not found" });
     }
     if (blockInpatientRecordAccess(req, res, patient)) return;
     if (isDoctorRole(req)) {
       const doctorIds = await resolveRequestDoctorIds(req);
-      if (!patientVisibleToDoctorIds(patient, doctorIds)) {
+      const prescriptions = await req.tenantDb
+        .model("Prescription")
+        .find({
+          hospitalId: req.hospitalId,
+          $or: [{ patientId: patient._id }, { UMRNo: patient.UMRNo }],
+        })
+        .select("doctorId")
+        .lean()
+        .catch(() => []);
+      const patientWithRx = {
+        ...patient.toObject(),
+        prescriptions,
+      };
+      if (!patientVisibleToDoctorIds(patientWithRx, doctorIds)) {
         return res.status(403).json({
           message:
             "Patient is not assigned to you and you have no visit on this record.",
         });
       }
     }
-    res.json(patient);
+
+    const responsePayload = patient.toObject ? patient.toObject() : { ...patient };
+
+    res.json(responsePayload);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -520,7 +605,142 @@ router.post("/", async (req, res) => {
     }
     const patient = new Patient({ ...req.body, hospitalId: req.hospitalId });
     const newPatient = await patient.save();
-    res.status(201).json(newPatient);
+
+    // New OP registration → create today's Prescription visit so they appear in OPD queue
+    let initialVisit = null;
+    let initialAdmission = null;
+    if (newPatient.patient_type === "OP") {
+      try {
+        const Prescription = req.tenantDb.model("Prescription");
+        const doctorId =
+          req.body.doctorId ||
+          (req.user?.type === "Doctor" ? req.user.id : "") ||
+          "";
+        const consultantDoctor =
+          req.body.consultantDoctor ||
+          req.body.doctorName ||
+          (req.user?.type === "Doctor" ? req.user.name : "") ||
+          "";
+
+        if (doctorId) {
+          const prescriptionId = `RX-${Date.now()}-${Math.floor(
+            Math.random() * 9000 + 1000,
+          )}`;
+          const doc = await Prescription.create({
+            prescriptionId,
+            hospitalId: req.hospitalId,
+            patientId: newPatient._id,
+            UMRNo: newPatient.UMRNo,
+            doctorId: String(doctorId),
+            doctorName: consultantDoctor,
+            consultantDoctor,
+            date: new Date().toISOString().split("T")[0],
+            symptoms: "",
+            vitals: [],
+            doctorNotes: [],
+            nurseNotes: [],
+            diagnosticData: [],
+            medicineData: [],
+            paymentMethod: newPatient.paymentMethod || "Personal",
+            insurance_provider: newPatient.insurance_provider,
+            insurance_providerId: newPatient.insurance_providerId,
+            policy_number: newPatient.policy_number,
+            pharmacyStatus: "pending",
+          });
+          initialVisit = doc.toObject ? doc.toObject() : doc;
+        }
+      } catch (visitErr) {
+        console.warn(
+          "OP patient created but initial visit failed:",
+          visitErr?.message || visitErr,
+        );
+      }
+    }
+
+    // New IP / ERA registration → create IPAdmission so they appear in IPD roster
+    if (
+      newPatient.patient_type === "IP" ||
+      newPatient.patient_type === "OPtoIP"
+    ) {
+      try {
+        const IPAdmission = req.tenantDb.model("IPAdmission");
+        const year = new Date().getFullYear();
+        const rand = Math.floor(1000 + Math.random() * 9000);
+        const admissionDate =
+          req.body.admissionDate ||
+          new Date().toISOString().split("T")[0];
+        const admissionTime =
+          req.body.admissionTime ||
+          new Date().toTimeString().slice(0, 5);
+
+        const admission = await IPAdmission.create({
+          ipNumber: `IP-${year}-${rand}`,
+          hospitalId: req.hospitalId,
+          patientId: newPatient._id,
+          UMRNo: newPatient.UMRNo,
+          patientName: newPatient.name,
+          admissionDate,
+          admissionTime,
+          mlcNo: req.body.mlcNo,
+          patient_status: "Admitted",
+          consultantDoctor:
+            req.body.consultantDoctor || newPatient.consultantDoctor,
+          doctorId: req.body.doctorId || newPatient.doctorId,
+          medicalOfficerName: req.body.medicalOfficerName,
+          medicalOfficerId: req.body.medicalOfficerId,
+          patientRepresentiveOfficer: req.body.patientRepresentiveOfficer,
+          wardName: req.body.wardName,
+          wardId: req.body.wardId,
+          selectedBed: req.body.selectedBed,
+          transfers: Array.isArray(req.body.transfers) ? req.body.transfers : [],
+          chiefComplaintsPresentIllnessHistory:
+            req.body.chiefComplaintsPresentIllnessHistory,
+          consciousness: req.body.consciousness,
+          gcs: req.body.gcs,
+          pupils: req.body.pupils,
+          systemicExamination: req.body.systemicExamination,
+          provisionalDiagnosis: req.body.provisionalDiagnosis,
+          vitals: req.body.vitals || [],
+          doctorNotes: req.body.doctorNotes || [],
+          nurseNotes: req.body.nurseNotes || [],
+          insulinChart: req.body.insulinChart || [],
+          investigations: req.body.investigations || [],
+          procedures: req.body.procedures || [],
+          treatment: req.body.treatment || [],
+          casualtyTreatment: req.body.casualtyTreatment || [],
+          paymentMethod: newPatient.paymentMethod || "Personal",
+          insurance_provider: newPatient.insurance_provider,
+          insurance_providerId: newPatient.insurance_providerId,
+          policy_number: newPatient.policy_number,
+        });
+
+        newPatient.patient_type = "IP";
+        newPatient.activeAdmissionId = admission._id;
+        newPatient.admissionDate = admission.admissionDate;
+        newPatient.admissionTime = admission.admissionTime;
+        newPatient.wardName = admission.wardName;
+        newPatient.wardId = admission.wardId;
+        newPatient.selectedBed = admission.selectedBed;
+        newPatient.consultantDoctor = admission.consultantDoctor;
+        newPatient.doctorId = admission.doctorId;
+        newPatient.patient_status = "Admitted";
+        await newPatient.save();
+        initialAdmission = admission.toObject
+          ? admission.toObject()
+          : admission;
+      } catch (admitErr) {
+        console.warn(
+          "IP patient created but initial admission failed:",
+          admitErr?.message || admitErr,
+        );
+      }
+    }
+
+    res.status(201).json({
+      ...newPatient.toObject(),
+      initialVisit,
+      initialAdmission,
+    });
   } catch (error) {
     console.error("POST /api/patients failed:", error?.message || error);
     if (error?.errors) {
@@ -546,10 +766,11 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const Patient = req.tenantDb.model("Patient");
-    const existingPatient = await Patient.findOne({
-      UMRNo: req.params.id,
-      hospitalId: req.hospitalId,
-    });
+    const existingPatient = await findPatientByIdOrUMR(
+      Patient,
+      req.params.id,
+      req.hospitalId,
+    );
     if (!existingPatient) {
       return res.status(404).json({ message: "Patient not found" });
     }
@@ -582,23 +803,59 @@ router.put("/:id", async (req, res) => {
         "IPD patient updates are not included in your subscription plan.",
       );
     }
-    const patient = await Patient.findOneAndUpdate(
-      { UMRNo: req.params.id, hospitalId: req.hospitalId },
-      { $set: req.body },
-      { new: true, runValidators: true },
-    );
-    if (!patient) {
-      return res.status(404).json({ message: "Patient not found" });
-    }
-    if (Array.isArray(req.body?.prescriptions)) {
-      syncClinicalCasesFromPatient(req.tenantDb, req.hospitalId, patient).catch(
-        (err) => {
-          console.warn("Clinical case sync failed:", err?.message || err);
-        },
+
+    const body = { ...(req.body || {}) };
+    delete body.prescriptions;
+    delete body.vitals;
+    delete body.doctorNotes;
+    delete body.nurseNotes;
+    delete body.treatment;
+    delete body.investigations;
+    delete body.procedures;
+    delete body.insulinChart;
+    delete body.transfers;
+    delete body.dischargeSummary;
+    delete body._id;
+    delete body.UMRNo;
+    delete body.hospitalId;
+    delete body.__v;
+    delete body.activeAdmission;
+    delete body.createdAt;
+    delete body.updatedAt;
+
+    const patientFields = body;
+
+    let patient = existingPatient;
+    if (Object.keys(patientFields).length > 0) {
+      patient = await Patient.findOneAndUpdate(
+        { _id: existingPatient._id, hospitalId: req.hospitalId },
+        { $set: patientFields },
+        { new: true, runValidators: true },
+      );
+      if (!patient) {
+        return res.status(404).json({ message: "Patient not found" });
+      }
+    } else {
+      patient = await findPatientByIdOrUMR(
+        Patient,
+        req.params.id,
+        req.hospitalId,
       );
     }
-    res.json(patient);
+
+    const hydrated = patient.toObject ? patient.toObject() : { ...patient };
+
+    syncClinicalCasesFromPatient(
+      req.tenantDb,
+      req.hospitalId,
+      hydrated,
+    ).catch((err) => {
+      console.warn("Clinical case sync failed:", err?.message || err);
+    });
+
+    res.json(hydrated);
   } catch (error) {
+    console.error("PUT /api/patients failed:", error?.message || error);
     res.status(400).json({ message: error.message });
   }
 });
@@ -607,16 +864,17 @@ router.put("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   try {
     const Patient = req.tenantDb.model("Patient");
-    const existingPatient = await Patient.findOne({
-      UMRNo: req.params.id,
-      hospitalId: req.hospitalId,
-    });
+    const existingPatient = await findPatientByIdOrUMR(
+      Patient,
+      req.params.id,
+      req.hospitalId,
+    );
     if (!existingPatient) {
       return res.status(404).json({ message: "Patient not found" });
     }
     if (blockInpatientRecordAccess(req, res, existingPatient)) return;
     const patient = await Patient.findOneAndDelete({
-      UMRNo: req.params.id,
+      _id: existingPatient._id,
       hospitalId: req.hospitalId,
     });
     if (!patient) {
@@ -632,10 +890,11 @@ router.delete("/:id", async (req, res) => {
 router.post("/:id/medical-history", async (req, res) => {
   try {
     const Patient = req.tenantDb.model("Patient");
-    const patient = await Patient.findOne({
-      UMRNo: req.params.id,
-      hospitalId: req.hospitalId,
-    });
+    const patient = await findPatientByIdOrUMR(
+      Patient,
+      req.params.id,
+      req.hospitalId,
+    );
     if (!patient) {
       return res.status(404).json({ message: "Patient not found" });
     }
@@ -654,10 +913,11 @@ router.post("/:id/medical-history", async (req, res) => {
 router.put("/:id/medical-history/:historyId", async (req, res) => {
   try {
     const Patient = req.tenantDb.model("Patient");
-    const patient = await Patient.findOne({
-      UMRNo: req.params.id,
-      hospitalId: req.hospitalId,
-    });
+    const patient = await findPatientByIdOrUMR(
+      Patient,
+      req.params.id,
+      req.hospitalId,
+    );
     if (!patient) {
       return res.status(404).json({ message: "Patient not found" });
     }
@@ -701,10 +961,11 @@ router.get("/:id/interim-bill", async (req, res) => {
     const { endDate } = req.query;
     const calculateEndDate = endDate ? new Date(endDate) : new Date();
 
-    const patient = await Patient.findOne({
-      UMRNo: id,
-      hospitalId: req.hospitalId,
-    });
+    const patient = await findPatientByIdOrUMR(
+      Patient,
+      id,
+      req.hospitalId,
+    );
     if (!patient) {
       return res.status(404).json({ message: "Patient not found" });
     }

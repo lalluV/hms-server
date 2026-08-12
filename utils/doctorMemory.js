@@ -1210,11 +1210,16 @@ async function upsertClinicalCase(tenantDb, caseDoc) {
 }
 
 async function syncClinicalCasesFromPatient(tenantDb, hospitalId, patient) {
-  if (!patient || !Array.isArray(patient.prescriptions)) return { indexed: 0 };
+  if (!patient) return { indexed: 0 };
+  const Prescription = tenantDb.model("Prescription");
+  const prescriptions = await Prescription.find({
+    hospitalId,
+    $or: [{ patientId: patient._id }, { UMRNo: patient.UMRNo }],
+  }).lean();
   const umr = patient.UMRNo || patient.umr || "";
   let indexed = 0;
 
-  for (const rx of patient.prescriptions) {
+  for (const rx of prescriptions) {
     const doctorId = String(rx.doctorId || patient.doctorId || "").trim();
     if (!doctorId) continue;
     const caseDoc = buildCaseFromPrescription({

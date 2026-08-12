@@ -51,6 +51,12 @@ const hospitalSchema = new mongoose.Schema(
       receiptFooterNote: { type: String },
     },
     // Tenant Database Fields
+    /** "shared" = data in hms_shared (multi-tenant); "isolated" = dedicated hms_hospital_{id} DB */
+    tenancyMode: {
+      type: String,
+      enum: ["shared", "isolated"],
+      default: "isolated",
+    },
     databaseName: { type: String }, // Name of the tenant database
     databaseStatus: {
       type: String,

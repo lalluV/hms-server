@@ -5,7 +5,7 @@ const jwt = require("jsonwebtoken");
 const Staff = require("../models/Staff");
 const Hospital = require("../models/Hospital");
 const auth = require("../middleware/auth");
-const { getTenantConnection } = require("../utils/tenantDb");
+const { resolveTenantConnection } = require("../utils/tenantRouter");
 const {
   toClientPayloadFromHospital,
 } = require("../services/entitlementsService");
@@ -15,11 +15,19 @@ const {
   extractSubdomain,
   requireSubdomain,
 } = require("../middleware/subdomain");
+const { createRateLimiter } = require("../middleware/rateLimiter");
+
+// Strict auth rate limiter: max 25 attempts per 15-minute window per IP
+const authLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 25,
+  message: { message: "Too many authentication attempts. Please try again in 15 minutes." },
+});
 
 // @route   POST api/auth/register-hospital
 // @desc    Register a new hospital and SuperAdmin Staff user
 // @access  Public
-router.post("/register-hospital", async (req, res) => {
+router.post("/register-hospital", authLimiter, async (req, res) => {
   try {
     const {
       // Hospital data
@@ -98,6 +106,10 @@ router.post("/register-hospital", async (req, res) => {
         city: hospitalCity,
         phone: hospitalPhone,
         email: hospitalEmail,
+        // Self-serve registrations default to shared tenancy (instant, no DB provisioning)
+        tenancyMode: "shared",
+        databaseName: "hms_shared",
+        databaseStatus: "active",
       });
       await hospital.save();
     } catch (hospitalErr) {
@@ -126,7 +138,6 @@ router.post("/register-hospital", async (req, res) => {
         id: staffId,
         userId: finalStaffUserId,
         password: hashedPassword,
-        loginPassword: adminPassword,
         name: adminUsername,
         email: adminEmail,
         type: "SuperAdmin",
@@ -216,7 +227,7 @@ router.post("/register-hospital", async (req, res) => {
 // @route   POST api/auth/register
 // @desc    Register a staff member
 // @access  Public
-router.post("/register", async (req, res) => {
+router.post("/register", authLimiter, async (req, res) => {
   try {
     const { userId, password, email, type, ...staffData } = req.body;
 
@@ -236,7 +247,6 @@ router.post("/register", async (req, res) => {
       userId,
       email,
       password: hashedPassword,
-      loginPassword: password,
       type: type || "Staff", // Default type if not specified
     });
 
@@ -281,7 +291,7 @@ router.post("/register", async (req, res) => {
 // @access  Public
 // @note    This route REQUIRES subdomain identification via Origin/Referer/Host headers
 // @note    Only subdomain-based authentication is supported (no query params or custom headers)
-router.post("/login", extractSubdomain, requireSubdomain, async (req, res) => {
+router.post("/login", authLimiter, extractSubdomain, requireSubdomain, async (req, res) => {
   try {
     const { userId, password } = req.body;
 
@@ -309,17 +319,21 @@ router.post("/login", extractSubdomain, requireSubdomain, async (req, res) => {
       });
     }
 
-    if (hospital.databaseStatus !== "active") {
+    // Shared-tier hospitals skip databaseStatus check (hms_shared is always ready)
+    if (
+      hospital.tenancyMode !== "shared" &&
+      hospital.databaseStatus !== "active"
+    ) {
       return res.status(503).json({
         message: `Hospital database is not yet ready. Status: ${hospital.databaseStatus}. Please contact administrator.`,
         databaseStatus: hospital.databaseStatus,
       });
     }
 
-    // STEP 1: Connect to the specific tenant database (already identified by subdomain)
+    // STEP 1: Connect to the correct tenant database (shared or isolated)
     let tenantConnection;
     try {
-      tenantConnection = await getTenantConnection(hospital._id.toString());
+      tenantConnection = await resolveTenantConnection(hospital._id.toString());
     } catch (error) {
       console.error(
         `Error connecting to tenant database for hospital ${hospital._id}:`,
@@ -480,7 +494,7 @@ router.get("/me", auth, async (req, res) => {
       });
     }
 
-    const tenantConnection = await getTenantConnection(hospitalId);
+    const tenantConnection = await resolveTenantConnection(hospitalId);
     const StaffModel = tenantConnection.model("Staff");
 
     const staff = await StaffModel.findById(req.user.id).select("-password");
@@ -649,7 +663,7 @@ router.put("/change-password", auth, async (req, res) => {
         .json({ message: "Hospital ID not found in token" });
     }
 
-    const tenantConnection = await getTenantConnection(hospitalId);
+    const tenantConnection = await resolveTenantConnection(hospitalId);
     const StaffModel = tenantConnection.model("Staff");
     const staff = await StaffModel.findById(req.user.id).select("+password");
     if (!staff) {

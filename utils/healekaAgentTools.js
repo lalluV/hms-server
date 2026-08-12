@@ -691,16 +691,41 @@ async function get_patient_summary(ctx, args) {
     };
   }
 
-  const recentNotes = (patient.doctorNotes || []).slice(-10).map((n) => ({
+  const Prescription = ctx.tenantDb.model("Prescription");
+  const IPAdmission = ctx.tenantDb.model("IPAdmission");
+  const [prescriptionRows, admission] = await Promise.all([
+    Prescription.find({
+      hospitalId: ctx.hospitalId,
+      $or: [{ patientId: patient._id }, { UMRNo: patient.UMRNo }],
+    })
+      .sort({ createdAt: -1 })
+      .limit(8)
+      .lean(),
+    patient.activeAdmissionId
+      ? IPAdmission.findOne({
+          _id: patient.activeAdmissionId,
+          hospitalId: ctx.hospitalId,
+        }).lean()
+      : IPAdmission.findOne({
+          hospitalId: ctx.hospitalId,
+          patientId: patient._id,
+          patient_status: "Admitted",
+        })
+          .sort({ createdAt: -1 })
+          .lean(),
+  ]);
+  const chart = admission || {};
+
+  const recentNotes = (chart.doctorNotes || []).slice(-10).map((n) => ({
     date: n.date || n.createdAt || n.timestamp,
     note: typeof n === "string" ? n : n.note || n.text || n.content,
     doctor: n.doctor || n.doctorName,
   }));
-  const recentNurse = (patient.nurseNotes || []).slice(-10).map((n) => ({
+  const recentNurse = (chart.nurseNotes || []).slice(-10).map((n) => ({
     date: n.date || n.createdAt,
     note: typeof n === "string" ? n : n.note || n.text || n.content,
   }));
-  const recentRx = [...(patient.prescriptions || [])]
+  const recentRx = [...prescriptionRows]
     .sort(
       (a, b) =>
         new Date(b.date || b.createdAt || 0) -
@@ -746,20 +771,20 @@ async function get_patient_summary(ctx, args) {
           : undefined,
       };
     });
-  const recentLabs = (patient.investigations || []).slice(-10).map((i) => ({
+  const recentLabs = (chart.investigations || []).slice(-10).map((i) => ({
     name: i.name || i.testName || i.item_name,
     status: i.status,
     date: i.date || i.createdAt,
   }));
-  const recentVitals = (patient.vitals || []).slice(-10);
-  const recentProcedures = (patient.procedures || []).slice(-5);
-  const recentTreatment = (patient.treatment || []).slice(-5);
+  const recentVitals = (chart.vitals || []).slice(-10);
+  const recentProcedures = (chart.procedures || []).slice(-5);
+  const recentTreatment = (chart.treatment || []).slice(-5);
 
   return {
     summary: {
       ...base,
       chiefComplaintsPresentIllnessHistory:
-        patient.chiefComplaintsPresentIllnessHistory,
+        chart.chiefComplaintsPresentIllnessHistory,
       pastMedicalHistory: patient.pastMedicalHistory,
       recentDoctorNotes: recentNotes,
       recentNurseNotes: recentNurse,

@@ -6,10 +6,12 @@ const counterSchema = new mongoose.Schema({
   seq: { type: Number, default: 0 },
 });
 
-const Counter = mongoose.model("Counter", counterSchema);
+const Counter =
+  mongoose.models.Counter || mongoose.model("Counter", counterSchema);
 
 const patientSchema = new mongoose.Schema(
   {
+    // Permanent Identifiers
     UMRNo: {
       type: String,
       unique: true,
@@ -20,22 +22,43 @@ const patientSchema = new mongoose.Schema(
       ref: "Hospital",
       required: true,
     },
+    /** Deterministic identity for public OP self-registration dedupe */
+    publicRegistrationKey: { type: String },
+
+    // Personal Demographics
     name: { type: String, required: true },
     gender: { type: String, required: true },
     age: { type: String, required: true },
     phone: { type: String, required: true },
     email: { type: String },
+
+    // Address
     street_address: { type: String },
     city: { type: String },
     state: { type: String, default: "Telangana" },
     postal_code: { type: String, default: "506002" },
     country: { type: String, default: "India" },
+
+    // Emergency Contact
     emergency_contact_name: { type: String },
     emergency_contact_relationship: { type: String },
     emergency_phone: { type: String },
     emergency_signature: { type: String },
-    patient_type: { type: String, default: "OP" },
-    patient_status: { type: String },
+
+    // Permanent Baseline Medical History
+    allergiesHistory: { type: String },
+    pastMedicalHistory: { type: String },
+    pastMedications: { type: String },
+    personalHistory: {
+      alcohol: { type: Boolean, default: false },
+      smoking: { type: Boolean, default: false },
+      illicitDrugs: { type: Boolean, default: false },
+      other: { type: String },
+      maritalStatus: { type: String },
+      familyHistory: { type: String },
+    },
+
+    // Saved Default Insurance Profile (Autofills on OP / IP visits)
     paymentMethod: { type: String, default: "Personal" },
     insurance_provider: { type: String },
     insurance_providerId: { type: String },
@@ -45,97 +68,28 @@ const patientSchema = new mongoose.Schema(
     coPayType: { type: String, default: "percentage" },
     coverage: { type: String },
     expiry_date: { type: String },
+
+    // Current State & Pointers
+    patient_type: {
+      type: String,
+      enum: ["OP", "IP", "OPtoIP"],
+      default: "OP",
+    },
     active: { type: Boolean, default: true },
+    activeAdmissionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "IPAdmission",
+      default: null,
+    },
+
+    // Optional vitals snapshot (also on visit/admission)
+    weight: { type: String },
+    height: { type: String },
+
+    // Registration & Audit
     registered_by: { type: String },
     registration_date: { type: String },
-    /** Deterministic identity for public OP self-registration dedupe */
-    publicRegistrationKey: { type: String },
     appointment_date: { type: String },
-    admissionDate: { type: String },
-    admissionTime: { type: String },
-    mlcNo: { type: String },
-    consultantDoctor: { type: String },
-    doctorId: { type: String },
-    medicalOfficerName: { type: String },
-    medicalOfficerId: { type: String },
-    consultantHistory: [
-      {
-        consultantId: String,
-        consultantName: String,
-        role: String,
-        startDate: String,
-        endDate: String,
-        reason: String,
-      },
-    ],
-    patientRepresentiveOfficer: { type: String },
-    wardName: { type: String },
-    wardId: { type: String },
-    selectedBed: { type: String },
-    dischargeTo: { type: String },
-    dischargeDate: { type: String },
-    dischargedAt: { type: String },
-    dischargeCondition: { type: String },
-    dischargeDestination: { type: String },
-    finalDiagnosis: { type: String },
-    dischargeInstructions: { type: String },
-    followUpPlan: { type: String },
-    dischargeMedications: [mongoose.Schema.Types.Mixed],
-    dischargeSummary: { type: String },
-    dischargeSummaryType: { type: String },
-    dischargeSummaryTimestamp: { type: String },
-    finalBillAmount: { type: Number },
-    paymentStatus: { type: String },
-    discount: { type: Number, default: 0 },
-    insurance: { type: Number, default: 0 },
-    transfers: [
-      {
-        price: Number,
-        transferDate: String,
-        wardId: String,
-        wardName: String,
-      },
-    ],
-    commissionEarnerType: { type: String },
-    commissionEarnerId: { type: String },
-    commissionEarnerName: { type: String },
-    commissionRates: {
-      consultation: { type: Number },
-      surgery: { type: Number },
-      pharmacy: { type: Number },
-      lab: { type: Number },
-    },
-    vitals: [mongoose.Schema.Types.Mixed],
-    chiefComplaintsPresentIllnessHistory: { type: String },
-    pastMedicalHistory: { type: String },
-    pastMedications: { type: String },
-    consciousness: { type: String },
-    gcs: { type: String },
-    pupils: { type: String },
-    height: { type: String },
-    weight: { type: String },
-    doctorNotes: [mongoose.Schema.Types.Mixed],
-    nurseNotes: [mongoose.Schema.Types.Mixed],
-    systemicExamination: { type: String },
-    personalHistory: {
-      alcohol: { type: Boolean, default: false },
-      smoking: { type: Boolean, default: false },
-      illicitDrugs: { type: Boolean, default: false },
-      other: { type: String },
-      maritalStatus: { type: String },
-      familyHistory: { type: String },
-    },
-    provisionalDiagnosis: { type: String },
-    allergiesHistory: { type: String },
-    investigations: [mongoose.Schema.Types.Mixed],
-    procedures: [mongoose.Schema.Types.Mixed],
-    treatment: [mongoose.Schema.Types.Mixed],
-    casualtyTreatment: [mongoose.Schema.Types.Mixed],
-    insulinChart: [mongoose.Schema.Types.Mixed],
-    dischargeOrders: { type: String },
-    counselling: { type: String },
-    symptoms: [String],
-    prescriptions: [mongoose.Schema.Types.Mixed],
     modifiedBy: [
       {
         user: String,
@@ -147,6 +101,9 @@ const patientSchema = new mongoose.Schema(
   { strict: true, timestamps: true },
 );
 
+patientSchema.index({ hospitalId: 1, phone: 1 });
+patientSchema.index({ hospitalId: 1, UMRNo: 1 }, { unique: true });
+patientSchema.index({ hospitalId: 1, active: 1, patient_type: 1 });
 patientSchema.index(
   { hospitalId: 1, publicRegistrationKey: 1 },
   {
@@ -156,15 +113,9 @@ patientSchema.index(
   },
 );
 
-// Fix for 'type' field in modifiedBy if needed, but since strict: false, it might pass.
-// However, to be correct in Schema definition:
-patientSchema.path("modifiedBy").schema.path("type").options.type = String;
-// Or better definition above:
-// modifiedBy: [{ user: String, type: { type: String }, modifiedTime: String }]
-
 // Pre-save middleware to generate UMR number
 patientSchema.pre("save", async function (next) {
-  if (this.isNew) {
+  if (this.isNew && !this.UMRNo) {
     try {
       const counter = await Counter.findByIdAndUpdate(
         { _id: "UMRNo" },
@@ -179,4 +130,5 @@ patientSchema.pre("save", async function (next) {
   next();
 });
 
-module.exports = mongoose.model("Patient", patientSchema);
+module.exports =
+  mongoose.models.Patient || mongoose.model("Patient", patientSchema);

@@ -9,7 +9,21 @@ const {
 } = require("./utils/meilisearch");
 const { initializeMasterDatabase } = require("./utils/tenantDb");
 
+const securityHeaders = require("./middleware/securityHeaders");
+const { createRateLimiter } = require("./middleware/rateLimiter");
+
 const app = express();
+
+// Apply security headers
+app.use(securityHeaders);
+
+// General API Rate Limiter: 300 requests per minute per IP
+const generalLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 300,
+  message: { message: "Too many requests to API. Please slow down." },
+});
+app.use("/api/", generalLimiter);
 
 // Enable CORS for all routes
 // Note: Subdomain-based tenant authentication is implemented
@@ -73,6 +87,7 @@ app.use("/api/auth", require("./routes/auth"));
 app.use("/api/admin/auth", require("./routes/adminAuth"));
 app.use("/api/patients", require("./routes/patients"));
 app.use("/api/prescriptions", require("./routes/prescriptions"));
+app.use("/api/ip-admissions", require("./routes/ipAdmissions"));
 app.use("/api/appointments", require("./routes/appointments"));
 app.use("/api/staff", require("./routes/staff"));
 app.use("/api/diagnostics", require("./routes/diagnostics"));
