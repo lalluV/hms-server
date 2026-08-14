@@ -74,6 +74,55 @@ async function findPatientByIdOrUMR(Patient, idOrUmr, hospitalId) {
     patient = await Patient.findOne({ phone: decodedId });
   }
 
+  // 5. Try resolving via IPAdmission document if idOrUmr was an admissionId or ipNumber
+  if (!patient) {
+    try {
+      const IPAdmission = Patient.db.model("IPAdmission");
+      const admQuery = hospitalId
+        ? {
+            hospitalId,
+            $or: [
+              ...(mongoose.Types.ObjectId.isValid(decodedId)
+                ? [{ _id: decodedId }, { patientId: decodedId }]
+                : []),
+              { ipNumber: decodedId },
+            ],
+          }
+        : {
+            $or: [
+              ...(mongoose.Types.ObjectId.isValid(decodedId)
+                ? [{ _id: decodedId }, { patientId: decodedId }]
+                : []),
+              { ipNumber: decodedId },
+            ],
+          };
+      const adm = await IPAdmission.findOne(admQuery).lean();
+      if (adm) {
+        if (adm.patientId) {
+          patient = await Patient.findById(adm.patientId);
+        }
+        if (!patient && adm.UMRNo) {
+          patient = await Patient.findOne({ UMRNo: adm.UMRNo });
+        }
+        if (!patient) {
+          patient = new Patient({
+            _id: adm.patientId || adm._id,
+            hospitalId: adm.hospitalId,
+            UMRNo: adm.UMRNo,
+            name: adm.patientName || adm.name,
+            age: adm.age,
+            gender: adm.gender,
+            phone: adm.phone,
+            patient_type: adm.patient_type || "IP",
+            activeAdmissionId: adm._id,
+          });
+        }
+      }
+    } catch (e) {
+      // ignore fallback error
+    }
+  }
+
   return patient;
 }
 

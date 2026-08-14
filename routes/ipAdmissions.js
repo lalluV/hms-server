@@ -411,6 +411,23 @@ router.get("/patient/:patientId", async (req, res) => {
     }
 
     if (!patient) {
+      const directList = await IPAdmission.find({
+        hospitalId: req.hospitalId,
+        $or: [
+          ...(mongoose.Types.ObjectId.isValid(patientId)
+            ? [{ _id: patientId }, { patientId }]
+            : []),
+          { ipNumber: patientId },
+          { UMRNo: patientId },
+        ],
+      })
+        .sort({ admissionDate: -1, createdAt: -1 })
+        .lean();
+
+      if (directList && directList.length > 0) {
+        return res.json(directList);
+      }
+
       return res.status(404).json({ message: "Patient not found" });
     }
 

@@ -208,7 +208,7 @@ router.get("/public/:token", async (req, res) => {
     const doctorPromise = prescription.doctorId
       ? Staff.findOne(
           { id: prescription.doctorId },
-          { name: 1, qualification: 1, specialization: 1, id: 1 },
+          { name: 1, qualification: 1, specialization: 1, id: 1, signatureUrl: 1 },
         )
           .lean()
           .catch(() => null)
@@ -218,9 +218,13 @@ router.get("/public/:token", async (req, res) => {
       .select("name address city state zipCode phone logoUrl")
       .lean();
 
-    const [doctorDoc, hospital] = await Promise.all([
+    const Stamp = connection.model("Stamp");
+    const stampsPromise = Stamp.find({ isActive: true }).lean().catch(() => []);
+
+    const [doctorDoc, hospital, stamps] = await Promise.all([
       doctorPromise,
       hospitalPromise,
+      stampsPromise,
     ]);
 
     const doctor = doctorDoc
@@ -228,14 +232,31 @@ router.get("/public/:token", async (req, res) => {
           name: doctorDoc.name,
           qualification: doctorDoc.qualification,
           specialization: doctorDoc.specialization,
+          signatureUrl: doctorDoc.signatureUrl || null,
         }
       : null;
+
+    const departmentStamp =
+      (stamps || []).find((s) => (s.department === "OPD" || s.department === "Consultation") && s.isDefault) ||
+      (stamps || []).find((s) => s.department === "OPD" || s.department === "Consultation") ||
+      null;
+
+    const hospitalStamp =
+      (stamps || []).find((s) => s.category === "hospital" && s.isDefault) ||
+      (stamps || []).find((s) => s.category === "hospital") ||
+      null;
 
     return res.json({
       hospital: buildPublicHospital(hospital),
       doctor,
       patient: buildPublicPatient(patientDoc),
       prescription: buildPublicPrescription(prescription),
+      departmentStamp: departmentStamp
+        ? { imageUrl: departmentStamp.imageUrl, name: departmentStamp.name }
+        : null,
+      hospitalStamp: hospitalStamp
+        ? { imageUrl: hospitalStamp.imageUrl, name: hospitalStamp.name }
+        : null,
     });
   } catch (error) {
     console.error("Public prescription view error:", error);

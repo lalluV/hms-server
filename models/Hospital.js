@@ -49,6 +49,8 @@ const hospitalSchema = new mongoose.Schema(
       labLicenseNumber: { type: String },
       /** Shown above footer disclaimer on receipts */
       receiptFooterNote: { type: String },
+      /** Bill Print Configuration (TatvaPractice / modern clinic format) */
+      billPrintSettings: { type: mongoose.Schema.Types.Mixed, default: {} },
     },
     // Tenant Database Fields
     /** "shared" = data in hms_shared (multi-tenant); "isolated" = dedicated hms_hospital_{id} DB */

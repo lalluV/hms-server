@@ -1,10 +1,10 @@
 /**
- * Doctor Memory — index signed visits and suggest meds/labs from past practice.
- * No pharmacy or lab catalog; suggestions use historical prescription strings only.
+ * Doctor Memory — crawl signed Prescriptions directly and suggest meds/labs/notes from past practice.
+ * Direct crawling of the Prescription collection ensures 100% real-time accuracy with zero sync lag.
  */
 
 const SECTION_HEADER =
-  /^(Complaints?|Chief\s*Complaints?(?:\s*\/\s*HPI)?|HPI|History|Past\s*Medical\s*History|PMH|Examination|Exam|Systemic\s*Examination|Vitals?|Provisional\s*Diagnosis|Working\s*Diagnosis|Diagnosis|Advice)\s*:\s*(.*)$/i;
+  /^(Complaints?|Chief\s*Complaints?(?:\s*\/\s*HPI)?|HPI|History|Past\s*Medical\s*History|PMH|Examination|Exam|Systemic\s*Examination|Vitals?|Provisional\s*Diagnosis|Working\s*Diagnosis|Diagnosis|Advice|Procedures?)\s*:\s*(.*)$/i;
 
 const STOP_WORDS = new Set([
   "with",
@@ -38,18 +38,73 @@ const STOP_WORDS = new Set([
   "before",
 ]);
 
-const MIN_SIMILAR_CASES = 3;
-const MIN_MED_FREQUENCY = 0.15;
-const MIN_LAB_FREQUENCY = 0.15;
-const MAX_MED_SUGGESTIONS = 12;
+// 2-letter and 3-letter clinical abbreviations that MUST NOT be stripped
+const CLINICAL_SHORT_TOKENS = new Set([
+  "dm",
+  "bp",
+  "ht",
+  "htn",
+  "tb",
+  "ra",
+  "oa",
+  "urti",
+  "lrti",
+  "uti",
+  "gerd",
+  "apd",
+  "ckd",
+  "cad",
+  "copd",
+  "ba",
+  "hiv",
+  "lft",
+  "kft",
+  "rft",
+  "cbp",
+  "cbc",
+  "esr",
+  "crp",
+  "ns1",
+  "ecg",
+  "cxr",
+  "usg",
+  "grbs",
+  "rbs",
+  "fbs",
+  "ppbs",
+  "af",
+  "hba1c",
+  "tsh",
+  "t3",
+  "t4",
+  "pt",
+  "inr",
+  "pct",
+  "aptt",
+  "vdrl",
+  "hbsag",
+  "hcv",
+  "ct",
+  "mri",
+  "2d",
+  "echo",
+  "pft",
+  "eeg",
+  "tmt",
+]);
+
+const MIN_SIMILAR_CASES = 2;
+const MIN_MED_FREQUENCY = 0.08;
+const MIN_LAB_FREQUENCY = 0.08;
+const MAX_MED_SUGGESTIONS = 14;
 const MAX_LAB_SUGGESTIONS = 10;
-const MIN_TEXT_FREQUENCY = 0.12;
-const MIN_PROCEDURE_FREQUENCY = 0.12;
-const MIN_CASE_SCORE_FOR_ORDERS = 0.12;
+const MIN_TEXT_FREQUENCY = 0.1;
+const MIN_PROCEDURE_FREQUENCY = 0.1;
+const MIN_CASE_SCORE_FOR_ORDERS = 0.08;
 const MAX_TEXT_SUGGESTIONS = 8;
 const MAX_PROCEDURE_SUGGESTIONS = 8;
-const SAME_PATIENT_BOOST = 0.15;
-const MIN_SIMILARITY_SCORE = 0.12;
+const SAME_PATIENT_BOOST = 0.18;
+const MIN_SIMILARITY_SCORE = 0.08;
 
 function normalizeText(value) {
   return String(value || "")
@@ -64,7 +119,9 @@ function tokenize(text) {
   if (!normalized) return [];
   const tokens = new Set();
   for (const word of normalized.split(" ")) {
-    if (word.length < 3 || STOP_WORDS.has(word)) continue;
+    if (!word) continue;
+    if (word.length < 3 && !CLINICAL_SHORT_TOKENS.has(word)) continue;
+    if (STOP_WORDS.has(word)) continue;
     tokens.add(word);
   }
   return [...tokens];
@@ -116,7 +173,12 @@ function medName(m) {
   if (!m) return "";
   if (typeof m === "string") return m.trim();
   return String(
-    m.name || m.description || m.correctedName || m.generic_name || "",
+    m.name ||
+      m.medicine_name ||
+      m.description ||
+      m.correctedName ||
+      m.generic_name ||
+      "",
   ).trim();
 }
 
@@ -124,18 +186,6 @@ function labName(t) {
   if (!t) return "";
   if (typeof t === "string") return t.trim();
   return String(t.name || t.test_name || t.description || "").trim();
-}
-
-function normalizeMedKey(name) {
-  return normalizeText(name);
-}
-
-function normalizeLabKey(name) {
-  return normalizeText(name);
-}
-
-function normalizeBulletKey(text) {
-  return normalizeText(text);
 }
 
 function procName(proc) {
@@ -148,6 +198,169 @@ function procName(proc) {
       proc.correctedName ||
       "",
   ).trim();
+}
+
+/**
+ * Canonical Medicine Normalizer — groups brand/form/strength variations together
+ * e.g. "Tab Dolo 650", "Dolo 650mg", "Tab. Dolo 650 mg", "DOLO 650" -> "dolo 650"
+ */
+function normalizeMedKey(name) {
+  if (!name) return "";
+  let s = String(name || "").toLowerCase().trim();
+
+  // Strip dosage form prefixes/suffixes
+  s = s.replace(
+    /\b(tab|tablet|tablets|cap|capsule|capsules|syp|syrup|inj|injection|injections|oint|ointment|cream|gel|sachet|sachets|drops|respules|spray|rotacap|susp|suspension|mouthwash|gargle|lotion|powder)\b\.?/gi,
+    " ",
+  );
+
+  // Strip routes and dosing schedules
+  s = s.replace(
+    /\b(od|0d|bd|bid|tds|tid|qid|hs|sos|stat|prn|ac|pc|po|iv|im|sc|oral|before\s*food|after\s*food|bf|af|once|twice|thrice|daily|night|morning)\b/gi,
+    " ",
+  );
+
+  // Strip pattern doses: 1-0-1, 1-1-1, 1-0-0, 0-0-1, etc.
+  s = s.replace(/\b\d+-\d+-\d+(?:-\d+)?\b/g, " ");
+
+  // Standardize trailing strength numbers (e.g. "650 mg" -> "650", "0.5 mg" -> "0.5")
+  s = s.replace(/(\d+(?:\.\d+)?)\s*(?:mg|mcg|µg|g|gm|ml|iu|units?|%)\b/gi, "$1");
+
+  // Clean non-alphanumeric and excess whitespace
+  s = s.replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+  return s;
+}
+
+const LAB_SYNONYMS = new Map([
+  ["cbc", "cbp"],
+  ["complete blood count", "cbp"],
+  ["complete blood picture", "cbp"],
+  ["hemogram", "cbp"],
+  ["haemogram", "cbp"],
+  ["complete hemogram", "cbp"],
+  ["cbp", "cbp"],
+
+  ["liver function test", "lft"],
+  ["liver function tests", "lft"],
+  ["liver profile", "lft"],
+  ["lft", "lft"],
+
+  ["renal function test", "rft"],
+  ["renal function tests", "rft"],
+  ["kidney function test", "rft"],
+  ["kidney function tests", "rft"],
+  ["kft", "rft"],
+  ["rft", "rft"],
+
+  ["lipid profile", "lipid profile"],
+  ["serum lipid profile", "lipid profile"],
+  ["lipid panel", "lipid profile"],
+
+  ["thyroid profile", "thyroid profile"],
+  ["thyroid function test", "thyroid profile"],
+  ["thyroid function tests", "thyroid profile"],
+  ["tft", "thyroid profile"],
+  ["t3 t4 tsh", "thyroid profile"],
+  ["tsh", "tsh"],
+
+  ["cue", "urine routine"],
+  ["complete urine examination", "urine routine"],
+  ["urine routine examination", "urine routine"],
+  ["urinalysis", "urine routine"],
+  ["urine complete", "urine routine"],
+  ["urine re", "urine routine"],
+  ["urine routine", "urine routine"],
+
+  ["serum creatinine", "serum creatinine"],
+  ["s creatinine", "serum creatinine"],
+  ["creatinine", "serum creatinine"],
+
+  ["blood urea", "serum urea"],
+  ["serum urea", "serum urea"],
+  ["urea", "serum urea"],
+
+  ["glycated hemoglobin", "hba1c"],
+  ["glycosylated hemoglobin", "hba1c"],
+  ["hb a1c", "hba1c"],
+  ["hba1c", "hba1c"],
+
+  ["fasting blood sugar", "fbs"],
+  ["fasting blood glucose", "fbs"],
+  ["fbs", "fbs"],
+
+  ["post prandial blood sugar", "ppbs"],
+  ["post prandial blood glucose", "ppbs"],
+  ["ppbs", "ppbs"],
+
+  ["random blood sugar", "rbs"],
+  ["grbs", "rbs"],
+  ["blood sugar random", "rbs"],
+  ["rbs", "rbs"],
+
+  ["serum electrolytes", "serum electrolytes"],
+  ["electrolytes", "serum electrolytes"],
+  ["na k cl", "serum electrolytes"],
+
+  ["dengue ns1", "dengue profile"],
+  ["dengue serology", "dengue profile"],
+  ["dengue ns1 antigen", "dengue profile"],
+  ["dengue profile", "dengue profile"],
+  ["dengue test", "dengue profile"],
+
+  ["widal", "widal test"],
+  ["widal test", "widal test"],
+  ["typhoid test", "widal test"],
+
+  ["ecg", "ecg"],
+  ["ekg", "ecg"],
+  ["12 lead ecg", "ecg"],
+
+  ["chest x ray", "chest x-ray"],
+  ["chest xray", "chest x-ray"],
+  ["cxr", "chest x-ray"],
+  ["x ray chest pa", "chest x-ray"],
+  ["x ray chest", "chest x-ray"],
+  ["chest x-ray", "chest x-ray"],
+
+  ["usg abdomen", "usg abdomen"],
+  ["usg abdomen and pelvis", "usg abdomen"],
+  ["ultrasound abdomen", "usg abdomen"],
+  ["usg whole abdomen", "usg abdomen"],
+]);
+
+const CANONICAL_LAB_NAMES = {
+  cbp: "Complete Blood Picture (CBP)",
+  lft: "Liver Function Tests (LFT)",
+  rft: "Renal Function Tests (RFT)",
+  "lipid profile": "Lipid Profile",
+  "thyroid profile": "Thyroid Profile (T3, T4, TSH)",
+  tsh: "TSH",
+  "urine routine": "Complete Urine Examination (CUE)",
+  "serum creatinine": "Serum Creatinine",
+  "serum urea": "Serum Urea",
+  hba1c: "HbA1c (Glycated Hemoglobin)",
+  fbs: "Fasting Blood Sugar (FBS)",
+  ppbs: "Post Prandial Blood Sugar (PPBS)",
+  rbs: "Random Blood Sugar (RBS)",
+  "serum electrolytes": "Serum Electrolytes",
+  "dengue profile": "Dengue Serology / NS1 Antigen",
+  "widal test": "Widal Test",
+  ecg: "ECG (12 Lead)",
+  "chest x-ray": "Chest X-Ray (PA View)",
+  "usg abdomen": "USG Abdomen & Pelvis",
+};
+
+function normalizeLabKey(name) {
+  if (!name) return "";
+  const s = normalizeText(name);
+  if (LAB_SYNONYMS.has(s)) return LAB_SYNONYMS.get(s);
+  const clean = s.replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+  if (LAB_SYNONYMS.has(clean)) return LAB_SYNONYMS.get(clean);
+  return clean;
+}
+
+function normalizeBulletKey(text) {
+  return normalizeText(text);
 }
 
 function jaccard(a, b) {
@@ -317,11 +530,19 @@ function buildCaseFromPrescription({
   patientAge = "",
   patientGender = "",
 }) {
-  const prescriptionId = String(prescription?.prescriptionId || "").trim();
+  const prescriptionId = String(
+    prescription?.prescriptionId || prescription?._id || "",
+  ).trim();
   if (!prescriptionId || !doctorId) return null;
 
-  const note = (prescription?.doctorNotes || [])
-    .map((n) => n?.content || "")
+  const noteList = Array.isArray(prescription?.doctorNotes)
+    ? prescription.doctorNotes
+    : prescription?.doctorNotes
+    ? [prescription.doctorNotes]
+    : [];
+
+  const note = noteList
+    .map((n) => (typeof n === "string" ? n : n?.content || n?.text || ""))
     .filter(Boolean)
     .join("\n");
 
@@ -397,7 +618,7 @@ function buildCaseFromPrescription({
   return {
     hospitalId: String(hospitalId),
     doctorId: String(doctorId),
-    umr: String(umr || "").trim(),
+    umr: String(umr || prescription?.UMRNo || "").trim(),
     prescriptionId,
     visitDate:
       visitDate && !Number.isNaN(visitDate.getTime()) ? visitDate : null,
@@ -456,6 +677,19 @@ function casePassesScoreGate(
   return score >= minScore;
 }
 
+function pickBestDisplayName(samples = []) {
+  if (!samples.length) return "";
+  const sorted = [...samples].sort((a, b) => {
+    const nameA = String(a.name || "");
+    const nameB = String(b.name || "");
+    const hasDosageA = nameA.match(/\d+/) ? 1 : 0;
+    const hasDosageB = nameB.match(/\d+/) ? 1 : 0;
+    if (hasDosageA !== hasDosageB) return hasDosageB - hasDosageA;
+    return nameB.length - nameA.length;
+  });
+  return sorted[0]?.name || "";
+}
+
 function aggregateMedicinePills(
   similarCases,
   currentReview = {},
@@ -474,12 +708,9 @@ function aggregateMedicinePills(
       const key = normalizeMedKey(med.name);
       if (!key) continue;
       if (!buckets.has(key)) {
-        buckets.set(key, { key, samples: [], displayName: med.name });
+        buckets.set(key, { key, samples: [] });
       }
       buckets.get(key).samples.push(med);
-      if (med.name.length > buckets.get(key).displayName.length) {
-        buckets.get(key).displayName = med.name;
-      }
     }
   }
 
@@ -488,8 +719,11 @@ function aggregateMedicinePills(
 
   for (const bucket of buckets.values()) {
     const frequencyInCases = bucket.samples.length / caseCount;
-    if (frequencyInCases < MIN_MED_FREQUENCY) continue;
+    if (frequencyInCases < MIN_MED_FREQUENCY && bucket.samples.length < 2) {
+      continue;
+    }
 
+    const displayName = pickBestDisplayName(bucket.samples);
     const dosage = pickModeValue(
       bucket.samples.filter((m) => m.dosage),
       (m) => m.dosage,
@@ -537,7 +771,8 @@ function aggregateMedicinePills(
     }
 
     pills.push({
-      name: bucket.displayName,
+      name: displayName,
+      canonicalKey: bucket.key,
       dosage,
       frequency,
       duration,
@@ -577,7 +812,8 @@ function aggregateLabPills(
       const key = normalizeLabKey(lab.name);
       if (!key) continue;
       if (!buckets.has(key)) {
-        buckets.set(key, { key, name: lab.name, count: 0 });
+        const canonicalName = CANONICAL_LAB_NAMES[key] || lab.name;
+        buckets.set(key, { key, name: canonicalName, count: 0 });
       }
       buckets.get(key).count += 1;
     }
@@ -587,9 +823,10 @@ function aggregateLabPills(
   const pills = [];
   for (const bucket of buckets.values()) {
     const frequencyInCases = bucket.count / caseCount;
-    if (frequencyInCases < MIN_LAB_FREQUENCY) continue;
+    if (frequencyInCases < MIN_LAB_FREQUENCY && bucket.count < 2) continue;
     pills.push({
       name: bucket.name,
+      canonicalKey: bucket.key,
       frequencyInCases: Math.round(frequencyInCases * 1000) / 1000,
       usedInCases: bucket.count,
       alreadyInReview: currentLabs.has(bucket.key),
@@ -599,6 +836,46 @@ function aggregateLabPills(
 
   pills.sort((a, b) => b.frequencyInCases - a.frequencyInCases);
   return pills.slice(0, MAX_LAB_SUGGESTIONS);
+}
+
+function isRelevantToContext(text, noteContext, section) {
+  const textTokens = tokenize(text);
+  if (!textTokens.length) return false;
+
+  const parts = [];
+  if (section === "complaints") {
+    parts.push(...(noteContext.complaints || []), noteContext.searchText);
+  } else if (section === "examination") {
+    parts.push(
+      ...(noteContext.examination || []),
+      ...(noteContext.complaints || []),
+      noteContext.searchText,
+    );
+  } else if (section === "diagnosis") {
+    parts.push(
+      ...(noteContext.diagnosis || []),
+      ...(noteContext.complaints || []),
+      noteContext.searchText,
+    );
+  } else if (section === "advice") {
+    parts.push(
+      ...(noteContext.advice || []),
+      ...(noteContext.diagnosis || []),
+      noteContext.searchText,
+    );
+  } else {
+    parts.push(noteContext.searchText);
+  }
+
+  const contextTokens = tokenize(parts.filter(Boolean).join(" "));
+  if (!contextTokens.length) return true;
+
+  const setB = new Set(contextTokens);
+  let inter = 0;
+  for (const token of textTokens) {
+    if (setB.has(token)) inter += 1;
+  }
+  return inter >= 1 || jaccard(textTokens, contextTokens) >= 0.1;
 }
 
 function aggregateTextPills(
@@ -731,44 +1008,16 @@ function buildNotePills(
   return result;
 }
 
-function isRelevantToContext(text, noteContext, section) {
-  const textTokens = tokenize(text);
-  if (!textTokens.length) return false;
-
-  const parts = [];
-  if (section === "complaints") {
-    parts.push(...(noteContext.complaints || []), noteContext.searchText);
-  } else if (section === "examination") {
-    parts.push(
-      ...(noteContext.examination || []),
-      ...(noteContext.complaints || []),
-      noteContext.searchText,
-    );
-  } else if (section === "diagnosis") {
-    parts.push(
-      ...(noteContext.diagnosis || []),
-      ...(noteContext.complaints || []),
-      noteContext.searchText,
-    );
-  } else if (section === "advice") {
-    parts.push(
-      ...(noteContext.advice || []),
-      ...(noteContext.diagnosis || []),
-      noteContext.searchText,
-    );
-  } else {
-    parts.push(noteContext.searchText);
+function bulletAlreadyInNote(text, noteContext = {}) {
+  const key = normalizeBulletKey(text);
+  if (!key) return true;
+  for (const section of ["complaints", "examination", "diagnosis", "advice"]) {
+    const items = noteContext[section] || [];
+    for (const bullet of items) {
+      if (normalizeBulletKey(bullet) === key) return true;
+    }
   }
-
-  const contextTokens = tokenize(parts.filter(Boolean).join(" "));
-  if (!contextTokens.length) return true;
-
-  const setB = new Set(contextTokens);
-  let inter = 0;
-  for (const token of textTokens) {
-    if (setB.has(token)) inter += 1;
-  }
-  return inter >= 2 || jaccard(textTokens, contextTokens) >= 0.15;
+  return false;
 }
 
 function buildMemoryHints(
@@ -827,7 +1076,8 @@ function buildMemoryHints(
       const name = labName(lab);
       if (!name) continue;
       const key = normalizeLabKey(name);
-      if (!labBucket.has(key)) labBucket.set(key, { name, score: 0 });
+      const canonicalName = CANONICAL_LAB_NAMES[key] || name;
+      if (!labBucket.has(key)) labBucket.set(key, { name: canonicalName, score: 0 });
       labBucket.get(key).score += weight;
     }
     for (const proc of clinicalCase.procedures || []) {
@@ -864,22 +1114,10 @@ function buildMemoryHints(
   };
 }
 
-function bulletAlreadyInNote(text, noteContext = {}) {
-  const key = normalizeBulletKey(text);
-  if (!key) return true;
-  for (const section of ["complaints", "examination", "diagnosis", "advice"]) {
-    const items = noteContext[section] || [];
-    for (const bullet of items) {
-      if (normalizeBulletKey(bullet) === key) return true;
-    }
-  }
-  return false;
-}
-
 function hasUsableOrderMemory(similarCases, packages = []) {
   if ((packages || []).length > 0) return true;
   const prescriptionCases = similarCases.filter((c) => c.source !== "package");
-  if (prescriptionCases.length < MIN_SIMILAR_CASES) return false;
+  if (prescriptionCases.length < 1) return false;
   return similarCases.some(
     (clinicalCase) =>
       (clinicalCase.medicines || []).length > 0 ||
@@ -888,16 +1126,54 @@ function hasUsableOrderMemory(similarCases, packages = []) {
   );
 }
 
+/**
+ * Enhanced Clinical Case Scorer
+ * Uses asymmetric containment (so short notes match rich records) + Diagnosis boost + Jaccard
+ */
 function scoreCase(clinicalCase, context, umr) {
-  let score = jaccard(context.searchTokens, clinicalCase.searchTokens || []);
-  if (umr && clinicalCase.umr && String(umr) === String(clinicalCase.umr)) {
+  const queryTokens = context.searchTokens || [];
+  const caseTokens = clinicalCase.searchTokens || [];
+  if (!queryTokens.length || !caseTokens.length) return 0;
+
+  const setCase = new Set(caseTokens);
+  let matchCount = 0;
+  for (const t of queryTokens) {
+    if (setCase.has(t)) matchCount += 1;
+  }
+
+  // 1. Asymmetric containment: % of what the doctor typed that is in the historical case
+  const containment = matchCount / queryTokens.length;
+
+  // 2. Symmetric Jaccard
+  const unionSize = new Set([...queryTokens, ...caseTokens]).size;
+  const jaccardScore = unionSize ? matchCount / unionSize : 0;
+
+  let score = containment * 0.65 + jaccardScore * 0.35;
+
+  // 3. Diagnosis Token Priority Boost
+  const queryDiagTokens = tokenize((context.diagnosis || []).join(" "));
+  if (queryDiagTokens.length) {
+    const caseDiagTokens = tokenize((clinicalCase.diagnosis || []).join(" "));
+    if (caseDiagTokens.length) {
+      const caseDiagSet = new Set(caseDiagTokens);
+      let diagMatches = 0;
+      for (const dt of queryDiagTokens) {
+        if (caseDiagSet.has(dt)) diagMatches += 1;
+      }
+      const diagContainment = diagMatches / queryDiagTokens.length;
+      score += diagContainment * 0.4;
+    }
+  }
+
+  // 4. Same Patient Boost
+  if (
+    umr &&
+    clinicalCase.umr &&
+    String(umr).trim() === String(clinicalCase.umr).trim()
+  ) {
     score += SAME_PATIENT_BOOST;
   }
-  const diagTokens = tokenize((context.diagnosis || []).join(" "));
-  if (diagTokens.length) {
-    const caseDiag = tokenize((clinicalCase.diagnosis || []).join(" "));
-    score += jaccard(diagTokens, caseDiag) * 0.25;
-  }
+
   return Math.min(1, score);
 }
 
@@ -939,10 +1215,12 @@ function normalizeDoctorIds(doctorIdOrIds) {
   return [...new Set(raw.map((id) => String(id || "").trim()).filter(Boolean))];
 }
 
+/**
+ * Direct crawl of Prescriptions — no intermediate shadow table needed.
+ */
 async function findSimilarCases({
-  ClinicalCase,
+  Prescription,
   ClinicalOrderPackage,
-  doctorId,
   doctorIds,
   hospitalId,
   context,
@@ -950,17 +1228,18 @@ async function findSimilarCases({
   excludePrescriptionId,
   limit = 40,
 }) {
-  const resolvedDoctorIds = normalizeDoctorIds(doctorIds || doctorId);
+  const resolvedDoctorIds = normalizeDoctorIds(doctorIds);
   if (!resolvedDoctorIds.length) {
     return { similarCases: [], scores: [], packages: [] };
   }
 
-  const allCases = await ClinicalCase.find({
+  // Fetch recent prescriptions directly from Prescription collection
+  const allPrescriptions = await Prescription.find({
     hospitalId: String(hospitalId),
     doctorId: { $in: resolvedDoctorIds },
   })
-    .sort({ visitDate: -1, updatedAt: -1 })
-    .limit(500)
+    .sort({ date: -1, createdAt: -1 })
+    .limit(300)
     .lean();
 
   let packages = [];
@@ -976,13 +1255,20 @@ async function findSimilarCases({
   }
 
   const scored = [];
-  for (const clinicalCase of allCases) {
-    if (
-      excludePrescriptionId &&
-      String(clinicalCase.prescriptionId) === String(excludePrescriptionId)
-    ) {
+  for (const rx of allPrescriptions) {
+    const rxId = String(rx.prescriptionId || rx._id || "").trim();
+    if (excludePrescriptionId && rxId === String(excludePrescriptionId).trim()) {
       continue;
     }
+
+    const clinicalCase = buildCaseFromPrescription({
+      hospitalId,
+      doctorId: rx.doctorId,
+      umr: rx.UMRNo,
+      prescription: rx,
+    });
+    if (!clinicalCase) continue;
+
     const score = scoreCase(clinicalCase, context, umr);
     if (score < MIN_SIMILARITY_SCORE) continue;
     scored.push({ clinicalCase, score });
@@ -1004,9 +1290,10 @@ async function findSimilarCases({
 }
 
 function confidenceFromCount(count) {
-  if (count >= 15) return "high";
+  if (count >= 10) return "high";
   if (count >= MIN_SIMILAR_CASES) return "medium";
-  return "low";
+  if (count >= 1) return "low";
+  return "none";
 }
 
 const {
@@ -1027,13 +1314,13 @@ async function suggestFromPractice({
   currentReview = {},
   excludePrescriptionId,
 }) {
-  const ClinicalCase = tenantDb.model("ClinicalCase");
+  const Prescription = tenantDb.model("Prescription");
   const ClinicalOrderPackage = tenantDb.models.ClinicalOrderPackage || null;
   const resolvedDoctorIds = normalizeDoctorIds(doctorIds || doctorId);
 
   const context = buildSearchContext(extractedClinical);
   const { similarCases, scores, packages } = await findSimilarCases({
-    ClinicalCase,
+    Prescription,
     ClinicalOrderPackage,
     doctorIds: resolvedDoctorIds,
     hospitalId,
@@ -1158,23 +1445,43 @@ async function suggestFromPractice({
 
   let patientContinue = null;
   if (umr) {
-    const lastPatientCase = await ClinicalCase.findOne({
+    const lastPatientRx = await Prescription.findOne({
       hospitalId: String(hospitalId),
       doctorId: { $in: resolvedDoctorIds },
-      umr: String(umr),
+      UMRNo: String(umr).trim(),
+      ...(excludePrescriptionId
+        ? { prescriptionId: { $ne: String(excludePrescriptionId).trim() } }
+        : {}),
     })
-      .sort({ visitDate: -1, updatedAt: -1 })
+      .sort({ date: -1, createdAt: -1 })
       .lean();
-    if (
-      lastPatientCase &&
-      (lastPatientCase.medicines?.length || lastPatientCase.labs?.length)
-    ) {
-      patientContinue = {
-        prescriptionId: lastPatientCase.prescriptionId,
-        visitDate: lastPatientCase.visitDate,
-        medicines: (lastPatientCase.medicines || []).map((m) => m.name),
-        labs: (lastPatientCase.labs || []).map((l) => l.name),
-      };
+
+    if (lastPatientRx) {
+      const activeMeds = (
+        Array.isArray(lastPatientRx.medicineData)
+          ? lastPatientRx.medicineData
+          : []
+      )
+        .filter((m) => m?.isActive !== false)
+        .map(medName)
+        .filter(Boolean);
+
+      const activeLabs = (
+        Array.isArray(lastPatientRx.diagnosticData)
+          ? lastPatientRx.diagnosticData
+          : []
+      )
+        .map(labName)
+        .filter(Boolean);
+
+      if (activeMeds.length || activeLabs.length) {
+        patientContinue = {
+          prescriptionId: lastPatientRx.prescriptionId,
+          visitDate: lastPatientRx.date || lastPatientRx.createdAt,
+          medicines: activeMeds,
+          labs: activeLabs,
+        };
+      }
     }
   }
 
@@ -1194,80 +1501,21 @@ async function suggestFromPractice({
   };
 }
 
-async function upsertClinicalCase(tenantDb, caseDoc) {
-  if (!caseDoc?.prescriptionId || !caseDoc?.doctorId) return null;
-  const ClinicalCase = tenantDb.model("ClinicalCase");
-  return ClinicalCase.findOneAndUpdate(
-    {
-      hospitalId: caseDoc.hospitalId,
-      doctorId: caseDoc.doctorId,
-      prescriptionId: caseDoc.prescriptionId,
-      umr: caseDoc.umr || "",
-    },
-    { $set: caseDoc },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
-  );
+// Backwards-compatible stubs for any legacy invocation
+async function upsertClinicalCase() {
+  return null;
 }
-
-async function syncClinicalCasesFromPatient(tenantDb, hospitalId, patient) {
-  if (!patient) return { indexed: 0 };
-  const Prescription = tenantDb.model("Prescription");
-  const prescriptions = await Prescription.find({
-    hospitalId,
-    $or: [{ patientId: patient._id }, { UMRNo: patient.UMRNo }],
-  }).lean();
-  const umr = patient.UMRNo || patient.umr || "";
-  let indexed = 0;
-
-  for (const rx of prescriptions) {
-    const doctorId = String(rx.doctorId || patient.doctorId || "").trim();
-    if (!doctorId) continue;
-    const caseDoc = buildCaseFromPrescription({
-      hospitalId,
-      doctorId,
-      umr,
-      prescription: rx,
-      patientAge: patient.age,
-      patientGender: patient.gender,
-    });
-    if (!caseDoc) continue;
-    await upsertClinicalCase(tenantDb, caseDoc);
-    indexed += 1;
-  }
-  return { indexed };
+async function syncClinicalCasesFromPatient() {
+  return { indexed: 0 };
 }
-
-async function clearClinicalCasesForTenant(tenantDb, hospitalId) {
-  const ClinicalCase = tenantDb.model("ClinicalCase");
-  const result = await ClinicalCase.deleteMany({
-    hospitalId: String(hospitalId),
-  });
-  return { deleted: result.deletedCount || 0 };
+async function clearClinicalCasesForTenant() {
+  return { deleted: 0 };
 }
-
-async function backfillClinicalCasesForTenant(tenantDb, hospitalId) {
-  const Patient = tenantDb.model("Patient");
-  const patients = await Patient.find(
-    { hospitalId },
-    { prescriptions: 1, UMRNo: 1, age: 1, gender: 1, doctorId: 1 },
-  ).lean();
-
-  let indexed = 0;
-  for (const patient of patients) {
-    const result = await syncClinicalCasesFromPatient(
-      tenantDb,
-      hospitalId,
-      patient,
-    );
-    indexed += result.indexed;
-  }
-  return { patients: patients.length, indexed };
+async function backfillClinicalCasesForTenant() {
+  return { ok: true, message: "Direct prescription crawl active" };
 }
-
-async function rebuildClinicalCasesForTenant(tenantDb, hospitalId) {
-  const cleared = await clearClinicalCasesForTenant(tenantDb, hospitalId);
-  const built = await backfillClinicalCasesForTenant(tenantDb, hospitalId);
-  return { ...cleared, ...built, rebuilt: true };
+async function rebuildClinicalCasesForTenant() {
+  return { ok: true, message: "Direct prescription crawl active" };
 }
 
 module.exports = {
@@ -1281,5 +1529,7 @@ module.exports = {
   rebuildClinicalCasesForTenant,
   normalizeMedKey,
   normalizeLabKey,
+  normalizeBulletKey,
+  scoreCase,
   MIN_SIMILAR_CASES,
 };

@@ -158,13 +158,99 @@ router.get("/public/:token", async (req, res) => {
         .json({ message: "No lab results are available for this report yet." });
     }
 
-    const hospital = await Hospital.findById(hospitalId)
+    const hospitalPromise = Hospital.findById(hospitalId)
       .select("name address city state zipCode phone logoUrl")
       .lean();
+
+    const Stamp = connection.model("Stamp");
+    const Staff = connection.model("Staff");
+
+    const stampsPromise = Stamp.find({ isActive: true }).lean().catch(() => []);
+
+    const doctorSearch =
+      receipt.verifiedBy ||
+      receipt.completedBy ||
+      receipt.doctorName ||
+      receipt.doctor?.name ||
+      (typeof receipt.doctor === "string" ? receipt.doctor : null);
+
+    const staffPromise = (async () => {
+      try {
+        if (doctorSearch) {
+          const direct = await Staff.findOne(
+            {
+              $or: [
+                { name: doctorSearch },
+                { id: doctorSearch },
+                { userId: doctorSearch },
+              ],
+              active: { $ne: false },
+            },
+            { name: 1, signatureUrl: 1, qualification: 1, specialization: 1 }
+          ).lean();
+          if (direct?.signatureUrl) return direct;
+        }
+
+        // Look for staff with Lab type/department and active signature
+        let labIncharge = await Staff.findOne(
+          {
+            $or: [
+              { type: { $in: ["LabTechnician", "Lab Incharge", "LabIncharge", "Pathologist", "Laboratory"] } },
+              { department: "Laboratory" },
+              { position: /lab|patholog/i },
+            ],
+            active: { $ne: false },
+            signatureUrl: { $exists: true, $ne: null, $ne: "" },
+          },
+          { name: 1, signatureUrl: 1, qualification: 1, specialization: 1 }
+        ).lean();
+
+        // Fallback: any active staff with signature
+        if (!labIncharge?.signatureUrl) {
+          labIncharge = await Staff.findOne(
+            {
+              active: { $ne: false },
+              signatureUrl: { $exists: true, $ne: null, $ne: "" },
+            },
+            { name: 1, signatureUrl: 1, qualification: 1, specialization: 1 }
+          ).lean();
+        }
+
+        return labIncharge;
+      } catch (err) {
+        console.error("Error fetching lab incharge signature:", err);
+        return null;
+      }
+    })();
+
+    const [hospital, stamps, staffDoc] = await Promise.all([
+      hospitalPromise,
+      stampsPromise,
+      staffPromise,
+    ]);
+
+    const departmentStamp =
+      (stamps || []).find((s) => s.department === "Laboratory" && s.isDefault) ||
+      (stamps || []).find((s) => s.department === "Laboratory") ||
+      null;
+
+    const hospitalStamp =
+      (stamps || []).find((s) => s.category === "hospital" && s.isDefault) ||
+      (stamps || []).find((s) => s.category === "hospital") ||
+      null;
 
     return res.json({
       hospital: buildPublicHospital(hospital),
       receipt: publicReceipt,
+      departmentStamp: departmentStamp
+        ? { imageUrl: departmentStamp.imageUrl, name: departmentStamp.name }
+        : null,
+      hospitalStamp: hospitalStamp
+        ? { imageUrl: hospitalStamp.imageUrl, name: hospitalStamp.name }
+        : null,
+      signatureUrl: staffDoc?.signatureUrl || null,
+      signerName: staffDoc?.name || (typeof doctorSearch === "string" ? doctorSearch : ""),
+      signatureLabel: "Lab Incharge",
     });
   } catch (error) {
     console.error("Public lab report view error:", error);
@@ -204,45 +290,97 @@ router.get("/", async (req, res) => {
       patientId = "",
       startDate = "",
       endDate = "",
+      visitType = "",
     } = req.query;
 
-    const query = { hospitalId: req.hospitalId };
+    const andConditions = [{ hospitalId: req.hospitalId }];
 
     if (type) {
       if (type.includes(",")) {
-        query.type = { $in: type.split(",").map((t) => t.trim()) };
+        andConditions.push({
+          type: { $in: type.split(",").map((t) => t.trim()) },
+        });
       } else {
-        query.type = type;
+        andConditions.push({ type });
       }
     }
 
     if (status) {
-      query.status = status;
+      andConditions.push({
+        $or: [{ overallStatus: status }, { status: status }],
+      });
     }
 
     if (patientId) {
-      query.patientId = patientId;
+      andConditions.push({
+        $or: [
+          { patientId: patientId },
+          { UMRNo: patientId },
+          { "patientData.UMRNo": patientId },
+        ],
+      });
+    }
+
+    if (visitType === "IP") {
+      andConditions.push({
+        $or: [
+          { visitType: { $regex: /^IP$/i } },
+          { admissionId: { $exists: true, $nin: [null, ""] } },
+          { "patientData.patient_type": { $in: ["IP", "OPtoIP", "OPTOIP"] } },
+        ],
+      });
+    } else if (visitType === "OP") {
+      andConditions.push({
+        $or: [
+          { visitType: { $regex: /^OP$/i } },
+          { visitType: null },
+          { visitType: "" },
+          { visitType: { $exists: false } },
+          {
+            visitType: {
+              $in: ["Center", "Home Visit", "Direct", "OP", "op"],
+            },
+          },
+        ],
+        admissionId: { $in: [null, ""] },
+        "patientData.patient_type": { $nin: ["IP", "OPtoIP", "OPTOIP"] },
+      });
     }
 
     if (startDate && endDate) {
-      query.createdAt = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
-      };
+      andConditions.push({
+        createdAt: {
+          $gte: new Date(startDate),
+          $lte: new Date(endDate),
+        },
+      });
     } else if (startDate) {
-      query.createdAt = { $gte: new Date(startDate) };
+      andConditions.push({ createdAt: { $gte: new Date(startDate) } });
     } else if (endDate) {
-      query.createdAt = { $lte: new Date(endDate) };
+      andConditions.push({ createdAt: { $lte: new Date(endDate) } });
     }
 
-    if (search && search.length >= 2) {
-      query.$or = [
-        { receiptId: { $regex: search, $options: "i" } },
-        { patientId: { $regex: search, $options: "i" } },
-        { "items.name": { $regex: search, $options: "i" } },
-        { "items.code": { $regex: search, $options: "i" } },
-      ];
+    if (search && search.trim()) {
+      const s = search.trim();
+      andConditions.push({
+        $or: [
+          { receiptId: { $regex: s, $options: "i" } },
+          { patientId: { $regex: s, $options: "i" } },
+          { UMRNo: { $regex: s, $options: "i" } },
+          { patientName: { $regex: s, $options: "i" } },
+          { patientPhone: { $regex: s, $options: "i" } },
+          { "patientData.name": { $regex: s, $options: "i" } },
+          { "patientData.phone": { $regex: s, $options: "i" } },
+          { "patientData.UMRNo": { $regex: s, $options: "i" } },
+          { "doctorData.name": { $regex: s, $options: "i" } },
+          { "items.name": { $regex: s, $options: "i" } },
+          { "items.code": { $regex: s, $options: "i" } },
+        ],
+      });
     }
+
+    const query =
+      andConditions.length > 1 ? { $and: andConditions } : andConditions[0];
 
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);

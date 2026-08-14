@@ -17,7 +17,13 @@ applyTenantEntitlements(router, { moduleKey: "core" });
  */
 router.post("/suggest", async (req, res) => {
   try {
-    const doctorIds = await resolveRequestDoctorIds(req);
+    let doctorIds = await resolveRequestDoctorIds(req);
+    if (req.body?.doctorId) {
+      const explicitId = String(req.body.doctorId).trim();
+      if (explicitId && !doctorIds.includes(explicitId)) {
+        doctorIds = [explicitId, ...doctorIds];
+      }
+    }
     if (!doctorIds.length) {
       return res.status(401).json({ message: "Doctor identity required" });
     }

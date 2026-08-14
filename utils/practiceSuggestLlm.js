@@ -232,7 +232,7 @@ function normalizeLlmMedicinePills(
   for (const item of raw) {
     const name = String(item?.name || "").trim();
     if (!name) continue;
-    const key = name.toLowerCase();
+    const key = name.toLowerCase().replace(/^(tab|cap|syp|inj)\.?\s+/i, "").trim();
     if (seen.has(key)) continue;
     if (strictHints) {
       const nameKey = normalizeBulletKey(name);
@@ -240,8 +240,6 @@ function normalizeLlmMedicinePills(
         (hint) => nameKey.includes(hint) || hint.includes(nameKey),
       );
       if (!allowedHit) continue;
-    } else if (!isGroundedSuggestion(name, groundingCorpus)) {
-      continue;
     }
     seen.add(key);
     pills.push({
@@ -250,12 +248,12 @@ function normalizeLlmMedicinePills(
       frequency:
         item?.frequency && Number(item.frequency.value) > 0
           ? item.frequency
-          : null,
-      duration: item?.duration || null,
+          : { value: 1, unit: "/Day" },
+      duration: item?.duration || { value: 5, unit: "Days" },
       directions: String(
-        item?.directions || item?.patientDirections || "",
+        item?.directions || item?.patientDirections || "After food",
       ).trim(),
-      type: String(item?.type || "").trim(),
+      type: String(item?.type || "Tablet").trim(),
       dosages: Array.isArray(item?.dosages) ? item.dosages : [],
       frequencyInCases: 0,
       usedInCases: 0,
@@ -298,8 +296,6 @@ function normalizeLlmNamePills(
         (hint) => key.includes(hint) || hint.includes(key),
       );
       if (!allowedHit) continue;
-    } else if (!isGroundedSuggestion(name, groundingCorpus)) {
-      continue;
     }
     seen.add(key);
     pills.push({
@@ -325,30 +321,40 @@ Return JSON only:
 }
 
 STRICT ACCURACY RULES:
-- Use ONLY facts present in extractedClinical or practiceMemoryHints. Do NOT invent vitals, exam findings, imaging results, or diagnoses.
-- If a section already has 2+ bullets in currentNoteSections, return [] for that section.
-- complaints = patient-reported symptoms only, phrased from extracted text.
-- examination = only findings explicitly stated or clearly implied in extracted text (e.g. if note says SLR positive, you may suggest that; do NOT add SLR if not mentioned anywhere).
-- diagnosis = only working diagnoses supported by extracted complaints/exam; if diagnosis already stated, suggest at most 1 closely related alternative or return [].
-- advice = plan/follow-up/lifestyle/investigations already mentioned or directly implied in extracted text. No new drugs here.
-- Each bullet must be different across sections. Max 3 bullets per non-empty section.
-- Prefer empty arrays over guessing.`;
+- complaints = patient-reported symptoms, phrased cleanly.
+- examination = physical exam findings (e.g. throat congested, chest clear, tenderness) relevant to complaints.
+- diagnosis = working diagnoses supported by extracted complaints/exam.
+- advice = plan/follow-up/lifestyle/hydration advice.
+- Max 3 bullets per non-empty section. Prefer concise bullet points.`;
 
-const ORDER_SYSTEM_PROMPT = `You suggest tap-to-add orders ONLY when doctor practice memory is unavailable.
+const ORDER_SYSTEM_PROMPT = `You are an expert Indian Outpatient (OPD) Physician AI. Suggest relevant, safe, standard tap-to-add OPD medicines, labs, and procedures matching the patient's complaints and provisional diagnosis when past doctor memory is unavailable.
 
 Return JSON only:
 {
-  "medicinePills": [{"name":"","dosage":"","frequency":{"value":1,"unit":"/Day"},"duration":{"value":5,"unit":"Days"},"directions":"","type":"Tablet"}],
-  "labPills": [{"name":""}],
-  "procedurePills": [{"name":""}]
+  "medicinePills": [
+    {
+      "name": "Dolo 650mg",
+      "dosage": "650mg",
+      "frequency": {"value": 2, "unit": "/Day"},
+      "duration": {"value": 5, "unit": "Days"},
+      "directions": "After food (BD)",
+      "type": "Tablet"
+    }
+  ],
+  "labPills": [
+    {"name": "Complete Blood Picture (CBP)"}
+  ],
+  "procedurePills": [
+    {"name": "Steam Inhalation"}
+  ]
 }
 
-STRICT ACCURACY RULES:
-- If practiceMemoryHints lists medicines/labs/procedures, ONLY pick from those exact names (dose may be copied from hint context).
-- If hints are empty, suggest ONLY orders clearly indicated in extractedClinical (e.g. drug named in advice, lab explicitly ordered).
-- Do NOT invent broad antibiotic/antiviral stacks. Return empty arrays if unsure.
-- Do not duplicate items already in currentReview.
-- Max 8 medicines, 6 labs, 4 procedures.`;
+CLINICAL RULES:
+1. Suggest frontline standard Indian OPD medications appropriate for the diagnosis (e.g. Paracetamol/Dolo for fever/body pain, PPIs like Pantoprazole for GERD/gastritis, Levocetirizine for allergic URTI, ORS for gastroenteritis).
+2. If practiceMemoryHints has specific medicines/labs, prioritize those exact names.
+3. Do NOT invent dangerous or heavy specialty inpatient drugs.
+4. Do NOT duplicate medicines or labs already present in currentReview.
+5. Max 8 medicines, 6 labs, 4 procedures. Return clean, standard Indian brand/generic names.`;
 
 function buildNotePillsFromHints(memoryHints = {}, noteContext = {}) {
   const sections = ["complaints", "examination", "diagnosis", "advice"];

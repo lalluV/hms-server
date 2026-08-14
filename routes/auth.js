@@ -594,6 +594,7 @@ router.put("/hospital-profile", auth, async (req, res) => {
       "currency",
       "timezone",
       "dateFormat",
+      "billPrintSettings",
     ];
     if (req.body.settings && typeof req.body.settings === "object") {
       hospital.settings = hospital.settings || {};
