@@ -277,10 +277,55 @@ function isSameMedicine(a, b) {
   return false;
 }
 
+function isSameMedicineStep(a, b) {
+  if (!a || !b) return false;
+  if (a.lineId && b.lineId && a.lineId === b.lineId) return true;
+  if (!isSameMedicine(a, b)) return false;
+
+  const isSeq = (med) =>
+    Boolean(
+      med?.sequenceGroup ||
+        Number(med?.sequenceIndex) > 1 ||
+        String(med?.sequenceLabel || "").trim().toLowerCase() === "then" ||
+        String(med?.scheduleKind || "").trim().toLowerCase() === "sequential",
+    );
+
+  const aSeq = isSeq(a);
+  const bSeq = isSeq(b);
+
+  if (!aSeq && !bSeq) return true;
+
+  if (aSeq && bSeq) {
+    const aIdx = Number(
+      a.sequenceIndex ||
+        (String(a.sequenceLabel || "").trim().toLowerCase() === "then" ? 2 : 1),
+    );
+    const bIdx = Number(
+      b.sequenceIndex ||
+        (String(b.sequenceLabel || "").trim().toLowerCase() === "then" ? 2 : 1),
+    );
+    return aIdx === bIdx;
+  }
+
+  const seqIdx = aSeq
+    ? Number(
+        a.sequenceIndex ||
+          (String(a.sequenceLabel || "").trim().toLowerCase() === "then" ? 2 : 1),
+      )
+    : Number(
+        b.sequenceIndex ||
+          (String(b.sequenceLabel || "").trim().toLowerCase() === "then" ? 2 : 1),
+      );
+
+  return seqIdx <= 1;
+}
+
 function dedupeMedicineList(medicines = []) {
   const result = [];
   for (const med of medicines || []) {
-    const idx = result.findIndex((item) => isSameMedicine(item, med));
+    const idx = result.findIndex(
+      (item) => isSameMedicineStep(item, med) && isSameMedicine(item, med),
+    );
     if (idx >= 0) {
       result[idx] = {
         ...result[idx],
