@@ -8,11 +8,19 @@ const {
 
 applyEntitlementsNoTenantDb(router, { moduleKey: "ipd" });
 
+const {
+  aiCompletionWithFallback,
+  openAiMessagesToGemini,
+} = require("../utils/aiCompletionWithFallback");
+
 const OPENAI_API_BASE_URL = "https://api.openai.com/v1";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_MODEL = "gpt-4o-mini";
+const OPENAI_MODEL =
+  process.env.OPENAI_FALLBACK_MODEL ||
+  process.env.OPENAI_MODEL ||
+  "gpt-4.1-mini";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-// AI Write extract / review-followup / taper expand — Gemini 3.1 Flash Lite.
+// AI Write extract / review-followup / taper expand — Gemini 3.1 Flash Lite with GPT-4.1 Mini fallback.
 const PARSE_NOTE_MODEL =
   process.env.GEMINI_PARSE_MODEL ||
   process.env.GEMINI_TRANSCRIBE_MODEL ||
@@ -40,133 +48,21 @@ const REVIEW_FOLLOWUP_DELTA_RETRY_MAX_TOKENS =
 // Live "typing" reply is a separate tiny call — plain text, streamed, no JSON mode.
 const REVIEW_FOLLOWUP_REPLY_MAX_TOKENS = 60;
 
-function withTimeout(promise, timeoutMs) {
-  if (!timeoutMs || timeoutMs <= 0) return promise;
-  let timer;
-  const timeoutPromise = new Promise((_, reject) => {
-    timer = setTimeout(() => {
-      const err = new Error(`AI request timed out after ${timeoutMs}ms`);
-      err.code = "ECONNABORTED";
-      reject(err);
-    }, timeoutMs);
-  });
-  return Promise.race([promise, timeoutPromise]).finally(() => {
-    if (timer) clearTimeout(timer);
-  });
-}
-
-/** OpenAI-style messages → Gemini systemInstruction + contents. */
-function openAiMessagesToGemini(messages) {
-  const list = Array.isArray(messages) ? messages : [];
-  const systemChunks = [];
-  const contents = [];
-  for (const message of list) {
-    const text = String(message?.content || "").trim();
-    if (!text) continue;
-    if (message.role === "system") {
-      systemChunks.push(text);
-      continue;
-    }
-    const role = message.role === "assistant" ? "model" : "user";
-    const prev = contents[contents.length - 1];
-    if (prev && prev.role === role) {
-      prev.parts[0].text = `${prev.parts[0].text}\n\n${text}`;
-    } else {
-      contents.push({ role, parts: [{ text }] });
-    }
-  }
-  if (!contents.length) {
-    contents.push({ role: "user", parts: [{ text: "Return valid JSON." }] });
-  }
-  // Gemini chats should start with a user turn.
-  if (contents[0].role !== "user") {
-    contents.unshift({
-      role: "user",
-      parts: [{ text: "Continue with the JSON response." }],
-    });
-  }
-  return {
-    systemInstruction: systemChunks.length
-      ? systemChunks.join("\n\n")
-      : undefined,
-    contents,
-  };
-}
-
 /**
- * AI Write JSON completion via Gemini (same return shape as OpenAI chat.completions
- * so parse / follow-up / taper callers stay unchanged).
+ * AI Write JSON completion via Gemini with instant failover to GPT-4.1 Mini
+ * on 503 / high demand / timeouts. Returns standard OpenAI completion shape.
  */
 async function callParseClinicalNoteCompletion(
   messages,
   { timeoutMs = PARSE_NOTE_TIMEOUT_MS, maxTokens = PARSE_NOTE_MAX_TOKENS } = {},
 ) {
-  if (!GEMINI_API_KEY) {
-    const err = new Error("GEMINI_API_KEY is not configured");
-    err.status = 503;
-    throw err;
-  }
-
-  const { systemInstruction, contents } = openAiMessagesToGemini(messages);
-  const client = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-
-  const buildConfig = (outputTokens) => {
-    const config = {
-      temperature: 0.1,
-      topP: 0.9,
-      maxOutputTokens: outputTokens,
-      responseMimeType: "application/json",
-      // Keep thinking minimal so the budget goes to chart JSON, not reasoning.
-      thinkingConfig: { thinkingLevel: "minimal" },
-    };
-    if (systemInstruction) {
-      config.systemInstruction = systemInstruction;
-    }
-    return config;
-  };
-
-  const run = (outputTokens) =>
-    client.models.generateContent({
-      model: PARSE_NOTE_MODEL,
-      contents,
-      config: buildConfig(outputTokens),
-    });
-
-  const toOpenAiShape = (response) => {
-    const content = String(response?.text || "").trim();
-    if (!content) {
-      throw new Error("Empty response from Gemini");
-    }
-    const finishRaw = String(
-      response?.candidates?.[0]?.finishReason || "STOP",
-    ).toUpperCase();
-    const finish_reason =
-      finishRaw === "MAX_TOKENS" || finishRaw === "LENGTH" ? "length" : "stop";
-    return {
-      data: {
-        model: PARSE_NOTE_MODEL,
-        choices: [
-          {
-            message: { role: "assistant", content },
-            finish_reason,
-          },
-        ],
-      },
-    };
-  };
-
-  try {
-    const response = await withTimeout(run(maxTokens), timeoutMs);
-    return toOpenAiShape(response);
-  } catch (firstError) {
-    const timedOut =
-      firstError?.code === "ECONNABORTED" ||
-      /timeout/i.test(String(firstError?.message || ""));
-    if (!timedOut) throw firstError;
-    console.warn("Parse clinical note timed out; retrying once…");
-    const response = await withTimeout(run(maxTokens), timeoutMs);
-    return toOpenAiShape(response);
-  }
+  return aiCompletionWithFallback(messages, {
+    geminiModel: PARSE_NOTE_MODEL,
+    openAiModel: OPENAI_MODEL,
+    timeoutMs,
+    maxTokens,
+    responseJson: true,
+  });
 }
 
 const openaiApi = axios.create({
@@ -2275,12 +2171,15 @@ router.post("/parse-clinical-note", async (req, res) => {
       ]);
     } catch (apiError) {
       console.error(
-        "Gemini AI Write parse error:",
+        "AI Write parse error:",
         apiError?.response?.data || apiError.message,
       );
       return res.status(apiError?.status === 503 ? 503 : 502).json({
-        error: "Failed to contact Gemini for AI Write",
-        details: apiError?.response?.data || apiError.message,
+        error:
+          apiError?.message ||
+          "AI assistant is temporarily experiencing high demand. Please try again.",
+        details:
+          apiError?.response?.data || apiError.details || apiError.message,
       });
     }
 
@@ -2290,7 +2189,7 @@ router.post("/parse-clinical-note", async (req, res) => {
     ) {
       return res
         .status(500)
-        .json({ error: "Invalid response from Gemini AI Write" });
+        .json({ error: "Invalid response from AI Write" });
     }
 
     let content = response.data.choices[0].message.content.trim();
@@ -2449,12 +2348,15 @@ router.post("/review-followup", async (req, res) => {
       });
     } catch (apiError) {
       console.error(
-        "Gemini review follow-up error:",
+        "Review follow-up AI error:",
         apiError?.response?.data || apiError.message,
       );
       return res.status(apiError?.status === 503 ? 503 : 502).json({
-        error: "Failed to contact Gemini for AI Write",
-        details: apiError?.response?.data || apiError.message,
+        error:
+          apiError?.message ||
+          "AI assistant is temporarily experiencing high demand. Please try again.",
+        details:
+          apiError?.response?.data || apiError.details || apiError.message,
       });
     }
 
@@ -2464,7 +2366,7 @@ router.post("/review-followup", async (req, res) => {
     ) {
       return res
         .status(500)
-        .json({ error: "Invalid response from Gemini AI Write" });
+        .json({ error: "Invalid response from AI Write" });
     }
 
     let content = response.data.choices[0].message.content.trim();

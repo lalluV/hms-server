@@ -533,12 +533,90 @@ router.get("/", async (req, res) => {
       .skip(skip)
       .limit(limitNum);
 
-    const formattedPatients = patients.map((patient) => ({
-      ...patient.toObject(),
-      registration_date: new Date(
-        patient.registration_date,
-      ).toLocaleDateString(),
-    }));
+    const patientIds = patients.map((p) => p._id);
+    const umrNos = patients.map((p) => p.UMRNo).filter(Boolean);
+
+    const visitMap = new Map();
+    if (patientIds.length > 0 || umrNos.length > 0) {
+      const Prescription = req.tenantDb.model("Prescription");
+      const todayStr = dayjs().format("YYYY-MM-DD");
+
+      const rxList = await Prescription.find({
+        hospitalId: req.hospitalId,
+        $or: [
+          { patientId: { $in: patientIds } },
+          { UMRNo: { $in: umrNos } },
+        ],
+      })
+        .select(
+          "patientId UMRNo prescriptionId doctorId doctorName consultantDoctor date createdAt medicineData diagnosticData symptoms provisionalDiagnosis",
+        )
+        .sort({ createdAt: -1, date: -1 })
+        .lean();
+
+      for (const rx of rxList) {
+        const pKey1 = rx.patientId ? String(rx.patientId) : null;
+        const pKey2 = rx.UMRNo ? String(rx.UMRNo) : null;
+
+        const rxDateStr = String(rx.date || "").slice(0, 10);
+        const rxCreatedStr = rx.createdAt
+          ? new Date(rx.createdAt).toISOString().slice(0, 10)
+          : "";
+        const isToday = rxDateStr === todayStr || rxCreatedStr === todayStr;
+
+        const keys = [pKey1, pKey2].filter(Boolean);
+        for (const k of keys) {
+          if (!visitMap.has(k)) {
+            visitMap.set(k, {
+              lastVisitDate: rx.date || rx.createdAt,
+              lastDoctorName: rx.consultantDoctor || rx.doctorName || "",
+              lastPrescriptionId: rx.prescriptionId,
+              todayVisit: null,
+              lastRxCount: (rx.medicineData || []).length,
+              lastTestCount: (rx.diagnosticData || []).length,
+              lastDiagnosis: rx.provisionalDiagnosis || "",
+              lastSymptoms: rx.symptoms || "",
+            });
+          }
+          const curr = visitMap.get(k);
+          if (isToday && !curr.todayVisit) {
+            curr.todayVisit = {
+              prescriptionId: rx.prescriptionId,
+              date: rx.date || rx.createdAt,
+              doctorName: rx.doctorName || "",
+              consultantDoctor: rx.consultantDoctor || rx.doctorName || "",
+              doctorId: rx.doctorId || "",
+              createdAt: rx.createdAt,
+              medicineCount: (rx.medicineData || []).length,
+              testCount: (rx.diagnosticData || []).length,
+            };
+          }
+        }
+      }
+    }
+
+    const formattedPatients = patients.map((patient) => {
+      const pObj = patient.toObject();
+      const rxInfo =
+        visitMap.get(String(patient._id)) ||
+        visitMap.get(String(patient.UMRNo)) ||
+        {};
+
+      return {
+        ...pObj,
+        registration_date: new Date(
+          patient.registration_date,
+        ).toLocaleDateString(),
+        lastVisitDate: rxInfo.lastVisitDate || null,
+        lastDoctorName: rxInfo.lastDoctorName || null,
+        lastPrescriptionId: rxInfo.lastPrescriptionId || null,
+        todayVisit: rxInfo.todayVisit || null,
+        lastRxCount: rxInfo.lastRxCount || 0,
+        lastTestCount: rxInfo.lastTestCount || 0,
+        lastDiagnosis: rxInfo.lastDiagnosis || "",
+        lastSymptoms: rxInfo.lastSymptoms || "",
+      };
+    });
 
     res.json({
       patients: formattedPatients,

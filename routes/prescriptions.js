@@ -49,6 +49,108 @@ function slimMedicine(med = {}) {
   };
 }
 
+function cleanAndDeduplicateServerNote(text) {
+  if (!text || !String(text).trim()) return "";
+  const raw = String(text).trim();
+  const SECTION_REGEX =
+    /^(Complaints|History|Examination|Vitals|Diagnosis|Medicines?|Medications?|Rx|Investigations?|Labs?|Lab\s*Tests?|Procedures?|Advice|Past Medical History|Provisional Diagnosis)\s*:\s*(.*)$/i;
+
+  const lines = raw.split(/\r?\n/);
+  const hasSections = lines.some((l) => SECTION_REGEX.test(l.trim()));
+
+  if (hasSections) {
+    const sections = new Map();
+    const preamble = [];
+    let currentKey = null;
+
+    for (const rawLine of lines) {
+      const line = rawLine.trimEnd();
+      const match = line.trim().match(SECTION_REGEX);
+      if (match) {
+        let key = match[1].trim();
+        const lower = key.toLowerCase();
+        if (lower === "provisional diagnosis") key = "Diagnosis";
+        else if (lower === "past medical history") key = "History";
+        else {
+          key = key.charAt(0).toUpperCase() + key.slice(1);
+        }
+
+        if (!sections.has(key)) {
+          sections.set(key, []);
+        }
+        currentKey = key;
+        const inline = match[2]?.trim();
+        if (inline) {
+          const bullet = inline.replace(/^[-*•]\s*/, "").trim();
+          if (bullet) sections.get(key).push(bullet);
+        }
+        continue;
+      }
+
+      if (!currentKey) {
+        if (line.trim()) preamble.push(line.trim());
+        continue;
+      }
+
+      const bullet = line.trim().replace(/^[-*•]\s*/, "").trim();
+      if (bullet) sections.get(currentKey).push(bullet);
+    }
+
+    const parts = [];
+    if (preamble.length > 0) {
+      const uniquePreamble = [...new Set(preamble)];
+      parts.push(uniquePreamble.map((p) => `• ${p}`).join("\n"));
+    }
+
+    const order = [
+      "Complaints",
+      "History",
+      "Examination",
+      "Diagnosis",
+      "Advice",
+      "Procedures",
+    ];
+    for (const k of sections.keys()) {
+      if (!order.includes(k)) order.push(k);
+    }
+
+    for (const k of order) {
+      const bullets = sections.get(k);
+      if (!bullets || !bullets.length) continue;
+      const seen = new Set();
+      const unique = [];
+      for (const b of bullets) {
+        const bl = b.toLowerCase();
+        if (!seen.has(bl)) {
+          seen.add(bl);
+          unique.push(`• ${b}`);
+        }
+      }
+      if (unique.length > 0) {
+        parts.push(`${k}:\n${unique.join("\n")}`);
+      }
+    }
+    if (parts.length > 0) {
+      return parts.join("\n\n").trim();
+    }
+  }
+
+  const paragraphs = raw
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const seen = new Set();
+  const uniqueParas = [];
+  for (const p of paragraphs) {
+    const lower = p.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      uniqueParas.push(p);
+    }
+  }
+  return uniqueParas.join("\n\n");
+}
+
 function buildPublicPatient(patient) {
   return {
     name: patient.name,
@@ -459,6 +561,8 @@ router.post("/check-in", async (req, res) => {
       doctorName,
       consultantDoctor,
       reuseToday = true,
+      duplicatePastRx = false,
+      forceNew = false,
     } = req.body || {};
 
     let patient = null;
@@ -502,7 +606,7 @@ router.post("/check-in", async (req, res) => {
     const today = new Date().toISOString().slice(0, 10);
     const dateRange = buildDateStringRange(today, today);
 
-    if (reuseToday) {
+    if (reuseToday && !forceNew) {
       const existing = await Prescription.findOne({
         hospitalId: req.hospitalId,
         $or: [{ patientId: patient._id }, { UMRNo: patient.UMRNo }],
@@ -522,6 +626,102 @@ router.post("/check-in", async (req, res) => {
       }
     }
 
+    // Duplicate past visit Rx (entire prescription: medicines, tests, diagnosis, complaints, vitals)
+    let pastMedicineData = [];
+    let pastDiagnosticData = [];
+    let pastDoctorNotes = [];
+    let pastSymptoms = "";
+    let pastProvisionalDiagnosis = "";
+    let pastWeight = "";
+    let pastHeight = "";
+
+    if (duplicatePastRx === true || duplicatePastRx === "true") {
+      const pastPrescription = await Prescription.findOne({
+        hospitalId: req.hospitalId,
+        $or: [{ patientId: patient._id }, { UMRNo: patient.UMRNo }],
+      })
+        .sort({ createdAt: -1 })
+        .lean();
+
+      if (pastPrescription) {
+        if (
+          Array.isArray(pastPrescription.medicineData) &&
+          pastPrescription.medicineData.length > 0
+        ) {
+          pastMedicineData = pastPrescription.medicineData.map((m, idx) => ({
+            ...m,
+            lineId: `med_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 7)}`,
+            pharmacyBilled: false,
+            indentSent: false,
+            billedQuantity: 0,
+            dispensed: false,
+            status: "active",
+          }));
+        }
+
+        if (
+          Array.isArray(pastPrescription.diagnosticData) &&
+          pastPrescription.diagnosticData.length > 0
+        ) {
+          pastDiagnosticData = pastPrescription.diagnosticData.map((t, idx) => ({
+            ...t,
+            lineId: `test_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 7)}`,
+            labBilled: false,
+            indentSent: false,
+            billedQuantity: 0,
+            status: "active",
+          }));
+        }
+
+        if (
+          Array.isArray(pastPrescription.doctorNotes) &&
+          pastPrescription.doctorNotes.length > 0
+        ) {
+          const rawJoined = pastPrescription.doctorNotes
+            .map((n) => (n?.content || "").trim())
+            .filter(Boolean)
+            .join("\n\n");
+          const cleanText = cleanAndDeduplicateServerNote(rawJoined);
+          if (cleanText) {
+            pastDoctorNotes = [
+              {
+                content: cleanText,
+                doctorId: String(resolvedDoctorId || ""),
+                doctorName: resolvedDoctorName || "",
+                time: new Date().toISOString(),
+                patient_type: patient.patient_type || "OP",
+              },
+            ];
+          }
+        } else if (pastSymptoms || pastProvisionalDiagnosis) {
+          const noteParts = [];
+          if (pastSymptoms) noteParts.push(`Complaints:\n${pastSymptoms}`);
+          if (pastPrescription.pastMedicalHistory) {
+            noteParts.push(`Past Medical History:\n${pastPrescription.pastMedicalHistory}`);
+          }
+          if (pastProvisionalDiagnosis) {
+            noteParts.push(`Provisional Diagnosis:\n${pastProvisionalDiagnosis}`);
+          }
+          if (noteParts.length > 0) {
+            pastDoctorNotes = [
+              {
+                content: noteParts.join("\n\n"),
+                time: new Date().toISOString(),
+                doctorId: String(resolvedDoctorId || ""),
+                doctorName: resolvedDoctorName || "",
+                patient_type: patient.patient_type || "OP",
+              },
+            ];
+          }
+        }
+
+        pastSymptoms = pastPrescription.symptoms || "";
+        pastProvisionalDiagnosis = pastPrescription.provisionalDiagnosis || "";
+        pastWeight = pastPrescription.weight || "";
+        pastHeight = pastPrescription.height || "";
+      }
+    }
+
     const prescriptionId = `RX-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`;
     const prescriptionDoc = new Prescription({
       prescriptionId,
@@ -532,13 +732,15 @@ router.post("/check-in", async (req, res) => {
       doctorName: resolvedDoctorName,
       consultantDoctor: resolvedDoctorName,
       date: new Date().toISOString().split("T")[0],
-      symptoms: "",
-      provisionalDiagnosis: "",
+      symptoms: pastSymptoms || "",
+      provisionalDiagnosis: pastProvisionalDiagnosis || "",
+      weight: pastWeight || "",
+      height: pastHeight || "",
       vitals: [],
-      doctorNotes: [],
+      doctorNotes: pastDoctorNotes,
       nurseNotes: [],
-      diagnosticData: [],
-      medicineData: [],
+      diagnosticData: pastDiagnosticData,
+      medicineData: pastMedicineData,
       paymentMethod: patient.paymentMethod || "Personal",
       insurance_provider: patient.insurance_provider,
       insurance_providerId: patient.insurance_providerId,

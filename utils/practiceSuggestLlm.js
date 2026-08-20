@@ -3,100 +3,38 @@
  * Never invent clinical facts; prefer exact memory hint phrases.
  */
 
-const { GoogleGenAI } = require("@google/genai");
+const {
+  aiCompletionWithFallback,
+} = require("./aiCompletionWithFallback");
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const PARSE_NOTE_MODEL =
   process.env.GEMINI_PARSE_MODEL ||
   process.env.GEMINI_TRANSCRIBE_MODEL ||
   "gemini-3.1-flash-lite";
+const OPENAI_MODEL =
+  process.env.OPENAI_FALLBACK_MODEL ||
+  process.env.OPENAI_MODEL ||
+  "gpt-4.1-mini";
 const SUGGEST_TIMEOUT_MS =
   Number(process.env.GEMINI_SUGGEST_TIMEOUT_MS) || 25000;
 const SUGGEST_MAX_TOKENS =
   Number(process.env.GEMINI_SUGGEST_MAX_TOKENS) || 3072;
 
-function withTimeout(promise, timeoutMs) {
-  if (!timeoutMs || timeoutMs <= 0) return promise;
-  let timer;
-  const timeoutPromise = new Promise((_, reject) => {
-    timer = setTimeout(() => {
-      const err = new Error(`AI suggest timed out after ${timeoutMs}ms`);
-      err.code = "ECONNABORTED";
-      reject(err);
-    }, timeoutMs);
-  });
-  return Promise.race([promise, timeoutPromise]).finally(() => {
-    if (timer) clearTimeout(timer);
-  });
-}
-
-function openAiMessagesToGemini(messages) {
-  const list = Array.isArray(messages) ? messages : [];
-  const systemChunks = [];
-  const contents = [];
-  for (const message of list) {
-    const text = String(message?.content || "").trim();
-    if (!text) continue;
-    if (message.role === "system") {
-      systemChunks.push(text);
-      continue;
-    }
-    const role = message.role === "assistant" ? "model" : "user";
-    const prev = contents[contents.length - 1];
-    if (prev && prev.role === role) {
-      prev.parts[0].text = `${prev.parts[0].text}\n\n${text}`;
-    } else {
-      contents.push({ role, parts: [{ text }] });
-    }
-  }
-  if (!contents.length) {
-    contents.push({ role: "user", parts: [{ text: "Return valid JSON." }] });
-  }
-  if (contents[0].role !== "user") {
-    contents.unshift({
-      role: "user",
-      parts: [{ text: "Return valid JSON." }],
-    });
-  }
-  return {
-    systemInstruction: systemChunks.length
-      ? systemChunks.join("\n\n")
-      : undefined,
-    contents,
-  };
-}
-
 async function callSuggestJsonCompletion(
   messages,
   maxTokens = SUGGEST_MAX_TOKENS,
 ) {
-  if (!GEMINI_API_KEY) {
-    const err = new Error("GEMINI_API_KEY is not configured");
-    err.status = 503;
-    throw err;
-  }
+  const result = await aiCompletionWithFallback(messages, {
+    geminiModel: PARSE_NOTE_MODEL,
+    openAiModel: OPENAI_MODEL,
+    timeoutMs: SUGGEST_TIMEOUT_MS,
+    maxTokens,
+    responseJson: true,
+  });
 
-  const { systemInstruction, contents } = openAiMessagesToGemini(messages);
-  const client = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-  const config = {
-    temperature: 0,
-    topP: 0.8,
-    maxOutputTokens: maxTokens,
-    responseMimeType: "application/json",
-    thinkingConfig: { thinkingLevel: "minimal" },
-  };
-  if (systemInstruction) config.systemInstruction = systemInstruction;
-
-  const response = await withTimeout(
-    client.models.generateContent({
-      model: PARSE_NOTE_MODEL,
-      contents,
-      config,
-    }),
-    SUGGEST_TIMEOUT_MS,
-  );
-
-  const content = String(response?.text || "").trim();
+  const content = String(
+    result?.data?.choices?.[0]?.message?.content || "",
+  ).trim();
   if (!content) throw new Error("Empty LLM suggest response");
   return JSON.parse(content);
 }
