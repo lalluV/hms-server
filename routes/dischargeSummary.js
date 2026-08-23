@@ -1445,8 +1445,8 @@ function mergeChartDelta(currentChart, delta) {
     }
 
     if (kind === "add" && op.medicine) {
-      // Always add a review draft row — same as AI Write, even if already on visit.
-      medicines.push({
+      // Always add a review draft row at top line — same as AI Write, even if already on visit.
+      medicines.unshift({
         ...op.medicine,
         generic_name: "",
         action: "add",
@@ -1456,8 +1456,8 @@ function mergeChartDelta(currentChart, delta) {
       if (activeIdx >= 0) {
         const prev = medicines[activeIdx];
         if (itemOrigin(prev) === "visit") {
-          // Don't overwrite visit context — add a review copy (AI Write style).
-          medicines.push({
+          // Don't overwrite visit context — add a review copy at top (AI Write style).
+          medicines.unshift({
             ...op.medicine,
             generic_name: "",
             action: "add",
@@ -1472,7 +1472,7 @@ function mergeChartDelta(currentChart, delta) {
           };
         }
       } else {
-        medicines.push({
+        medicines.unshift({
           ...op.medicine,
           generic_name: "",
           action: "add",
@@ -1507,7 +1507,7 @@ function mergeChartDelta(currentChart, delta) {
             ["stop", "restart"].includes(String(m?.action || "").toLowerCase())
           ),
       );
-      medicines.push({
+      medicines.unshift({
         ...(op.medicine || { name: op.match }),
         name:
           String(op?.medicine?.name || op?.match || "").trim() ||
@@ -1565,7 +1565,7 @@ function mergeChartDelta(currentChart, delta) {
           String(t?.action || "add").toLowerCase() === "add",
       );
       if (!alreadyReviewAdd) {
-        labTests.push({ name: op.name, action: "add", origin: "review" });
+        labTests.unshift({ name: op.name, action: "add", origin: "review" });
       }
     } else if (kind === "remove" && target) {
       const wasVisit =
@@ -1622,7 +1622,7 @@ function mergeChartDelta(currentChart, delta) {
           String(p?.action || "add").toLowerCase() === "add",
       );
       if (!alreadyReviewAdd) {
-        procedures.push({ name: op.name, action: "add", origin: "review" });
+        procedures.unshift({ name: op.name, action: "add", origin: "review" });
       }
     } else if (kind === "remove" && target) {
       procedures = procedures.filter((p) => nameKey(p) !== target);

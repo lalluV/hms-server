@@ -16,14 +16,17 @@ const GEMINI_TRANSCRIBE_MODEL =
 const INLINE_MAX_BYTES = 15 * 1024 * 1024;
 
 const TRANSCRIBE_PROMPT =
-  "Transcribe this medical consult / dictation audio accurately.\n" +
-  "Rules:\n" +
-  "- Output ONLY the transcript text. No preamble, labels, or markdown.\n" +
-  "- Use the speaker’s language and script (auto-detect; support code-switching).\n" +
-  "- Keep medicine names, strengths, frequencies (OD/BD/TDS/SOS/HS), lab abbreviations, numbers and doses as spoken.\n" +
-  "- Do not invent clinical content. Do not structure into a chart.\n" +
-  "- Skip pure greetings with no clinical content.\n" +
-  "- If there is no speech, return an empty string.";
+  "You are a strict verbatim medical audio transcription system.\n\n" +
+  "TASK:\n" +
+  "Transcribe the provided audio clip accurately and verbatim.\n\n" +
+  "CRITICAL RULES TO PREVENT HALLUCINATIONS ON SILENCE OR NOISE:\n" +
+  "1. SILENCE & BACKGROUND NOISE: If the audio contains silence, static, hiss, breathing, keyboard typing, coughs, room background noise, or inaudible mumbles with NO clear spoken words, you MUST return an EXACT EMPTY STRING: \"\".\n" +
+  "2. NEVER GUESS OR INVENT WORDS: Do NOT hallucinate, infer, or complete sentences that were not explicitly spoken by a person in the recording.\n" +
+  "3. NO PLACEHOLDERS OR DISCLAIMERS: Do NOT output labels or filler phrases like '[silence]', '[no audio]', '[ambient noise]', '[background noise]', 'Thank you', 'Thank you for watching', 'Subtitles by', 'None', 'Silence', or transcription disclaimers.\n" +
+  "4. VERBATIM ONLY: Output ONLY the exact spoken transcript text. No greetings, no preamble, no markdown formatting, no conversational replies, and no chart structuring.\n" +
+  "5. MEDICAL ACCURACY: Preserve spoken medicine names, dosages, strengths, frequencies (e.g. OD, BD, TDS, QID, SOS, HS), routes, lab test names, numbers, and clinical terms precisely as spoken.\n" +
+  "6. LANGUAGE: Transcribe in the speaker's language and script (support multilingual medical dictation and code-switching).\n" +
+  "7. If you are not 100% confident actual human words are spoken, output nothing (empty string \"\").";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -33,17 +36,75 @@ const upload = multer({
   },
 });
 
+const KNOWN_SILENCE_HALLUCINATIONS = new Set([
+  "",
+  ".",
+  "...",
+  "you",
+  "thank you",
+  "thank you.",
+  "thank you!",
+  "thank you for watching",
+  "thank you for watching.",
+  "thank you very much.",
+  "subtitles by the amara.org community",
+  "subtitles by",
+  "please subscribe",
+  "thanks for watching",
+  "thanks for watching!",
+  "silence",
+  "silence.",
+  "[silence]",
+  "[noise]",
+  "[background noise]",
+  "[ambient noise]",
+  "[music]",
+  "[applause]",
+  "[laughter]",
+  "[inaudible]",
+  "[unintelligible]",
+  "no audio",
+  "no speech",
+  "no speech detected",
+  "no speech detected.",
+  "no words spoken",
+  "none",
+  "bye",
+  "bye.",
+  "goodbye",
+  "goodbye.",
+]);
+
 function extractText(response) {
   if (!response) return "";
+  let raw = "";
   if (typeof response.text === "string" && response.text.trim()) {
-    return response.text.trim();
+    raw = response.text.trim();
+  } else {
+    const parts = response?.candidates?.[0]?.content?.parts;
+    if (Array.isArray(parts)) {
+      raw = parts
+        .map((p) => (typeof p?.text === "string" ? p.text : ""))
+        .join("")
+        .trim();
+    }
   }
-  const parts = response?.candidates?.[0]?.content?.parts;
-  if (!Array.isArray(parts)) return "";
-  return parts
-    .map((p) => (typeof p?.text === "string" ? p.text : ""))
-    .join("")
-    .trim();
+
+  // Strip markdown code blocks if present
+  raw = raw.replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "").trim();
+
+  // Silence & hallucination guard
+  const normalized = raw.toLowerCase().replace(/[.,!?;:'"]/g, "").trim();
+  if (
+    !raw ||
+    KNOWN_SILENCE_HALLUCINATIONS.has(normalized) ||
+    KNOWN_SILENCE_HALLUCINATIONS.has(raw.toLowerCase().trim()) ||
+    /^\[.*\]$/.test(raw.trim())
+  ) {
+    return "";
+  }
+
+  return raw;
 }
 
 /**
@@ -144,7 +205,9 @@ router.post("/transcribe", upload.single("audio"), async (req, res) => {
       model: GEMINI_TRANSCRIBE_MODEL,
       contents,
       config: {
-        temperature: 0.2,
+        temperature: 0.0, // Strict zero temperature to eliminate hallucinations on silence
+        systemInstruction:
+          "You are a strict verbatim audio transcription assistant. If the audio is silent or contains only background room noise, you must return an empty string with zero words. Never hallucinate or guess speech.",
       },
     });
 
