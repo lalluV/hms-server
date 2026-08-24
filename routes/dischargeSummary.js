@@ -124,6 +124,7 @@ Rules:
 - Same-day "and"/"also"/"plus" doses stay ONE row.
 - "then"/"next"/"followed by"/"→" with changing strength or schedule → SEPARATE rows (one object per step).
 - Short course "days then stop" stays ONE add row (not a taper split into stop).
+- CHRONOLOGICAL ORDER (STRICT): Output taper steps in exact start-to-finish chronological sequence (Step 1 starting highest/initial dose FIRST, then Step 2, then Step 3 lowest dose). NEVER reverse the order.
 - Keep the spoken name on every step (brand if brand was spoken). Leave generic_name "".
 - directions: simple morning/afternoon/evening/night English (no twice/thrice/BD/OD/TDS as patient text).
 - dosages: time, amount, beforeFood; unit "" for Tablet/Capsules/Injection unless IU or ml stated.
@@ -444,6 +445,7 @@ TAPERS / SEQUENTIAL (MULTI medicines[] ROWS — REQUIRED)
 - Count strength/schedule steps after each "then". medicines[] length for that drug MUST equal that step count.
 - Each step: own name (with that step's strength), frequency, duration, directions (that step only), dosages, action "add".
 - Short course "… days then stop" → ONE add row; put "then stop" in directions; action is NOT stop.
+- CHRONOLOGICAL SEQUENCE (CRITICAL — NEVER REVERSE): Sequential taper steps in medicines[] MUST appear in exact chronological order: Step 1 (initial starting dose) FIRST, then Step 2 (next tapered dose), then Step 3 (lowest/final dose). NEVER list later taper steps before earlier ones. NEVER reverse the direction of a taper (e.g. from 20mg to 5mg must be 20mg first, 10mg second, 5mg third; NEVER 5mg -> 10mg -> 20mg).
 
 TAPER SHAPE (follow this structure — names are anonymous placeholders only):
 Doctor: "BrandX 20 bd 5d then 10 3d then 5 3d"
@@ -943,6 +945,7 @@ REVIEW FOLLOW-UP MODE — PATCH ONLY (CRITICAL — KEEP OUTPUT TINY)
 - Prefer ≤ 6 ops total. Prefer clear* flags for bulk clears. Never copy the whole chart.
 - Match existing items using their exact "name" as given in CURRENT CHART.
 - Apply the normal clinical formatting rules above to any medicine you add or edit.
+- TAPERS / SEQUENTIAL: When adding or editing a taper, output the steps in exact chronological start-to-finish order (Step 1 starting dose FIRST, then Step 2, then Step 3 lowest dose). NEVER reverse the order.
 - ADD EVEN IF ALREADY ON VISIT: if the doctor asks to add a medicine/lab/procedure that is already origin "visit" / action "on_visit", still emit op "add". Do NOT skip, and do NOT use "edit" for that — the app adds a new review row (same as AI Write; UI may show On Rx).
 - assistantReply is required: one short spoken sentence to the doctor (like a quick verbal confirm). Confirm only what this patch actually changes — warm, plain English, not robotic. Examples: "Okay — I've stopped Pantop." / "Got it, Dolo is now three times a day." / "Nothing to change on the chart from that."
 - Leave arrays/objects empty ({} or []) for anything the instruction did not touch.
@@ -1422,6 +1425,7 @@ function mergeChartDelta(currentChart, delta) {
     );
   }
 
+  let addedMedIndex = 0;
   for (const op of Array.isArray(d.medicineOps) ? d.medicineOps : []) {
     const matchName = String(op?.match || "")
       .trim()
@@ -1445,43 +1449,43 @@ function mergeChartDelta(currentChart, delta) {
     }
 
     if (kind === "add" && op.medicine) {
-      // Always add a review draft row at top line — same as AI Write, even if already on visit.
-      medicines.unshift({
+      // Always add a review draft row at top line in forward sequence — same as AI Write, even if already on visit.
+      medicines.splice(addedMedIndex++, 0, {
         ...op.medicine,
         generic_name: "",
         action: "add",
         origin: "review",
       });
     } else if (kind === "edit" && op.medicine) {
+      const stepsToInsert =
+        Array.isArray(op.steps) && op.steps.length > 0
+          ? op.steps
+          : [op.medicine];
+      const formattedSteps = stepsToInsert.map((step) => ({
+        ...step,
+        generic_name: "",
+        action: "add",
+        origin: "review",
+      }));
+
       if (activeIdx >= 0) {
         const prev = medicines[activeIdx];
         if (itemOrigin(prev) === "visit") {
-          // Don't overwrite visit context — add a review copy at top (AI Write style).
-          medicines.unshift({
-            ...op.medicine,
-            generic_name: "",
-            action: "add",
-            origin: "review",
-          });
+          // Don't overwrite visit context — add review copies at top (in original forward order).
+          medicines.splice(addedMedIndex, 0, ...formattedSteps);
+          addedMedIndex += formattedSteps.length;
         } else {
-          medicines[activeIdx] = {
-            ...op.medicine,
-            generic_name: "",
-            action: "add",
-            origin: "review",
-          };
+          // Replace review row in-place with all steps in sequence
+          medicines.splice(activeIdx, 1, ...formattedSteps);
         }
       } else {
-        medicines.unshift({
-          ...op.medicine,
-          generic_name: "",
-          action: "add",
-          origin: "review",
-        });
+        medicines.splice(addedMedIndex, 0, ...formattedSteps);
+        addedMedIndex += formattedSteps.length;
       }
     } else if (kind === "stop") {
       if (activeIdx >= 0) {
         const [existing] = medicines.splice(activeIdx, 1);
+        if (activeIdx < addedMedIndex) addedMedIndex = Math.max(0, addedMedIndex - 1);
         // Review-origin must never become a visit-delete row.
         if (itemOrigin(existing) === "review") continue;
         medicines.push({
@@ -1507,7 +1511,7 @@ function mergeChartDelta(currentChart, delta) {
             ["stop", "restart"].includes(String(m?.action || "").toLowerCase())
           ),
       );
-      medicines.unshift({
+      medicines.splice(addedMedIndex++, 0, {
         ...(op.medicine || { name: op.match }),
         name:
           String(op?.medicine?.name || op?.match || "").trim() ||
@@ -1545,6 +1549,7 @@ function mergeChartDelta(currentChart, delta) {
     }
   }
 
+  let addedLabIndex = 0;
   for (const op of Array.isArray(d.labOps) ? d.labOps : []) {
     let kind = String(op?.op || "").toLowerCase();
     const target = String(op?.match || op?.name || "")
@@ -1565,7 +1570,7 @@ function mergeChartDelta(currentChart, delta) {
           String(t?.action || "add").toLowerCase() === "add",
       );
       if (!alreadyReviewAdd) {
-        labTests.unshift({ name: op.name, action: "add", origin: "review" });
+        labTests.splice(addedLabIndex++, 0, { name: op.name, action: "add", origin: "review" });
       }
     } else if (kind === "remove" && target) {
       const wasVisit =
@@ -1585,6 +1590,7 @@ function mergeChartDelta(currentChart, delta) {
     } else if (kind === "stop" && target) {
       if (idx >= 0) {
         const [existing] = labTests.splice(idx, 1);
+        if (idx < addedLabIndex) addedLabIndex = Math.max(0, addedLabIndex - 1);
         if (itemOrigin(existing) === "review") {
           // drop — do not queue visit-delete for review drafts
         } else {
@@ -1604,6 +1610,7 @@ function mergeChartDelta(currentChart, delta) {
     }
   }
 
+  let addedProcIndex = 0;
   for (const op of Array.isArray(d.procedureOps) ? d.procedureOps : []) {
     let kind = String(op?.op || "").toLowerCase();
     const target = String(op?.match || op?.name || "")
@@ -1622,13 +1629,14 @@ function mergeChartDelta(currentChart, delta) {
           String(p?.action || "add").toLowerCase() === "add",
       );
       if (!alreadyReviewAdd) {
-        procedures.unshift({ name: op.name, action: "add", origin: "review" });
+        procedures.splice(addedProcIndex++, 0, { name: op.name, action: "add", origin: "review" });
       }
     } else if (kind === "remove" && target) {
       procedures = procedures.filter((p) => nameKey(p) !== target);
     } else if (kind === "stop" && target) {
       if (idx >= 0) {
         const [existing] = procedures.splice(idx, 1);
+        if (idx < addedProcIndex) addedProcIndex = Math.max(0, addedProcIndex - 1);
         if (itemOrigin(existing) !== "review") {
           procedures.push({
             ...(typeof existing === "string" ? { name: existing } : existing),
@@ -1685,9 +1693,12 @@ async function expandTapersInMedicineOps(medicineOps, instruction) {
         op.medicine,
         instruction,
       );
-      expandedOps.push({ ...op, medicine: steps[0] });
-      for (let i = 1; i < steps.length; i += 1) {
-        expandedOps.push({ op: "add", medicine: steps[i] });
+      if (kind === "edit") {
+        expandedOps.push({ ...op, medicine: steps[0], steps });
+      } else {
+        for (const step of steps) {
+          expandedOps.push({ ...op, op: "add", medicine: step });
+        }
       }
     } else {
       expandedOps.push(op);
