@@ -16,6 +16,7 @@ const {
   IPD_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM,
   buildIpdReviewFollowUpUserPrompt,
   mergeIpdChartDelta,
+  formatDoctorNotesLayout,
 } = require("../utils/ipdAi");
 const {
   OPD_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM,
@@ -103,7 +104,24 @@ function medicineTextBlob(med = {}) {
 /** Heuristic only: decide whether to ask the model to re-split medicines. */
 function medicineLooksPackedTaper(med = {}) {
   const blob = medicineTextBlob(med);
-  if (!/\b(?:then|followed\s+by)\b|→/i.test(blob)) return false;
+  const name = String(med?.name || med?.description || "");
+
+  // Slash-packed strengths in the name: "Wysolone 40mg/30mg/20mg/10mg"
+  if (
+    /\d+(?:\.\d+)?\s*(?:mg|mcg|µg|ug|g|gm)?\s*\/\s*\d+(?:\.\d+)?/i.test(name)
+  ) {
+    return true;
+  }
+
+  // "Tapering dose: 40mg …, 30mg …" (no "then" keyword)
+  if (/\btaper(?:ing|ed|s)?\b/i.test(blob)) {
+    const strengths = blob.match(
+      /\b\d+(?:\.\d+)?\s*(?:mg|mcg|µg|ug|g|gm)\b/gi,
+    );
+    if (strengths && strengths.length >= 2) return true;
+  }
+
+  if (!/\b(?:then|followed\s+by|next)\b|→/i.test(blob)) return false;
   const withoutCourseStop = blob.replace(/\bthen\s+stop\b/gi, " ");
   if (
     /\bthen\s+stop\b/i.test(blob) &&
@@ -135,13 +153,10 @@ Rules:
 - "then"/"next"/"followed by"/"→" with changing strength or schedule → SEPARATE rows (one object per step).
 - Short course "days then stop" stays ONE add row (not a taper split into stop).
 - CHRONOLOGICAL ORDER (STRICT): Output taper steps in exact start-to-finish chronological sequence (Step 1 starting highest/initial dose FIRST, then Step 2, then Step 3 lowest dose). NEVER reverse the order.
+- Also split slash-packed names and "Tapering dose:" multi-strength blurbs into one object per strength.
 - Keep the spoken name on every step (brand if brand was spoken). Leave generic_name "".
 - directions: simple morning/afternoon/evening/night English (no twice/thrice/BD/OD/TDS as patient text).
-- dosages: time, amount, beforeFood; unit "" for Tablet/Capsules/Injection unless IU or ml stated.
-
-Shape example (anonymous):
-Input packed: BrandX 20 bd 5d then 10 3d then 5 3d
-Output length 3: BrandX 20 (5 days), BrandX 10 (next 3 days), BrandX 5 (next 3 days).`;
+- dosages: time, amount, beforeFood; unit "" for Tablet/Capsules/Injection unless IU or ml stated.`;
 
 async function expandPackedTapersWithAi(medicines = [], clinicalNote = "") {
   const list = Array.isArray(medicines) ? medicines : [];
@@ -455,15 +470,7 @@ TAPERS / SEQUENTIAL (MULTI medicines[] ROWS — REQUIRED)
 - Count strength/schedule steps after each "then". medicines[] length for that drug MUST equal that step count.
 - Each step: own name (with that step's strength), frequency, duration, directions (that step only), dosages, action "add".
 - Short course "… days then stop" → ONE add row; put "then stop" in directions; action is NOT stop.
-- CHRONOLOGICAL SEQUENCE (CRITICAL — NEVER REVERSE): Sequential taper steps in medicines[] MUST appear in exact chronological order: Step 1 (initial starting dose) FIRST, then Step 2 (next tapered dose), then Step 3 (lowest/final dose). NEVER list later taper steps before earlier ones. NEVER reverse the direction of a taper (e.g. from 20mg to 5mg must be 20mg first, 10mg second, 5mg third; NEVER 5mg -> 10mg -> 20mg).
-
-TAPER SHAPE (follow this structure — names are anonymous placeholders only):
-Doctor: "BrandX 20 bd 5d then 10 3d then 5 3d"
-Correct medicines[] (length 3):
-1) name "BrandX 20", duration "5 days", directions morning+evening for 5 days, dosages Morning+Evening
-2) name "BrandX 10", duration "next 3 days", directions morning+evening for next 3 days, dosages Morning+Evening
-3) name "BrandX 5", duration "next 3 days", directions morning+evening for next 3 days, dosages Morning+Evening
-Wrong: one medicine whose directions list all three steps.
+- CHRONOLOGICAL SEQUENCE (CRITICAL — NEVER REVERSE): Sequential taper steps in medicines[] MUST appear in exact chronological order: Step 1 (initial starting dose) FIRST, then Step 2 (next tapered dose), then Step 3 (lowest/final dose). NEVER list later taper steps before earlier ones. NEVER reverse the direction of a taper.
 
 STOP / DELETE MEDICINES (REQUIRED)
 - If the doctor says stop / stopped / discontinue / hold / remove / delete / omit a NAMED medicine → include that medicine in medicines[] with action "stop".
@@ -1291,30 +1298,42 @@ function summarizeChartForReplyContext(chart) {
 }
 
 /** Reverse of composeNoteFromSections — recovers bucketed bullets from a composed note. */
-const NOTE_LABEL_TO_KEY = Object.fromEntries(
-  NOTE_SECTION_ORDER.map(([key, label]) => [label.toLowerCase(), key]),
-);
+const NOTE_LABEL_TO_KEY = {
+  ...Object.fromEntries(
+    NOTE_SECTION_ORDER.map(([key, label]) => [label.toLowerCase(), key]),
+  ),
+  advice: "advice",
+  "doctor's advice": "advice",
+  "doctors advice": "advice",
+};
 
 function parseComposedNoteSections(noteText) {
   const text = String(noteText || "").trim();
   if (!text) return {};
   const sections = {};
-  for (const block of text.split(/\n\s*\n/)) {
-    const lines = block
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    if (!lines.length) continue;
-    const headerMatch = lines[0].match(/^([A-Za-z ]+):\s*(.*)$/);
-    if (!headerMatch) continue;
-    const key = NOTE_LABEL_TO_KEY[headerMatch[1].trim().toLowerCase()];
-    if (!key) continue;
-    const rest = lines.slice(1);
-    if (headerMatch[2]?.trim()) rest.unshift(headerMatch[2].trim());
-    const items = rest
-      .map((line) => line.replace(/^[•\-*]\s*/, "").trim())
-      .filter(Boolean);
-    if (items.length) sections[key] = items;
+  let currentKey = null;
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = String(rawLine || "").trim();
+    if (!line) continue;
+    const headerMatch = line.match(/^([A-Za-z' ]+):\s*(.*)$/);
+    if (headerMatch) {
+      const label = headerMatch[1].trim().toLowerCase();
+      const key =
+        NOTE_LABEL_TO_KEY[label] ||
+        NOTE_SECTION_ALIASES[label.replace(/[^a-z]/g, "")];
+      if (key) {
+        currentKey = key;
+        if (!sections[currentKey]) sections[currentKey] = [];
+        const inline = headerMatch[2]?.trim();
+        if (inline) {
+          sections[currentKey].push(inline.replace(/^[•\-*]\s*/, "").trim());
+        }
+        continue;
+      }
+    }
+    if (!currentKey) continue;
+    const item = line.replace(/^[•\-*]\s*/, "").trim();
+    if (item) sections[currentKey].push(item);
   }
   return sections;
 }
@@ -1495,7 +1514,8 @@ function mergeChartDelta(currentChart, delta) {
     } else if (kind === "stop") {
       if (activeIdx >= 0) {
         const [existing] = medicines.splice(activeIdx, 1);
-        if (activeIdx < addedMedIndex) addedMedIndex = Math.max(0, addedMedIndex - 1);
+        if (activeIdx < addedMedIndex)
+          addedMedIndex = Math.max(0, addedMedIndex - 1);
         // Review-origin must never become a visit-delete row.
         if (itemOrigin(existing) === "review") continue;
         medicines.push({
@@ -1580,7 +1600,11 @@ function mergeChartDelta(currentChart, delta) {
           String(t?.action || "add").toLowerCase() === "add",
       );
       if (!alreadyReviewAdd) {
-        labTests.splice(addedLabIndex++, 0, { name: op.name, action: "add", origin: "review" });
+        labTests.splice(addedLabIndex++, 0, {
+          name: op.name,
+          action: "add",
+          origin: "review",
+        });
       }
     } else if (kind === "remove" && target) {
       const wasVisit =
@@ -1639,14 +1663,19 @@ function mergeChartDelta(currentChart, delta) {
           String(p?.action || "add").toLowerCase() === "add",
       );
       if (!alreadyReviewAdd) {
-        procedures.splice(addedProcIndex++, 0, { name: op.name, action: "add", origin: "review" });
+        procedures.splice(addedProcIndex++, 0, {
+          name: op.name,
+          action: "add",
+          origin: "review",
+        });
       }
     } else if (kind === "remove" && target) {
       procedures = procedures.filter((p) => nameKey(p) !== target);
     } else if (kind === "stop" && target) {
       if (idx >= 0) {
         const [existing] = procedures.splice(idx, 1);
-        if (idx < addedProcIndex) addedProcIndex = Math.max(0, addedProcIndex - 1);
+        if (idx < addedProcIndex)
+          addedProcIndex = Math.max(0, addedProcIndex - 1);
         if (itemOrigin(existing) !== "review") {
           procedures.push({
             ...(typeof existing === "string" ? { name: existing } : existing),
@@ -1886,7 +1915,7 @@ function finalizeParsedClinicalNote(parsed, existingContext) {
       ? parsed.lab_tests
       : [];
   const procedures = Array.isArray(parsed.procedures) ? parsed.procedures : [];
-  const noteSections = normalizeNoteSections(
+  let noteSections = normalizeNoteSections(
     parsed.noteSections || parsed.note_sections || parsed.sections,
   );
   const freeTextNote = compactSoapLabels(
@@ -1894,8 +1923,20 @@ function finalizeParsedClinicalNote(parsed, existingContext) {
       parsed.doctorNotes || parsed.doctorNote || parsed.notes || "",
     ).trim(),
   );
-  const sectionNote = composeNoteFromSections(noteSections);
   const isSoapNote = /^\s*[SOAP]\s*:/m.test(freeTextNote);
+
+  // Prefer AI noteSections; else mirror fields. Do not rewrite free-text into sections.
+  if (!noteSections) {
+    noteSections = normalizeNoteSections({
+      complaints: parsed.symptoms,
+      history: parsed.pastMedicalHistory || parsed.pastHistory,
+      examination: parsed.examination || parsed.examFindings,
+      diagnosis: parsed.provisionalDiagnosis || parsed.diagnosis,
+      advice: parsed.advice || parsed.plan,
+    });
+  }
+
+  const sectionNote = composeNoteFromSections(noteSections);
 
   return {
     noteFormat: String(parsed.noteFormat || "narrative").trim(),
@@ -1936,7 +1977,11 @@ function finalizeParsedClinicalNote(parsed, existingContext) {
       parsed.noteOperations || parsed.note_operations,
       existingContext,
     ),
-    doctorNotes: isSoapNote && freeTextNote ? freeTextNote : sectionNote,
+    doctorNotes: formatDoctorNotesLayout(
+      isSoapNote && freeTextNote
+        ? freeTextNote
+        : freeTextNote || sectionNote || "",
+    ),
     noteSections,
     dischargeFields: normalizeDischargeFields(parsed, noteSections),
   };
@@ -2208,9 +2253,7 @@ router.post("/parse-clinical-note", async (req, res) => {
       !response?.data?.choices ||
       !response.data.choices[0]?.message?.content
     ) {
-      return res
-        .status(500)
-        .json({ error: "Invalid response from AI Write" });
+      return res.status(500).json({ error: "Invalid response from AI Write" });
     }
 
     let content = response.data.choices[0].message.content.trim();
@@ -2354,9 +2397,19 @@ router.post("/review-followup", async (req, res) => {
         : REVIEW_FOLLOWUP_SYSTEM_ADDENDUM;
 
     const userPrompt = isOpd
-      ? buildOpdReviewFollowUpUserPrompt(instruction, chart, context, existingContext)
+      ? buildOpdReviewFollowUpUserPrompt(
+          instruction,
+          chart,
+          context,
+          existingContext,
+        )
       : isIpd
-        ? buildIpdReviewFollowUpUserPrompt(instruction, chart, context, existingContext)
+        ? buildIpdReviewFollowUpUserPrompt(
+            instruction,
+            chart,
+            context,
+            existingContext,
+          )
         : REVIEW_FOLLOWUP_USER_PROMPT(
             instruction,
             chart,
@@ -2383,7 +2436,10 @@ router.post("/review-followup", async (req, res) => {
     if (isOpd) {
       console.log("=== [OPD AI FOLLOW-UP INPUT] ===");
       console.log("Instruction:", instruction);
-      console.log("Current Prescription Chart:", JSON.stringify(chart, null, 2));
+      console.log(
+        "Current Prescription Chart:",
+        JSON.stringify(chart, null, 2),
+      );
     }
 
     let response;
@@ -2410,9 +2466,7 @@ router.post("/review-followup", async (req, res) => {
       !response?.data?.choices ||
       !response.data.choices[0]?.message?.content
     ) {
-      return res
-        .status(500)
-        .json({ error: "Invalid response from AI Write" });
+      return res.status(500).json({ error: "Invalid response from AI Write" });
     }
 
     let content = response.data.choices[0].message.content.trim();
@@ -2503,27 +2557,53 @@ router.post("/review-followup", async (req, res) => {
         console.log("Content:", content);
         console.log("Parsed Delta:", JSON.stringify(delta, null, 2));
 
+        // Split packed tapers (e.g. "Wysolone 40mg/30mg/20mg") into step rows
+        // before merging — OPD returns a full medicines[] and used to skip this pass.
+        if (Array.isArray(delta.medicines) && delta.medicines.length) {
+          delta.medicines = await expandPackedTapersWithAi(
+            delta.medicines,
+            instruction,
+          );
+        }
+
         const merged = mergeOpdChartDelta(chart, delta);
         console.log("=== [OPD AI FINAL RESULT] ===");
-        console.log("Medicines:", merged.medicines.map((m) => m.name));
-        console.log("Labs:", merged.labTests.map((t) => typeof t === "string" ? t : t?.name));
+        console.log(
+          "Medicines:",
+          merged.medicines.map((m) => m.name),
+        );
+        console.log(
+          "Labs:",
+          merged.labTests.map((t) => (typeof t === "string" ? t : t?.name)),
+        );
         console.log("Notes:", merged.doctorNotes);
 
         const result = {
           medicines: merged.medicines,
-          labTests: merged.labTests.map((t) => (typeof t === "string" ? t : t?.name || "")).filter(Boolean),
-          procedures: merged.procedures.map((p) => (typeof p === "string" ? p : p?.name || "")).filter(Boolean),
+          labTests: merged.labTests
+            .map((t) => (typeof t === "string" ? t : t?.name || ""))
+            .filter(Boolean),
+          procedures: merged.procedures
+            .map((p) => (typeof p === "string" ? p : p?.name || ""))
+            .filter(Boolean),
           vitals: merged.vitals || {},
           doctorNotes: merged.doctorNotes || "",
           medicinesToApply: merged.medicines,
-          labTestsToApply: merged.labTests.map((t) => (typeof t === "string" ? t : t?.name || "")).filter(Boolean),
-          proceduresToApply: merged.procedures.map((p) => (typeof p === "string" ? p : p?.name || "")).filter(Boolean),
+          labTestsToApply: merged.labTests
+            .map((t) => (typeof t === "string" ? t : t?.name || ""))
+            .filter(Boolean),
+          proceduresToApply: merged.procedures
+            .map((p) => (typeof p === "string" ? p : p?.name || ""))
+            .filter(Boolean),
           medicinesToStop: [],
           medicinesToRestart: [],
           labTestsToStop: [],
           assistantReply:
             String(delta.assistantReply || "").trim() ||
-            buildExtractionReply({ medicines: merged.medicines, labTests: merged.labTests }, instruction),
+            buildExtractionReply(
+              { medicines: merged.medicines, labTests: merged.labTests },
+              instruction,
+            ),
         };
         return res.json(result);
       }

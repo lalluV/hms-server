@@ -5,11 +5,7 @@
  * are returned as the final complete updated prescription chart.
  */
 
-const {
-  mergeNoteWithOps,
-  parseComposedNoteSections,
-  composeNoteFromSections,
-} = require("./ipdAi");
+const { mergeNoteWithOps, formatDoctorNotesLayout } = require("./ipdAi");
 
 function nameKey(item) {
   return String(
@@ -27,34 +23,36 @@ OPD PRESCRIPTION WORKSTATION MODE — COMPLETE PRESCRIPTION OUTPUT
 
 YOUR TASK:
 Return the COMPLETE, FINAL updated prescription reflecting all changes requested in INSTRUCTION:
-1. REPLACE:
-   * When doctor says "replace [Med A] with [Med B]" → Replace [Med A] with [Med B] in the "medicines" array in-place.
-2. DELETE / REMOVE / STOP:
-   * When doctor says "delete [Med A]" or "remove [Med A]" → Omit [Med A] completely from the "medicines" array.
-   * When doctor says "delete [Lab A]" or "remove [Lab A]" → Omit [Lab A] completely from the "labTests" array.
-3. ADD:
-   * When doctor says "add [Med C]" → Add [Med C] to the "medicines" array.
-   * When doctor says "add [Lab B]" → Add [Lab B] to the "labTests" array.
-4. UNTOUCHED ITEMS:
-   * All other unchanged medicines and lab tests MUST remain in their returned arrays.
-5. assistantReply is required:
-   * One warm, concise spoken confirmation sentence (e.g. "Replaced Pantop with Rabeprazole 20mg.", "Removed Dolo 650 from the prescription.").
+1. REPLACE: replace the named medicine in medicines[] in-place.
+2. DELETE / REMOVE / STOP: omit the named medicine or lab from its array.
+3. ADD: add the named medicine or lab to its array (prefer near the start).
+4. TAPERS / SEQUENTIAL DOSES:
+   - Never pack a taper into one medicine row.
+   - Each taper step is its own medicines[] object with its own strength, duration, directions, dosages.
+   - Chronological order: starting dose first, then next steps, lowest last.
+5. UNTOUCHED ITEMS: keep all unchanged medicines and lab tests in the returned arrays.
+6. doctorNotes:
+   - If INSTRUCTION does not change notes → copy doctorNotes from CURRENT PRESCRIPTION exactly. Do not invent or fill notes.
+   - If INSTRUCTION changes notes → return the updated doctorNotes with labeled bullet sections (Complaints, History, Examination, Diagnosis, Advice). Never put med/lab orders in doctorNotes.
+   - Symptom-only instructions without naming a drug or saying to prescribe/add a medicine → put that in doctorNotes Complaints only. Do NOT invent a medicine for a symptom.
+   - Add/change medicines[] only when the doctor names a medicine/product or clearly orders treatment.
+7. assistantReply: one short natural spoken confirmation sentence.
 
 Return EXACTLY this JSON shape:
 {
-  "assistantReply": "One short natural spoken sentence confirming the change",
+  "assistantReply": "string",
   "medicines": [
     {
-      "name": "Medicine name with strength",
+      "name": "string",
       "type": "Tablet|Capsules|Injection|Syrup|Ointment|Gel|Sachet|Drops|Inhaler|Spray|Other",
-      "duration": "5 days",
-      "directions": "Take 1 tablet in the morning before food",
+      "duration": "string",
+      "directions": "string",
       "dosages": [{ "time": "Morning|Afternoon|Evening|Night", "amount": 1, "unit": "", "beforeFood": false }]
     }
   ],
-  "labTests": ["CBC", "RBS"],
+  "labTests": ["string"],
   "procedures": [],
-  "doctorNotes": "Full updated clinical note text",
+  "doctorNotes": "string",
   "vitals": {}
 }
 `;
@@ -108,18 +106,18 @@ ${JSON.stringify(slimChart)}
 INSTRUCTION:
 ${instruction}
 
-REMINDER: Return JSON with complete updated medicines, labTests, doctorNotes, and assistantReply.`;
+REMINDER: Return complete medicines, labTests, doctorNotes, and assistantReply. Copy doctorNotes unchanged unless INSTRUCTION changes notes. Symptom-only words without a named drug go into Complaints notes — never invent medicines for them.`;
 }
 
 /**
  * Merges OPD chart result or fallback delta into final prescription.
+ * Trusts AI fields as returned — no note rewriting / filler heuristics.
  */
 function mergeOpdChartDelta(currentChart, delta) {
   const chart =
     currentChart && typeof currentChart === "object" ? currentChart : {};
   const d = delta && typeof delta === "object" ? delta : {};
 
-  // 1. Direct updated medicines array from model
   let medicines = [];
   if (Array.isArray(d.medicines)) {
     medicines = d.medicines.map((m) => ({
@@ -134,7 +132,6 @@ function mergeOpdChartDelta(currentChart, delta) {
       : [];
   }
 
-  // 2. Direct updated labTests array from model
   let labTests = [];
   if (Array.isArray(d.labTests)) {
     labTests = d.labTests.map((t) =>
@@ -166,7 +163,6 @@ function mergeOpdChartDelta(currentChart, delta) {
         )
       : [];
 
-  // 3. Fallback: If delta returned ops instead of full arrays
   if (Array.isArray(d.medicineOps) && d.medicineOps.length > 0) {
     for (const op of d.medicineOps) {
       const matchName = String(op?.match || "")
@@ -175,11 +171,13 @@ function mergeOpdChartDelta(currentChart, delta) {
       const kind = String(op?.op || "").toLowerCase();
 
       const activeIdx = medicines.findIndex(
-        (m) => nameKey(m) === matchName || (op?.medicine && nameKey(m) === nameKey(op.medicine)),
+        (m) =>
+          nameKey(m) === matchName ||
+          (op?.medicine && nameKey(m) === nameKey(op.medicine)),
       );
 
       if (kind === "add" && op.medicine) {
-        medicines.push({
+        medicines.unshift({
           ...op.medicine,
           generic_name: "",
           action: "add",
@@ -199,7 +197,7 @@ function mergeOpdChartDelta(currentChart, delta) {
         if (activeIdx >= 0) {
           medicines.splice(activeIdx, 1, ...formatted);
         } else {
-          medicines.push(...formatted);
+          medicines.unshift(...formatted);
         }
       } else if (kind === "remove" || kind === "stop" || kind === "delete") {
         if (activeIdx >= 0) {
@@ -220,8 +218,10 @@ function mergeOpdChartDelta(currentChart, delta) {
       const idx = labTests.findIndex((t) => nameKey(t) === target);
 
       if (kind === "add" && op.name) {
-        if (!labTests.some((t) => nameKey(t) === String(op.name).toLowerCase())) {
-          labTests.push({ name: op.name, action: "add", origin: "review" });
+        if (
+          !labTests.some((t) => nameKey(t) === String(op.name).toLowerCase())
+        ) {
+          labTests.unshift({ name: op.name, action: "add", origin: "review" });
         }
       } else if (kind === "remove" || kind === "stop" || kind === "delete") {
         if (idx >= 0) {
@@ -239,11 +239,17 @@ function mergeOpdChartDelta(currentChart, delta) {
     ...(d.vitals || {}),
   };
 
-  let doctorNotes = d.doctorNotes
-    ? d.doctorNotes
-    : d.clearNote
-      ? ""
-      : mergeNoteWithOps(chart.doctorNotes, d.noteOps);
+  let doctorNotes;
+  if (Object.prototype.hasOwnProperty.call(d, "doctorNotes")) {
+    doctorNotes = d.doctorNotes == null ? "" : String(d.doctorNotes);
+  } else if (d.clearNote) {
+    doctorNotes = "";
+  } else if (Array.isArray(d.noteOps) && d.noteOps.length > 0) {
+    doctorNotes = mergeNoteWithOps(chart.doctorNotes, d.noteOps);
+  } else {
+    doctorNotes = String(chart.doctorNotes || "");
+  }
+  doctorNotes = formatDoctorNotesLayout(doctorNotes);
 
   return { medicines, labTests, procedures, vitals, doctorNotes };
 }

@@ -9,7 +9,7 @@ const NOTE_SECTION_ORDER = [
   ["history", "History"],
   ["examination", "Examination"],
   ["diagnosis", "Diagnosis"],
-  ["advice", "Doctor's Advice"],
+  ["advice", "Advice"],
 ];
 
 const NOTE_SECTION_ALIASES = {
@@ -26,15 +26,21 @@ const NOTE_SECTION_ALIASES = {
   provisionaldiagnosis: "diagnosis",
   finaldiagnosis: "diagnosis",
   advice: "advice",
+  doctorsadvice: "advice",
   plan: "advice",
   treatmentplan: "advice",
   assessment: "advice",
   assessmentandplan: "advice",
 };
 
-const NOTE_LABEL_TO_KEY = Object.fromEntries(
-  NOTE_SECTION_ORDER.map(([key, label]) => [label.toLowerCase(), key]),
-);
+const NOTE_LABEL_TO_KEY = {
+  ...Object.fromEntries(
+    NOTE_SECTION_ORDER.map(([key, label]) => [label.toLowerCase(), key]),
+  ),
+  advice: "advice",
+  "doctor's advice": "advice",
+  "doctors advice": "advice",
+};
 
 function itemOrigin(item) {
   const raw = String(item?.origin || "").toLowerCase();
@@ -64,22 +70,29 @@ function parseComposedNoteSections(noteText) {
   const text = String(noteText || "").trim();
   if (!text) return {};
   const sections = {};
-  for (const block of text.split(/\n\s*\n/)) {
-    const lines = block
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    if (!lines.length) continue;
-    const headerMatch = lines[0].match(/^([A-Za-z ]+):\s*(.*)$/);
-    if (!headerMatch) continue;
-    const key = NOTE_LABEL_TO_KEY[headerMatch[1].trim().toLowerCase()];
-    if (!key) continue;
-    const rest = lines.slice(1);
-    if (headerMatch[2]?.trim()) rest.unshift(headerMatch[2].trim());
-    const items = rest
-      .map((line) => line.replace(/^[•\-*]\s*/, "").trim())
-      .filter(Boolean);
-    if (items.length) sections[key] = items;
+  let currentKey = null;
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = String(rawLine || "").trim();
+    if (!line) continue;
+    const headerMatch = line.match(/^([A-Za-z' ]+):\s*(.*)$/);
+    if (headerMatch) {
+      const label = headerMatch[1].trim().toLowerCase();
+      const key =
+        NOTE_LABEL_TO_KEY[label] ||
+        NOTE_SECTION_ALIASES[label.replace(/[^a-z]/g, "")];
+      if (key) {
+        currentKey = key;
+        if (!sections[currentKey]) sections[currentKey] = [];
+        const inline = headerMatch[2]?.trim();
+        if (inline) {
+          sections[currentKey].push(inline.replace(/^[•\-*]\s*/, "").trim());
+        }
+        continue;
+      }
+    }
+    if (!currentKey) continue;
+    const item = line.replace(/^[•\-*]\s*/, "").trim();
+    if (item) sections[currentKey].push(item);
   }
   return sections;
 }
@@ -100,6 +113,26 @@ function composeNoteFromSections(sections) {
     }
   }
   return blocks.join("\n\n");
+}
+
+/**
+ * Layout-only: turn single-line "Complaints: … Advice: …" into labeled bullets.
+ * Does not invent clinical content.
+ */
+function formatDoctorNotesLayout(noteText) {
+  let text = String(noteText || "").trim();
+  if (!text || /^\s*[SOAP]\s*:/m.test(text)) return text;
+
+  text = text.replace(
+    /([^\n])\s*\b(Complaints|History|Allergies|Examination|Diagnosis|Advice|Doctor'?s?\s*Advice|Past Medical History|Provisional Diagnosis)\s*:/gi,
+    "$1\n$2:",
+  );
+
+  const sections = parseComposedNoteSections(text);
+  if (Object.keys(sections).length) {
+    return composeNoteFromSections(sections) || text;
+  }
+  return text;
 }
 
 function mergeNoteWithOps(currentNoteText, noteOps) {
@@ -282,7 +315,8 @@ function mergeIpdChartDelta(currentChart, delta) {
     } else if (kind === "stop") {
       if (activeIdx >= 0) {
         const [existing] = medicines.splice(activeIdx, 1);
-        if (activeIdx < addedMedIndex) addedMedIndex = Math.max(0, addedMedIndex - 1);
+        if (activeIdx < addedMedIndex)
+          addedMedIndex = Math.max(0, addedMedIndex - 1);
         if (itemOrigin(existing) === "review") continue;
         medicines.push({
           ...existing,
@@ -339,7 +373,11 @@ function mergeIpdChartDelta(currentChart, delta) {
           String(t?.action || "add").toLowerCase() === "add",
       );
       if (!alreadyReviewAdd) {
-        labTests.splice(addedLabIndex++, 0, { name: op.name, action: "add", origin: "review" });
+        labTests.splice(addedLabIndex++, 0, {
+          name: op.name,
+          action: "add",
+          origin: "review",
+        });
       }
     } else if (kind === "remove" && target) {
       labTests = labTests.filter((t) => nameKey(t) !== target);
@@ -373,7 +411,11 @@ function mergeIpdChartDelta(currentChart, delta) {
     const idx = procedures.findIndex((p) => nameKey(p) === target);
 
     if (kind === "add" && op.name) {
-      procedures.splice(addedProcIndex++, 0, { name: op.name, action: "add", origin: "review" });
+      procedures.splice(addedProcIndex++, 0, {
+        name: op.name,
+        action: "add",
+        origin: "review",
+      });
     } else if (kind === "remove" && target) {
       procedures = procedures.filter((p) => nameKey(p) !== target);
     } else if (kind === "stop" && target) {
@@ -415,6 +457,7 @@ module.exports = {
   NOTE_LABEL_TO_KEY,
   parseComposedNoteSections,
   composeNoteFromSections,
+  formatDoctorNotesLayout,
   mergeNoteWithOps,
   IPD_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM,
   buildIpdReviewFollowUpUserPrompt,

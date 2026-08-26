@@ -472,11 +472,21 @@ function buildOpMedicine(med, pharmacyData, actorName) {
     duration,
     frequency,
     quantity: String(quantity),
-    dosages: Array.from({ length: frequency.value }, (_, index) => ({
-      id: index,
-      time: ["Morning", "Afternoon", "Evening", "Night"][index] || "Morning",
-      beforeFood: false,
-    })),
+    dosages: (() => {
+      const slotTimes =
+        frequency.value === 2
+          ? ["Morning", "Evening"]
+          : frequency.value === 3
+            ? ["Morning", "Afternoon", "Evening"]
+            : frequency.value === 4
+              ? ["Morning", "Afternoon", "Evening", "Night"]
+              : ["Morning"];
+      return Array.from({ length: frequency.value }, (_, index) => ({
+        id: index,
+        time: slotTimes[index] || "Morning",
+        beforeFood: false,
+      }));
+    })(),
     description: matched?.description || displayName,
     generic_name: matched?.generic_name || med.correctedName || med.name,
     item_code:
