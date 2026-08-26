@@ -12,6 +12,16 @@ const {
   aiCompletionWithFallback,
   openAiMessagesToGemini,
 } = require("../utils/aiCompletionWithFallback");
+const {
+  IPD_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM,
+  buildIpdReviewFollowUpUserPrompt,
+  mergeIpdChartDelta,
+} = require("../utils/ipdAi");
+const {
+  OPD_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM,
+  buildOpdReviewFollowUpUserPrompt,
+  mergeOpdChartDelta,
+} = require("../utils/opdAi");
 
 const OPENAI_API_BASE_URL = "https://api.openai.com/v1";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -2333,23 +2343,48 @@ router.post("/review-followup", async (req, res) => {
       return res.json(kept);
     }
 
+    const isOpd = clinicalSetting === "opd";
+    const isIpd = clinicalSetting === "ipd";
     const context = buildPatientContextLine({ age, gender, allergies });
+
+    const systemAddendum = isOpd
+      ? OPD_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM
+      : isIpd
+        ? IPD_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM
+        : REVIEW_FOLLOWUP_SYSTEM_ADDENDUM;
+
+    const userPrompt = isOpd
+      ? buildOpdReviewFollowUpUserPrompt(instruction, chart, context, existingContext)
+      : isIpd
+        ? buildIpdReviewFollowUpUserPrompt(instruction, chart, context, existingContext)
+        : REVIEW_FOLLOWUP_USER_PROMPT(
+            instruction,
+            chart,
+            context,
+            existingContext,
+            clinicalSetting,
+          );
+
+    const systemContent = isOpd
+      ? OPD_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM
+      : `${PARSE_CLINICAL_NOTE_SYSTEM_PROMPT}${systemAddendum}`;
+
     const followUpMessages = [
       {
         role: "system",
-        content: `${PARSE_CLINICAL_NOTE_SYSTEM_PROMPT}${REVIEW_FOLLOWUP_SYSTEM_ADDENDUM}`,
+        content: systemContent,
       },
       {
         role: "user",
-        content: REVIEW_FOLLOWUP_USER_PROMPT(
-          instruction,
-          chart,
-          context,
-          existingContext,
-          clinicalSetting,
-        ),
+        content: userPrompt,
       },
     ];
+
+    if (isOpd) {
+      console.log("=== [OPD AI FOLLOW-UP INPUT] ===");
+      console.log("Instruction:", instruction);
+      console.log("Current Prescription Chart:", JSON.stringify(chart, null, 2));
+    }
 
     let response;
     try {
@@ -2463,6 +2498,36 @@ router.post("/review-followup", async (req, res) => {
     }
 
     try {
+      if (isOpd) {
+        console.log("=== [OPD AI FOLLOW-UP RAW RESPONSE] ===");
+        console.log("Content:", content);
+        console.log("Parsed Delta:", JSON.stringify(delta, null, 2));
+
+        const merged = mergeOpdChartDelta(chart, delta);
+        console.log("=== [OPD AI FINAL RESULT] ===");
+        console.log("Medicines:", merged.medicines.map((m) => m.name));
+        console.log("Labs:", merged.labTests.map((t) => typeof t === "string" ? t : t?.name));
+        console.log("Notes:", merged.doctorNotes);
+
+        const result = {
+          medicines: merged.medicines,
+          labTests: merged.labTests.map((t) => (typeof t === "string" ? t : t?.name || "")).filter(Boolean),
+          procedures: merged.procedures.map((p) => (typeof p === "string" ? p : p?.name || "")).filter(Boolean),
+          vitals: merged.vitals || {},
+          doctorNotes: merged.doctorNotes || "",
+          medicinesToApply: merged.medicines,
+          labTestsToApply: merged.labTests.map((t) => (typeof t === "string" ? t : t?.name || "")).filter(Boolean),
+          proceduresToApply: merged.procedures.map((p) => (typeof p === "string" ? p : p?.name || "")).filter(Boolean),
+          medicinesToStop: [],
+          medicinesToRestart: [],
+          labTestsToStop: [],
+          assistantReply:
+            String(delta.assistantReply || "").trim() ||
+            buildExtractionReply({ medicines: merged.medicines, labTests: merged.labTests }, instruction),
+        };
+        return res.json(result);
+      }
+
       delta.medicineOps = pruneNoOpMedicineOps(delta.medicineOps, chart);
 
       // Taper-expand only the medicine(s) this turn actually touched — cheap,
@@ -2472,7 +2537,9 @@ router.post("/review-followup", async (req, res) => {
         instruction,
       );
 
-      const merged = mergeChartDelta(chart, { ...delta, medicineOps });
+      const merged = isIpd
+        ? mergeIpdChartDelta(chart, { ...delta, medicineOps })
+        : mergeChartDelta(chart, { ...delta, medicineOps });
 
       const result = finalizeParsedClinicalNote(
         {
