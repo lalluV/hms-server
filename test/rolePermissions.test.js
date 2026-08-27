@@ -51,6 +51,7 @@ describe("role permission helpers", () => {
     assert.equal(hasPermission("Doctor", "staff.update"), false);
     assert.equal(hasPermission("Doctor", "staff.read"), true);
     assert.equal(hasPermission("Doctor", "self.password.change"), true);
+    assert.equal(hasPermission("Doctor", "self.profile.update"), true);
   });
 });
 

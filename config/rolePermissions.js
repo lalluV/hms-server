@@ -40,6 +40,7 @@ const ALL_PERMISSIONS = [
   "staff.role.change",
   "staff.password.reset",
   "self.password.change",
+  "self.profile.update",
 ];
 
 const ROLE_PERMISSIONS = {
@@ -50,17 +51,18 @@ const ROLE_PERMISSIONS = {
     "staff.update",
     "staff.password.reset",
     "self.password.change",
+    "self.profile.update",
   ]),
-  Doctor: new Set(["staff.read", "self.password.change"]),
-  Nurse: new Set(["staff.read", "self.password.change"]),
-  Pharmacist: new Set(["staff.read", "self.password.change"]),
-  LabTechnician: new Set(["staff.read", "self.password.change"]),
-  Phlebotomist: new Set(["staff.read", "self.password.change"]),
-  Receptionist: new Set(["staff.read", "self.password.change"]),
-  Accountant: new Set(["staff.read", "self.password.change"]),
-  "HR Manager": new Set(["staff.read", "self.password.change"]),
-  "IT Support": new Set(["staff.read", "self.password.change"]),
-  PRO: new Set(["staff.read", "self.password.change"]),
+  Doctor: new Set(["staff.read", "self.password.change", "self.profile.update"]),
+  Nurse: new Set(["staff.read", "self.password.change", "self.profile.update"]),
+  Pharmacist: new Set(["staff.read", "self.password.change", "self.profile.update"]),
+  LabTechnician: new Set(["staff.read", "self.password.change", "self.profile.update"]),
+  Phlebotomist: new Set(["staff.read", "self.password.change", "self.profile.update"]),
+  Receptionist: new Set(["staff.read", "self.password.change", "self.profile.update"]),
+  Accountant: new Set(["staff.read", "self.password.change", "self.profile.update"]),
+  "HR Manager": new Set(["staff.read", "self.password.change", "self.profile.update"]),
+  "IT Support": new Set(["staff.read", "self.password.change", "self.profile.update"]),
+  PRO: new Set(["staff.read", "self.password.change", "self.profile.update"]),
 };
 
 function normalizeRole(role) {

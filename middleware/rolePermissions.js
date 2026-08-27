@@ -24,6 +24,18 @@ function getActor(req) {
   };
 }
 
+function isActorSelf(actor, target) {
+  if (!actor || !target) return false;
+  const actorId = actor.id?.toString?.() || String(actor.id || "");
+  const targetMongoId = target._id?.toString?.() || String(target._id || "");
+  const targetEmpId = target.id?.toString?.() || String(target.id || "");
+  return Boolean(
+    (actorId && (actorId === targetMongoId || actorId === targetEmpId)) ||
+      (actor.userId &&
+        (actor.userId === target.userId || actor.userId === target.id)),
+  );
+}
+
 function requirePermission(permission) {
   return (req, res, next) => {
     const actor = getActor(req);
@@ -36,6 +48,25 @@ function requirePermission(permission) {
       code: "ROLE_PERMISSION_DENIED",
       message: "You do not have permission to perform this action.",
       permission,
+    });
+  };
+}
+
+function requireStaffWriteOrSelf() {
+  return (req, res, next) => {
+    const actor = getActor(req);
+    req.actor = actor;
+    if (actor.isMasterAdmin || hasPermission(actor.type, "staff.update")) {
+      return next();
+    }
+    if (hasPermission(actor.type, "self.profile.update")) {
+      req.selfProfileOnly = true;
+      return next();
+    }
+    return res.status(403).json({
+      code: "ROLE_PERMISSION_DENIED",
+      message: "You do not have permission to perform this action.",
+      permission: "staff.update",
     });
   };
 }
@@ -81,16 +112,19 @@ function requireCanManageTargetStaff(options = {}) {
       }
 
       const actor = req.actor || getActor(req);
-      const actorId = actor.id?.toString?.() || actor.id;
-      const targetMongoId = target._id?.toString?.() || target._id;
-      const isSelf =
-        actorId &&
-        (actorId === targetMongoId ||
-          actor.userId === target.userId ||
-          actor.userId === target.id);
+      const isSelf = isActorSelf(actor, target);
 
-      if (allowSelf && isSelf) {
+      if (req.selfProfileOnly && !isSelf) {
+        return res.status(403).json({
+          code: "ROLE_PERMISSION_DENIED",
+          message: "You do not have permission to perform this action.",
+          permission: "staff.update",
+        });
+      }
+
+      if ((allowSelf || req.selfProfileOnly) && isSelf) {
         req.targetStaff = target;
+        req.isSelfStaffUpdate = true;
         return next();
       }
 
@@ -128,6 +162,7 @@ function requireCanManageTargetStaff(options = {}) {
 module.exports = {
   getActor,
   requirePermission,
+  requireStaffWriteOrSelf,
   requireAssignableRole,
   requireCanManageTargetStaff,
 };

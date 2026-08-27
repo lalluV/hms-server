@@ -4,6 +4,7 @@ const bcrypt = require("bcryptjs");
 const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
 const {
   requirePermission,
+  requireStaffWriteOrSelf,
   requireAssignableRole,
   requireCanManageTargetStaff,
 } = require("../middleware/rolePermissions");
@@ -34,6 +35,41 @@ function stripPassword(staff) {
   delete obj.password;
   delete obj.loginPassword;
   return obj;
+}
+
+const SELF_PROFILE_FIELDS = [
+  "name",
+  "email",
+  "phone",
+  "gender",
+  "dateOfBirth",
+  "location",
+  "position",
+  "qualification",
+  "specialization",
+  "department",
+  "opCharges",
+  "ipCharges",
+  "licenseNumber",
+  "labCertification",
+  "imgUrl",
+  "signatureUrl",
+];
+
+function staffUpdatePayload(req) {
+  if (req.selfProfileOnly) {
+    const out = {};
+    for (const key of SELF_PROFILE_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, key)) {
+        out[key] = req.body[key];
+      }
+    }
+    return out;
+  }
+  const updateData = { ...(req.body || {}) };
+  delete updateData.password;
+  delete updateData.loginPassword;
+  return updateData;
 }
 
 // NOTE: canViewLoginCredentials removed — plaintext passwords are no longer stored.
@@ -171,14 +207,13 @@ router.put(
 // Update staff member by userId (must come before /:id route)
 router.put(
   "/user/:userId",
-  requirePermission("staff.update"),
+  requireStaffWriteOrSelf(),
   requireCanManageTargetStaff({ lookup: "userId" }),
   requireRoleEnabledByPlan(),
   async (req, res) => {
     try {
       const Staff = req.tenantDb.model("Staff");
-      const updateData = { ...req.body };
-      delete updateData.password;
+      const updateData = staffUpdatePayload(req);
 
       const previousType = req.targetStaff?.type;
       if (
@@ -246,14 +281,13 @@ router.put(
 // Update staff member
 router.put(
   "/:id",
-  requirePermission("staff.update"),
+  requireStaffWriteOrSelf(),
   requireCanManageTargetStaff({ lookup: "employeeId" }),
   requireRoleEnabledByPlan(),
   async (req, res) => {
     try {
       const Staff = req.tenantDb.model("Staff");
-      const updateData = { ...req.body };
-      delete updateData.password;
+      const updateData = staffUpdatePayload(req);
 
       const previousType = req.targetStaff?.type;
       if (

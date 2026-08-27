@@ -8,6 +8,8 @@ const {
   buildCaseFromPrescription,
   normalizeMedKey,
   normalizeLabKey,
+  normalizeNoteIdeaKey,
+  caseMatchesContext,
   scoreCase,
 } = require("../utils/doctorMemory");
 
@@ -37,12 +39,20 @@ test("canonical medicine normalization deduplicates variations to the same key",
     "DOLO 650",
     "Tab Dolo 650mg 1-0-1",
     "Cap Dolo 650 mg TDS",
+    "PCM 650",
+    "Paracetamol 650mg",
   ];
 
   const keys = variations.map(normalizeMedKey);
   const uniqueKeys = new Set(keys);
   assert.equal(uniqueKeys.size, 1, `Expected 1 unique key, got: ${[...uniqueKeys].join(", ")}`);
-  assert.equal([...uniqueKeys][0], "dolo 650");
+  assert.equal([...uniqueKeys][0], "tab paracetamol 650");
+});
+
+test("syrup and tablet of the same drug stay in separate suggestion buckets", () => {
+  assert.equal(normalizeMedKey("Tab Dolo 650"), "tab paracetamol 650");
+  assert.equal(normalizeMedKey("Syp Dolo"), "syp paracetamol");
+  assert.notEqual(normalizeMedKey("Tab Dolo 650"), normalizeMedKey("Syp Dolo"));
 });
 
 test("canonical lab normalization maps test synonyms to standard test keys", () => {
@@ -122,6 +132,42 @@ test("buildCaseFromPrescription directly parses raw Prescription document format
 
   assert.equal(doc.medicines[0].name, "Tab Dolo 650mg");
   assert.equal(doc.labs[0].name, "CBP");
-  assert.equal(normalizeMedKey(doc.medicines[0].name), "dolo 650");
+  assert.equal(normalizeMedKey(doc.medicines[0].name), "tab paracetamol 650");
   assert.equal(normalizeLabKey(doc.labs[0].name), "cbp");
+});
+
+test("note idea key merges near-duplicate complaint wording", () => {
+  const keys = [
+    "Fever 3 days",
+    "Fever since 3 days",
+    "H/o fever 3 days",
+    "High grade fever since 3 days",
+  ].map(normalizeNoteIdeaKey);
+  assert.equal(new Set(keys).size, 1);
+  assert.equal(keys[0], "fever");
+});
+
+test("similar cases require diagnosis overlap when both have a diagnosis", () => {
+  const viralContext = buildSearchContext({
+    clinicalNote: "Complaints:\nFever 2 days\nDiagnosis:\nViral fever",
+  });
+  const utiCase = buildCaseFromPrescription({
+    hospitalId: "h1",
+    doctorId: "d1",
+    umr: "UMR009",
+    prescription: {
+      prescriptionId: "rx-uti",
+      date: "2026-08-10",
+      doctorNotes: [
+        {
+          content:
+            "Complaints:\nFever and burning micturition\nDiagnosis:\nUTI",
+        },
+      ],
+      medicineData: [{ name: "Tab Nitrofurantoin" }],
+    },
+  });
+
+  assert.equal(caseMatchesContext(utiCase, viralContext), false);
+  assert.equal(scoreCase(utiCase, viralContext, ""), 0);
 });
