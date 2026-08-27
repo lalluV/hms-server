@@ -115,10 +115,19 @@ function medicineLooksPackedTaper(med = {}) {
 
   // "Tapering dose: 40mg …, 30mg …" (no "then" keyword)
   if (/\btaper(?:ing|ed|s)?\b/i.test(blob)) {
-    const strengths = blob.match(
-      /\b\d+(?:\.\d+)?\s*(?:mg|mcg|µg|ug|g|gm)\b/gi,
-    );
+    const strengths = blob.match(/\b\d+(?:\.\d+)?\s*(?:mg|mcg|µg|ug|g|gm)\b/gi);
     if (strengths && strengths.length >= 2) return true;
+  }
+
+  // Already-split taper step ("Then take … for the next 3 days") is not packed.
+  const directions = String(
+    med.directions || med.patientDirections || med.instructions || "",
+  );
+  if (
+    /^\s*then\b/i.test(directions) &&
+    !/\bthen\s+(?:half\s+)?\d+/i.test(directions)
+  ) {
+    return false;
   }
 
   if (!/\b(?:then|followed\s+by|next)\b|→/i.test(blob)) return false;
@@ -129,13 +138,11 @@ function medicineLooksPackedTaper(med = {}) {
   ) {
     return false;
   }
-  const strengths = withoutCourseStop.match(
-    /\b\d+(?:\.\d+)?\s*(?:mg|mcg|µg|g|gm)?\b/gi,
+  if (/\bthen\s+(?:half\s+)?\d+/i.test(withoutCourseStop)) return true;
+  const unitStrengths = withoutCourseStop.match(
+    /\b\d+(?:\.\d+)?\s*(?:mg|mcg|µg|ug|g|gm|iu)\b/gi,
   );
-  return (
-    /\bthen\s+(?:half\s+)?\d+/i.test(withoutCourseStop) ||
-    (strengths && strengths.length >= 2)
-  );
+  return Boolean(unitStrengths && unitStrengths.length >= 2);
 }
 
 function medicinesNeedTaperExpandPass(medicines = []) {
@@ -158,34 +165,47 @@ Rules:
 - directions: simple morning/afternoon/evening/night English (no twice/thrice/BD/OD/TDS as patient text).
 - dosages: time, amount, beforeFood; unit "" for Tablet/Capsules/Injection unless IU or ml stated.`;
 
-async function expandPackedTapersWithAi(medicines = [], clinicalNote = "") {
-  const list = Array.isArray(medicines) ? medicines : [];
-  if (!medicinesNeedTaperExpandPass(list)) return list;
-
+async function expandOnePackedTaper(medicine, clinicalNote = "") {
   try {
     const response = await callParseClinicalNoteCompletion(
       [
         { role: "system", content: TAPER_EXPAND_SYSTEM_PROMPT },
         {
           role: "user",
-          content: `ORIGINAL NOTE (context only):\n${clinicalNote}\n\nCURRENT medicines[] JSON:\n${JSON.stringify(list)}\n\nReturn the corrected { "medicines": [...] } only.`,
+          content: `ORIGINAL NOTE (context only):\n${clinicalNote}\n\nCURRENT medicines[] JSON:\n${JSON.stringify([medicine])}\n\nReturn the corrected { "medicines": [...] } only.`,
         },
       ],
       { timeoutMs: Math.min(PARSE_NOTE_TIMEOUT_MS, 45000) },
     );
     const content = response?.data?.choices?.[0]?.message?.content?.trim();
-    if (!content) return list;
+    if (!content) return [medicine];
     const parsed = JSON.parse(extractJsonObject(content));
     const next = Array.isArray(parsed.medicines) ? parsed.medicines : null;
-    if (!next?.length) return list;
+    if (!next?.length) return [medicine];
     return next;
   } catch (err) {
     console.warn(
-      "Taper expand pass failed; keeping first-pass medicines:",
+      "Taper expand pass failed; keeping first-pass medicine:",
       err?.message || err,
     );
-    return list;
+    return [medicine];
   }
+}
+
+async function expandPackedTapersWithAi(medicines = [], clinicalNote = "") {
+  const list = Array.isArray(medicines) ? medicines : [];
+  if (!medicinesNeedTaperExpandPass(list)) return list;
+
+  const out = [];
+  for (const med of list) {
+    if (!medicineLooksPackedTaper(med)) {
+      out.push(med);
+      continue;
+    }
+    const steps = await expandOnePackedTaper(med, clinicalNote);
+    out.push(...(Array.isArray(steps) && steps.length ? steps : [med]));
+  }
+  return out;
 }
 
 async function applyAiOnlyMedicinePasses(parsed, clinicalNote) {
@@ -427,7 +447,13 @@ Critical constraints:
 - Match the requested section format precisely
 - For SOAP notes: use ONLY S: O: A: P: letter labels — never write Subjective, Objective, Assessment, or Plan as headers`;
 
-const PARSE_CLINICAL_NOTE_SYSTEM_PROMPT = `You are a medical scribe for an Indian hospital EMR. Convert the CURRENT doctor dictation or consult transcript into the requested JSON. Return valid JSON only. You are the ONLY clinical authority for this output — structure everything correctly yourself.
+const PARSE_CLINICAL_NOTE_SYSTEM_PROMPT = `You are a senior, highly experienced clinician-scribe for an Indian hospital EMR, equally fluent across all departments and specializations (medicine, surgery, paediatrics, obstetrics & gynaecology, orthopaedics, ENT, ophthalmology, dermatology, psychiatry, pulmonology, cardiology, nephrology, neurology, gastroenterology, urology, oncology, emergency, ICU, and every other specialty). Convert the CURRENT doctor dictation or consult transcript into the requested JSON. Return valid JSON only. You are the ONLY clinical authority for this output — structure everything correctly yourself, the way a senior consultant would chart.
+
+CLINICAL JUDGMENT (ALL SPECIALTIES)
+- Route by clinical meaning, not by department keyword lists. A presenting symptom is a complaint in any specialty; a named disease/impression is diagnosis; an ordered test is an investigation; a drug product is a medicine; a bedside/surgical act is a procedure.
+- Think like a senior doctor: expand shorthand into clear chart language, keep fidelity to what was said, and never invent diagnoses, orders, doses, or investigations that were not stated.
+- Symptom-only input (no named drug, no named disease, no ordered test) → Complaints only. Do not invent a medicine, diagnosis, or lab for a symptom.
+- Diagnostic-label-only input (a disease/syndrome/diagnostic abbreviation, no symptoms stated) → Diagnosis only, expanded to readable English. Do not invent complaints, medicines, or labs.
 
 COMPLETENESS AND SAFETY
 - Preserve every clinical fact from the current input, regardless of writing style, shorthand, language mix, or transcript quality.
@@ -439,29 +465,34 @@ TEMPORAL AND SEMANTIC ROUTING
 - Past conditions, prior events, and background medicines → history (not diagnosis).
 - Observed findings → examination.
 - Counsel, precautions, follow-up, conditional plans ("if needed", "if not better") → advice.
-- Today's drug orders → medicines[]; labs → labTests[]; this-visit clinical acts/services → procedures[] (never medicines[]); measured vitals → vitals.
+- Today's drug products → medicines[]; ordered investigations (including smear/panel/imaging abbreviations) → labTests[] ONLY (never in notes, never as medicines); this-visit clinical acts/services → procedures[] (never medicines[]); measured vitals → vitals.
 - A finite medicine course that ends afterward remains action "add". action "stop" only when the doctor explicitly discontinues/holds/removes/omits a medicine.
 - action "restart" only when the doctor explicitly restarts/resumes a previously stopped medicine.
 
 COMPLAINTS VS DIAGNOSIS (HARD — UNIVERSAL)
-- complaints / symptoms: ONLY what the patient presents with now (symptoms, complaints, with or without duration). Symptom language stays here regardless of wording style.
-- diagnosis / provisionalDiagnosis: ONLY a disease label, clinical impression, or named condition the doctor stated as diagnosis/impression (e.g. UTI, viral fever, GERD, hypertension, acute gastritis).
+- complaints / symptoms: ONLY presenting symptoms the patient feels (with or without duration). Never put a disease, syndrome, or diagnostic abbreviation in complaints.
+- diagnosis / provisionalDiagnosis: a named disease, syndrome, clinical entity, impression, or diagnostic abbreviation the doctor stated. Expand abbreviations to full clinical English in the diagnosis bullet.
+- If the input is only a diagnostic label/abbreviation (no symptoms, no drug, no test) → diagnosis only. Leave complaints []. Do not invent a complaint from the diagnosis. Do not invent medicines or labs unless ordered.
 - NEVER copy, paraphrase, or mirror a complaints bullet into diagnosis. No overlapping text between the two sections.
-- If the note has symptoms but no named diagnosis/impression, leave diagnosis [] and provisionalDiagnosis "".
-- Words like fever, pain, cough, cold, burning, itching, vomiting, diarrhea, headache, body ache, weakness belong in complaints — never in diagnosis — unless the doctor explicitly names a disease/impression.
+- If the input has symptoms but no named diagnosis/impression, leave diagnosis [] and provisionalDiagnosis "". Do not infer a disease from symptoms alone.
 
 NOTE SECTIONS (BULLETS — REQUIRED)
 - Always fill noteSections arrays. Each array item is ONE short bullet in clear English.
 - complaints / history / examination / diagnosis / advice: one fact per bullet.
 - Mirror into symptoms, pastMedicalHistory, provisionalDiagnosis as newline "• " bullets — same facts as complaints / history / diagnosis respectively (never put complaints facts into provisionalDiagnosis).
-- Expand shorthand into readable English. Never put today's drug/lab/imaging orders inside noteSections.
+- Expand shorthand into readable English.
+- NEVER put drug orders, lab/imaging orders, or investigation names inside noteSections, doctorNotes, complaints, diagnosis, or advice. Investigations belong only in labTests[]. Procedures belong only in procedures[]. Medicines belong only in medicines[].
 
-MEDICINE NAMES — ONE FIELD ONLY (HARD)
+MEDICINE NAMES — SPOKEN PRODUCT FIDELITY (HARD)
 - Put the spoken medicine in "name" only (+ strength if stated). Leave generic_name ALWAYS "".
-- Brand spoken → name is that brand (Pantop/PAN/Dolo/Telma stay as spoken; fix only clear typos like dollo→Dolo). NEVER replace a brand with its salt in name.
-- No brand spoken → name is the generic/salt (PCM→Paracetamol, azithro→Azithromycin). That IS the name — do not also invent a brand or fill generic_name.
-- Never invent a brand when only a generic was spoken. Never invent a generic_name when a brand was spoken.
+- name is the product as spoken: keep EVERY spoken token in order (brand + any short letter suffix + strength). Never drop a token.
+- Short letter groups between a brand and a strength (or right after a brand) are SKU/product suffixes and belong in name. They are NOT schedule, food, or time unless the token is an explicit frequency/time word (od, bd, tid, qid, hs, morning, afternoon, evening, night).
+- A trade/brand name stays as spoken. NEVER replace a brand with its salt/INN even if the brand resembles the generic. NEVER swap to a catalog/inventory close-match.
+- Full generic spoken with no brand tokens → keep that generic. Do not invent a brand.
+- Expand to full generic ONLY when the entire medicine mention is a generic abbreviation (no brand/product tokens). If any brand-like word is present, do not expand or rewrite.
+- Never invent a generic_name field. Typo-fix spelling only; do not rewrite or omit product tokens.
 - Keep strength in name when it distinguishes products.
+- Add a medicine only when the doctor named a drug/product or clearly ordered treatment — not because a symptom was mentioned.
 - type from spoken form: tab→Tablet, inj→Injection, drops/eye drops/tears→Drops, syp→Syrup, ointment/cream→Ointment, etc.
 
 TAPERS / SEQUENTIAL (MULTI medicines[] ROWS — REQUIRED)
@@ -509,11 +540,10 @@ DOSAGES GRID (M/A/E/N)
 - Unequal same-day amounts (e.g. morning 10 IU and afternoon 15 IU) → one medicine, two dosage slots with correct amounts and unit "IU".
 - Do NOT invent a daily grid for SOS / weekly / alternate-day / sliding-scale / conditional schedules; leave dosages [] and put clear text in directions.
 
-LABS
-- Current orders → labTests as separate items (split "CBP + LFT" into CBP and LFT).
-- Do not duplicate the same lab.
-- Phrases like "again if needed", "if required", "repeat if needed" are advice — put them in advice bullets; do NOT create extra labTests from conditional wording alone.
-- Past results stay in history/examination narrative.
+LABS / INVESTIGATIONS (HARD)
+- Ordered investigations → labTests[] only. Split combined orders into separate tests. Never medicines. Never notes.
+- Each investigation token maps to THAT token's conventional Indian laboratory name. Diagnosis/complaints/department must not rewrite the test.
+- If the conventional expansion is uncertain, keep the spoken code as the labTests name. Never guess a different test.
 
 PROCEDURES VS MEDICINES (HARD)
 - medicines[] = drug/product orders the patient takes or is given on a schedule (tablet, capsule, syrup, drops, ointment, inhaler, injection dose with OD/BD/TDS/duration, etc.).
@@ -530,10 +560,11 @@ ORDERS AND NOTES
 
 FINAL CHECK
 - No complaints/symptoms text in diagnosis; diagnosis empty if no named disease/impression.
+- No investigation/lab/imaging/smear/panel names in notes or in medicines[]; investigations only in labTests[].
 - Tapers = multiple medicines[] rows (never one packed taper object).
 - Explicit stop/delete of a named drug = action "stop" row; course "then stop" stays action "add".
 - Explicit restart/resume of a previously stopped named drug = action "restart" row.
-- name = spoken brand or spoken generic only; generic_name always "".
+- name = spoken product kept as spoken (brand+suffix stays brand; generic stays generic; generic abbreviation expands only when there are no brand tokens); never brand→salt rewrite; generic_name always "".
 - directions are morning/afternoon/evening/night English (no twice/thrice).
 - Tablet/Capsule/Injection dosages: unit "" unless insulin IU or ml stated; never invent "U" on plain injections.
 - IV fluids: duration in hours when stated, else "Once" — never default to 5 days.
@@ -937,7 +968,7 @@ ${modeLine}
 ${context ? `PATIENT: ${context}` : ""}
 ${existingLine}
 
-COMPLETENESS: Keep every clinical fact from CURRENT INPUT. Writing style may vary — expand shorthand into clear English and place each fact by meaning (past→history, symptoms→complaints only never diagnosis, exam→examination, named impression→diagnosis else leave diagnosis empty, plan/follow-up/if-needed→advice, today's drug orders→medicines[], labs→labTests[], this-visit acts/services→procedures[] never medicines[], measured vitals→vitals). noteSections are bullet lists. Medicine name = spoken brand or spoken generic; leave generic_name "". Tapers = multiple medicines[] rows. Explicit stop/delete of a named drug = action stop. Explicit restart/resume of a previously stopped named drug = action restart. Tablet/Capsule/Injection unit "" (IU/ml only when stated); IV fluids duration hours or Once not 5 days; beforeFood when known. Do not drop clauses.
+COMPLETENESS: Keep every clinical fact from CURRENT INPUT. Think like a senior clinician in any specialty — expand shorthand into clear English and place each fact by meaning (past→history, symptoms→complaints only never diagnosis, exam→examination, named impression→diagnosis else leave diagnosis empty, plan/follow-up/if-needed→advice, today's named drug orders→medicines[], ordered investigations→labTests[] never in notes, this-visit acts/services→procedures[] never medicines[], measured vitals→vitals). noteSections are bullet lists. Medicine name: keep the spoken product (brand+suffix stays as spoken; generic stays generic; expand only a standalone generic abbreviation; never rewrite a brand to its salt); leave generic_name "". Tapers = multiple medicines[] rows. Explicit stop/delete of a named drug = action stop. Explicit restart/resume of a previously stopped named drug = action restart. Tablet/Capsule/Injection unit "" (IU/ml only when stated); IV fluids duration hours or Once not 5 days; beforeFood when known. Do not drop clauses.
 
 ${clinicalSetting === "discharge" ? DISCHARGE_JSON_SHAPE_BLOCK : CLINICAL_JSON_SHAPE_BLOCK}
 
@@ -962,6 +993,8 @@ REVIEW FOLLOW-UP MODE — PATCH ONLY (CRITICAL — KEEP OUTPUT TINY)
 - Prefer ≤ 6 ops total. Prefer clear* flags for bulk clears. Never copy the whole chart.
 - Match existing items using their exact "name" as given in CURRENT CHART.
 - Apply the normal clinical formatting rules above to any medicine you add or edit.
+- MEDICINE NAMES: keep EVERY spoken product token (brand + letter suffix + strength). Never drop suffixes. Never treat letter suffixes as times unless they are explicit frequency/time words. Never rewrite a brand to its salt. Expand to generic only when the entire mention is a generic abbreviation with no brand tokens.
+- Symptom-only instruction → Complaints only. Diagnostic label/abbreviation only → Diagnosis (expanded English), never Complaints. Investigation abbreviations → labTests with THAT test's conventional name; never remap to fit diagnosis; never medicines; never notes. Adding a medicine does not invent notes.
 - TAPERS / SEQUENTIAL: When adding or editing a taper, output the steps in exact chronological start-to-finish order (Step 1 starting dose FIRST, then Step 2, then Step 3 lowest dose). NEVER reverse the order.
 - ADD EVEN IF ALREADY ON VISIT: if the doctor asks to add a medicine/lab/procedure that is already origin "visit" / action "on_visit", still emit op "add". Do NOT skip, and do NOT use "edit" for that — the app adds a new review row (same as AI Write; UI may show On Rx).
 - assistantReply is required: one short spoken sentence to the doctor (like a quick verbal confirm). Confirm only what this patch actually changes — warm, plain English, not robotic. Examples: "Okay — I've stopped Pantop." / "Got it, Dolo is now three times a day." / "Nothing to change on the chart from that."
@@ -2397,12 +2430,7 @@ router.post("/review-followup", async (req, res) => {
         : REVIEW_FOLLOWUP_SYSTEM_ADDENDUM;
 
     const userPrompt = isOpd
-      ? buildOpdReviewFollowUpUserPrompt(
-          instruction,
-          chart,
-          context,
-          existingContext,
-        )
+      ? buildOpdReviewFollowUpUserPrompt(instruction, chart)
       : isIpd
         ? buildIpdReviewFollowUpUserPrompt(
             instruction,
@@ -2419,7 +2447,7 @@ router.post("/review-followup", async (req, res) => {
           );
 
     const systemContent = isOpd
-      ? OPD_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM
+      ? `${PARSE_CLINICAL_NOTE_SYSTEM_PROMPT}\n${OPD_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM}`
       : `${PARSE_CLINICAL_NOTE_SYSTEM_PROMPT}${systemAddendum}`;
 
     const followUpMessages = [
@@ -2566,7 +2594,7 @@ router.post("/review-followup", async (req, res) => {
           );
         }
 
-        const merged = mergeOpdChartDelta(chart, delta);
+        const merged = mergeOpdChartDelta(chart, delta, instruction);
         console.log("=== [OPD AI FINAL RESULT] ===");
         console.log(
           "Medicines:",

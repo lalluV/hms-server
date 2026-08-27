@@ -96,15 +96,16 @@ const CLINICAL_SHORT_TOKENS = new Set([
 const MIN_SIMILAR_CASES = 2;
 const MIN_MED_FREQUENCY = 0.08;
 const MIN_LAB_FREQUENCY = 0.08;
-const MAX_MED_SUGGESTIONS = 14;
-const MAX_LAB_SUGGESTIONS = 10;
-const MIN_TEXT_FREQUENCY = 0.1;
+const MAX_MED_SUGGESTIONS = 40;
+const MAX_PER_MED_CATEGORY = 5;
+const MAX_LAB_SUGGESTIONS = 20;
+const MIN_TEXT_FREQUENCY = 0.08;
 const MIN_PROCEDURE_FREQUENCY = 0.1;
-const MIN_CASE_SCORE_FOR_ORDERS = 0.08;
-const MAX_TEXT_SUGGESTIONS = 8;
-const MAX_PROCEDURE_SUGGESTIONS = 8;
-const SAME_PATIENT_BOOST = 0.18;
-const MIN_SIMILARITY_SCORE = 0.08;
+const MIN_CASE_SCORE_FOR_ORDERS = 0.1;
+const MAX_TEXT_SUGGESTIONS = 5;
+const MAX_PROCEDURE_SUGGESTIONS = 5;
+const MIN_SIMILARITY_SCORE = 0.16;
+const SIMILAR_CASE_LIMIT = 40;
 
 function normalizeText(value) {
   return String(value || "")
@@ -200,12 +201,62 @@ function procName(proc) {
   ).trim();
 }
 
+const MED_BRAND_ALIASES = new Map([
+  ["dolo", "paracetamol"],
+  ["calpol", "paracetamol"],
+  ["crocin", "paracetamol"],
+  ["pcm", "paracetamol"],
+  ["paracetamol", "paracetamol"],
+  ["acetaminophen", "paracetamol"],
+  ["pantocid", "pantoprazole"],
+  ["pantop", "pantoprazole"],
+  ["pantoprazole", "pantoprazole"],
+]);
+
+function detectMedForm(name) {
+  const s = String(name || "").toLowerCase().trim();
+  if (!s) return "";
+  if (/\b(inj|injection)\b/.test(s) || s.startsWith("inj ") || s.startsWith("inj.")) {
+    return "inj";
+  }
+  if (/\b(iv|infusion)\b/.test(s) || s.startsWith("iv ")) return "iv";
+  if (/\b(syp|syrup|susp|suspension|liquid)\b/.test(s) || s.startsWith("syp")) {
+    return "syp";
+  }
+  if (/\b(drop|drops)\b/.test(s)) return "drops";
+  if (/\b(oint|ointment|cream|gel|lotion)\b/.test(s)) return "topical";
+  if (/\b(sachet|powder)\b/.test(s)) return "sachet";
+  if (/\b(spray|inhaler|rotacap|respule)\b/.test(s)) return "inh";
+  if (/\b(tab|tablet|cap|capsule)\b/.test(s) || s.startsWith("tab") || s.startsWith("cap")) {
+    return "tab";
+  }
+  return "";
+}
+
+function medicineFormCategory(pill) {
+  const type = String(pill?.type || "").toLowerCase();
+  const name = String(pill?.name || "").toLowerCase();
+  const blob = `${type} ${name}`;
+  const form = detectMedForm(blob) || detectMedForm(name);
+  if (form === "inj") return "Injections";
+  if (form === "iv") return "IV Fluids";
+  if (form === "syp") return "Syrups & Liquids";
+  if (form === "drops") return "Drops";
+  if (form === "topical") return "Ointments & Topicals";
+  if (form === "sachet") return "Sachets & Powders";
+  if (form === "inh") return "Inhalers & Sprays";
+  if (form === "tab") return "Tablets & Capsules";
+  return "Other Medicines";
+}
+
 /**
  * Canonical Medicine Normalizer — groups brand/form/strength variations together
- * e.g. "Tab Dolo 650", "Dolo 650mg", "Tab. Dolo 650 mg", "DOLO 650" -> "dolo 650"
+ * e.g. "Tab Dolo 650", "Dolo 650mg", "PCM 650" -> "tab paracetamol 650"
+ * Syrup/injection of the same drug stay in a separate bucket.
  */
 function normalizeMedKey(name) {
   if (!name) return "";
+  const form = detectMedForm(name) || "tab";
   let s = String(name || "").toLowerCase().trim();
 
   // Strip dosage form prefixes/suffixes
@@ -228,7 +279,13 @@ function normalizeMedKey(name) {
 
   // Clean non-alphanumeric and excess whitespace
   s = s.replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
-  return s;
+
+  const parts = s.split(" ").filter(Boolean);
+  if (parts[0] && MED_BRAND_ALIASES.has(parts[0])) {
+    parts[0] = MED_BRAND_ALIASES.get(parts[0]);
+    s = parts.join(" ");
+  }
+  return s ? `${form} ${s}` : form;
 }
 
 const LAB_SYNONYMS = new Map([
@@ -238,6 +295,8 @@ const LAB_SYNONYMS = new Map([
   ["hemogram", "cbp"],
   ["haemogram", "cbp"],
   ["complete hemogram", "cbp"],
+  ["complete haemogram", "cbp"],
+  ["blood picture", "cbp"],
   ["cbp", "cbp"],
 
   ["liver function test", "lft"],
@@ -363,16 +422,69 @@ function normalizeBulletKey(text) {
   return normalizeText(text);
 }
 
-function jaccard(a, b) {
-  if (!a.length || !b.length) return 0;
-  const setA = new Set(a);
-  const setB = new Set(b);
-  let inter = 0;
-  for (const t of setA) {
-    if (setB.has(t)) inter += 1;
+const NOTE_FILLER =
+  /\b(c\/o|h\/o|c o|h o|since|for|with|associated|and|the|of|in|on|to|a|an|days?|weeks?|months?|years?|history|complaints?|mild|moderate|severe|high|grade|low|ago)\b/g;
+
+/**
+ * Collapse near-duplicate note lines:
+ * "Fever 3 days" / "Fever since 3 days" / "H/o fever 3 days" -> "fever"
+ */
+function normalizeNoteIdeaKey(text) {
+  const filler =
+    /\b(c\/o|h\/o|c o|h o|since|for|with|associated|and|the|of|in|on|to|a|an|days?|weeks?|months?|years?|history|complaints?|mild|moderate|severe|high|grade|low|ago)\b/g;
+  const s = normalizeText(text)
+    .replace(/\b(c|h)\s+o\b/g, " ")
+    .replace(filler, " ")
+    .replace(/\b\d+\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return s;
+}
+
+function tokenSetFromList(list) {
+  return new Set(tokenize((list || []).join(" ")));
+}
+
+function overlapCount(querySet, caseSet) {
+  let n = 0;
+  for (const t of querySet) {
+    if (caseSet.has(t)) n += 1;
   }
-  const union = new Set([...setA, ...setB]).size;
-  return union ? inter / union : 0;
+  return n;
+}
+
+/**
+ * Same-kind-of-case gate: diagnosis overlap when both have a diagnosis,
+ * otherwise overlapping chief complaints.
+ */
+function caseMatchesContext(clinicalCase, context) {
+  const qDiag = tokenSetFromList(context?.diagnosis);
+  const cDiag = tokenSetFromList(clinicalCase?.diagnosis);
+  if (qDiag.size && cDiag.size) {
+    return overlapCount(qDiag, cDiag) > 0;
+  }
+
+  const qComp = tokenSetFromList(context?.complaints);
+  const cComp = tokenSetFromList(clinicalCase?.complaints);
+  if (qComp.size && cComp.size) {
+    const hits = overlapCount(qComp, cComp);
+    if (qComp.size <= 2) return hits >= 1;
+    return hits >= Math.min(2, qComp.size);
+  }
+
+  const q = new Set(context?.searchTokens || []);
+  const c = new Set(clinicalCase?.searchTokens || []);
+  if (!q.size || !c.size) return false;
+  return overlapCount(q, c) >= 2;
+}
+
+function recencyBoost(visitDate) {
+  if (!visitDate) return 0;
+  const days = (Date.now() - new Date(visitDate).getTime()) / 86400000;
+  if (!Number.isFinite(days) || days < 0) return 0;
+  if (days <= 60) return 0.1;
+  if (days <= 180) return 0.05;
+  return 0;
 }
 
 function buildSearchContext(extractedClinical = {}) {
@@ -701,9 +813,11 @@ function aggregateMedicinePills(
       .filter(Boolean),
   );
 
+  const gatedCases = similarCases.filter((clinicalCase) =>
+    casePassesScoreGate(clinicalCase, caseScores),
+  );
   const buckets = new Map();
-  for (const clinicalCase of similarCases) {
-    if (!casePassesScoreGate(clinicalCase, caseScores)) continue;
+  for (const clinicalCase of gatedCases) {
     for (const med of clinicalCase.medicines || []) {
       const key = normalizeMedKey(med.name);
       if (!key) continue;
@@ -714,22 +828,40 @@ function aggregateMedicinePills(
     }
   }
 
-  const caseCount = similarCases.length || 1;
+  const caseCount = gatedCases.length || 1;
   const pills = [];
 
   for (const bucket of buckets.values()) {
     const frequencyInCases = bucket.samples.length / caseCount;
-    if (frequencyInCases < MIN_MED_FREQUENCY && bucket.samples.length < 2) {
-      continue;
+    const displayName = pickBestDisplayName(bucket.samples);
+    const form =
+      detectMedForm(displayName) ||
+      detectMedForm(bucket.samples[0]?.name) ||
+      "tab";
+    if (form === "tab") {
+      if (frequencyInCases < MIN_MED_FREQUENCY && bucket.samples.length < 2) {
+        continue;
+      }
     }
 
-    const displayName = pickBestDisplayName(bucket.samples);
     const dosage = pickModeValue(
       bucket.samples.filter((m) => m.dosage),
       (m) => m.dosage,
     );
     const directions = pickModeValue(bucket.samples, (m) => m.directions);
     const type = pickModeValue(bucket.samples, (m) => m.type);
+    const inferredType =
+      type ||
+      ({
+        tab: "Tablet",
+        syp: "Syrup",
+        inj: "Injection",
+        iv: "IV Fluid",
+        drops: "Drops",
+        topical: "Ointment",
+        sachet: "Sachet",
+        inh: "Inhaler",
+      }[form] || "");
 
     let frequency = null;
     let duration = null;
@@ -777,7 +909,7 @@ function aggregateMedicinePills(
       frequency,
       duration,
       directions,
-      type,
+      type: inferredType,
       dosages,
       frequencyInCases: Math.round(frequencyInCases * 1000) / 1000,
       usedInCases: bucket.samples.length,
@@ -787,7 +919,17 @@ function aggregateMedicinePills(
   }
 
   pills.sort((a, b) => b.frequencyInCases - a.frequencyInCases);
-  return pills.slice(0, MAX_MED_SUGGESTIONS);
+  const visible = pills.filter((pill) => !pill.alreadyInReview);
+  const byCategory = new Map();
+  for (const pill of visible) {
+    const cat = medicineFormCategory(pill);
+    if (!byCategory.has(cat)) byCategory.set(cat, []);
+    const list = byCategory.get(cat);
+    if (list.length < MAX_PER_MED_CATEGORY) list.push(pill);
+  }
+  const mixed = [];
+  for (const list of byCategory.values()) mixed.push(...list);
+  return mixed.slice(0, MAX_MED_SUGGESTIONS);
 }
 
 function aggregateLabPills(
@@ -805,9 +947,11 @@ function aggregateLabPills(
       .filter(Boolean),
   );
 
+  const gatedCases = similarCases.filter((clinicalCase) =>
+    casePassesScoreGate(clinicalCase, caseScores),
+  );
   const buckets = new Map();
-  for (const clinicalCase of similarCases) {
-    if (!casePassesScoreGate(clinicalCase, caseScores)) continue;
+  for (const clinicalCase of gatedCases) {
     for (const lab of clinicalCase.labs || []) {
       const key = normalizeLabKey(lab.name);
       if (!key) continue;
@@ -819,7 +963,7 @@ function aggregateLabPills(
     }
   }
 
-  const caseCount = similarCases.length || 1;
+  const caseCount = gatedCases.length || 1;
   const pills = [];
   for (const bucket of buckets.values()) {
     const frequencyInCases = bucket.count / caseCount;
@@ -835,47 +979,9 @@ function aggregateLabPills(
   }
 
   pills.sort((a, b) => b.frequencyInCases - a.frequencyInCases);
-  return pills.slice(0, MAX_LAB_SUGGESTIONS);
-}
-
-function isRelevantToContext(text, noteContext, section) {
-  const textTokens = tokenize(text);
-  if (!textTokens.length) return false;
-
-  const parts = [];
-  if (section === "complaints") {
-    parts.push(...(noteContext.complaints || []), noteContext.searchText);
-  } else if (section === "examination") {
-    parts.push(
-      ...(noteContext.examination || []),
-      ...(noteContext.complaints || []),
-      noteContext.searchText,
-    );
-  } else if (section === "diagnosis") {
-    parts.push(
-      ...(noteContext.diagnosis || []),
-      ...(noteContext.complaints || []),
-      noteContext.searchText,
-    );
-  } else if (section === "advice") {
-    parts.push(
-      ...(noteContext.advice || []),
-      ...(noteContext.diagnosis || []),
-      noteContext.searchText,
-    );
-  } else {
-    parts.push(noteContext.searchText);
-  }
-
-  const contextTokens = tokenize(parts.filter(Boolean).join(" "));
-  if (!contextTokens.length) return true;
-
-  const setB = new Set(contextTokens);
-  let inter = 0;
-  for (const token of textTokens) {
-    if (setB.has(token)) inter += 1;
-  }
-  return inter >= 1 || jaccard(textTokens, contextTokens) >= 0.1;
+  return pills
+    .filter((pill) => !pill.alreadyInReview)
+    .slice(0, MAX_LAB_SUGGESTIONS);
 }
 
 function aggregateTextPills(
@@ -883,11 +989,10 @@ function aggregateTextPills(
   field,
   currentBullets = [],
   caseScores = new Map(),
-  noteContext = {},
 ) {
   const currentSet = new Set(
     (currentBullets || [])
-      .map((text) => normalizeBulletKey(text))
+      .map((text) => normalizeNoteIdeaKey(text) || normalizeBulletKey(text))
       .filter(Boolean),
   );
 
@@ -903,14 +1008,17 @@ function aggregateTextPills(
     for (const raw of items) {
       const text = String(raw || "").trim();
       if (!text || text.length < 3) continue;
-      if (!isRelevantToContext(text, noteContext, field)) continue;
-      const key = normalizeBulletKey(text);
+      const key = normalizeNoteIdeaKey(text) || normalizeBulletKey(text);
       if (!key) continue;
+      if (currentSet.has(key)) continue;
       if (!buckets.has(key)) {
         buckets.set(key, { text, weight: 0 });
       }
       buckets.get(key).weight += weight;
-      if (text.length > buckets.get(key).text.length) {
+      if (
+        text.length < buckets.get(key).text.length &&
+        text.length >= 8
+      ) {
         buckets.get(key).text = text;
       }
     }
@@ -925,7 +1033,7 @@ function aggregateTextPills(
       text: bucket.text,
       frequencyInCases: Math.round(frequencyInCases * 1000) / 1000,
       usedInCases: Math.round(bucket.weight * 10),
-      alreadyInNote: currentSet.has(normalizeBulletKey(bucket.text)),
+      alreadyInNote: false,
       source: "memory",
     });
   }
@@ -949,9 +1057,11 @@ function aggregateProcedurePills(
     if (key) currentProcs.add(key);
   }
 
+  const gatedCases = similarCases.filter((clinicalCase) =>
+    casePassesScoreGate(clinicalCase, caseScores),
+  );
   const buckets = new Map();
-  for (const clinicalCase of similarCases) {
-    if (!casePassesScoreGate(clinicalCase, caseScores)) continue;
+  for (const clinicalCase of gatedCases) {
     for (const raw of clinicalCase.procedures || []) {
       const name = procName(raw);
       if (!name) continue;
@@ -964,11 +1074,13 @@ function aggregateProcedurePills(
     }
   }
 
-  const caseCount = similarCases.length || 1;
+  const caseCount = gatedCases.length || 1;
   const pills = [];
   for (const bucket of buckets.values()) {
     const frequencyInCases = bucket.count / caseCount;
-    if (frequencyInCases < MIN_PROCEDURE_FREQUENCY) continue;
+    if (frequencyInCases < MIN_PROCEDURE_FREQUENCY && bucket.count < 2) {
+      continue;
+    }
     pills.push({
       name: bucket.name,
       frequencyInCases: Math.round(frequencyInCases * 1000) / 1000,
@@ -978,7 +1090,9 @@ function aggregateProcedurePills(
   }
 
   pills.sort((a, b) => b.frequencyInCases - a.frequencyInCases);
-  return pills.slice(0, MAX_PROCEDURE_SUGGESTIONS);
+  return pills
+    .filter((pill) => !pill.alreadyInReview)
+    .slice(0, MAX_PROCEDURE_SUGGESTIONS);
 }
 
 function buildNotePills(
@@ -996,9 +1110,9 @@ function buildNotePills(
       section,
       noteContext[section],
       caseScores,
-      noteContext,
     ).filter((pill) => {
-      const key = normalizeBulletKey(pill.text);
+      const key =
+        normalizeNoteIdeaKey(pill.text) || normalizeBulletKey(pill.text);
       if (!key || used.has(key)) return false;
       used.add(key);
       return true;
@@ -1009,12 +1123,14 @@ function buildNotePills(
 }
 
 function bulletAlreadyInNote(text, noteContext = {}) {
-  const key = normalizeBulletKey(text);
+  const key = normalizeNoteIdeaKey(text) || normalizeBulletKey(text);
   if (!key) return true;
   for (const section of ["complaints", "examination", "diagnosis", "advice"]) {
     const items = noteContext[section] || [];
     for (const bullet of items) {
-      if (normalizeBulletKey(bullet) === key) return true;
+      const bulletKey =
+        normalizeNoteIdeaKey(bullet) || normalizeBulletKey(bullet);
+      if (bulletKey === key) return true;
     }
   }
   return false;
@@ -1044,16 +1160,18 @@ function buildMemoryHints(
         const text = String(raw || "").trim();
         if (!text || text.length < 3) continue;
         if (bulletAlreadyInNote(text, noteContext)) continue;
-        if (!isRelevantToContext(text, noteContext, section)) continue;
-        const key = normalizeBulletKey(text);
+        const key = normalizeNoteIdeaKey(text) || normalizeBulletKey(text);
         if (!key) continue;
         if (!bucket.has(key)) bucket.set(key, { text, score: 0 });
         bucket.get(key).score += weight;
+        if (text.length < bucket.get(key).text.length && text.length >= 8) {
+          bucket.get(key).text = text;
+        }
       }
     }
     note[section] = [...bucket.values()]
       .sort((a, b) => b.score - a.score)
-      .slice(0, 12)
+      .slice(0, 4)
       .map((row) => row.text);
   }
 
@@ -1099,25 +1217,22 @@ function buildMemoryHints(
     note,
     medicines: [...medicineBucket.values()]
       .sort((a, b) => b.score - a.score)
-      .slice(0, 15)
+      .slice(0, 6)
       .map((row) => row.name),
     labs: [...labBucket.values()]
       .sort((a, b) => b.score - a.score)
-      .slice(0, 12)
+      .slice(0, 4)
       .map((row) => row.name),
     procedures: [...procedureBucket.values()]
       .sort((a, b) => b.score - a.score)
-      .slice(0, 10)
+      .slice(0, 3)
       .map((row) => row.name),
     packageNames,
     hasNoteHints: Object.values(note).some((items) => items.length > 0),
   };
 }
 
-function hasUsableOrderMemory(similarCases, packages = []) {
-  if ((packages || []).length > 0) return true;
-  const prescriptionCases = similarCases.filter((c) => c.source !== "package");
-  if (prescriptionCases.length < 1) return false;
+function hasUsableOrderMemory(similarCases) {
   return similarCases.some(
     (clinicalCase) =>
       (clinicalCase.medicines || []).length > 0 ||
@@ -1130,7 +1245,9 @@ function hasUsableOrderMemory(similarCases, packages = []) {
  * Enhanced Clinical Case Scorer
  * Uses asymmetric containment (so short notes match rich records) + Diagnosis boost + Jaccard
  */
-function scoreCase(clinicalCase, context, umr) {
+function scoreCase(clinicalCase, context, _umr) {
+  if (!caseMatchesContext(clinicalCase, context)) return 0;
+
   const queryTokens = context.searchTokens || [];
   const caseTokens = clinicalCase.searchTokens || [];
   if (!queryTokens.length || !caseTokens.length) return 0;
@@ -1165,14 +1282,7 @@ function scoreCase(clinicalCase, context, umr) {
     }
   }
 
-  // 4. Same Patient Boost
-  if (
-    umr &&
-    clinicalCase.umr &&
-    String(umr).trim() === String(clinicalCase.umr).trim()
-  ) {
-    score += SAME_PATIENT_BOOST;
-  }
+  score += recencyBoost(clinicalCase.visitDate);
 
   return Math.min(1, score);
 }
@@ -1226,7 +1336,7 @@ async function findSimilarCases({
   context,
   umr,
   excludePrescriptionId,
-  limit = 40,
+  limit = SIMILAR_CASE_LIMIT,
 }) {
   const resolvedDoctorIds = normalizeDoctorIds(doctorIds);
   if (!resolvedDoctorIds.length) {
@@ -1269,6 +1379,12 @@ async function findSimilarCases({
     });
     if (!clinicalCase) continue;
 
+    const samePatient =
+      umr &&
+      clinicalCase.umr &&
+      String(umr).trim() === String(clinicalCase.umr).trim();
+    if (samePatient) continue;
+
     const score = scoreCase(clinicalCase, context, umr);
     if (score < MIN_SIMILARITY_SCORE) continue;
     scored.push({ clinicalCase, score });
@@ -1290,7 +1406,7 @@ async function findSimilarCases({
 }
 
 function confidenceFromCount(count) {
-  if (count >= 10) return "high";
+  if (count >= 8) return "high";
   if (count >= MIN_SIMILAR_CASES) return "medium";
   if (count >= 1) return "low";
   return "none";
@@ -1299,6 +1415,7 @@ function confidenceFromCount(count) {
 const {
   suggestNotePillsWithLlm,
   suggestOrderPillsWithLlm,
+  cleanPracticeSuggestionsWithLlm,
   buildNotePillsFromHints,
   mergeNotePills,
   countNotePills,
@@ -1360,7 +1477,7 @@ async function suggestFromPractice({
   let procedurePills = [];
   let suggestionSource = "memory";
 
-  const orderMemoryAvailable = hasUsableOrderMemory(similarCases, packages);
+  const orderMemoryAvailable = hasUsableOrderMemory(similarCases);
   if (orderMemoryAvailable) {
     medicinePills = aggregateMedicinePills(
       similarCases,
@@ -1386,7 +1503,7 @@ async function suggestFromPractice({
     suggestionSource = "memory";
   }
 
-  if (countNotePills(notePills) < 3) {
+  if (countNotePills(notePills) === 0) {
     try {
       const llmNotePills = await suggestNotePillsWithLlm({
         extractedClinical,
@@ -1443,6 +1560,35 @@ async function suggestFromPractice({
     }
   }
 
+  try {
+    const cleaned = await cleanPracticeSuggestionsWithLlm({
+      extractedClinical,
+      noteContext,
+      medicinePills,
+      labPills,
+      procedurePills,
+      notePills,
+    });
+    const hadMemory =
+      medicinePills.length ||
+      labPills.length ||
+      procedurePills.length ||
+      countNotePills(notePills) > 0;
+    medicinePills = cleaned.medicinePills;
+    labPills = cleaned.labPills;
+    procedurePills = cleaned.procedurePills;
+    notePills = cleaned.notePills;
+    if (
+      hadMemory &&
+      suggestionSource === "memory" &&
+      (medicinePills.length > 0 || labPills.length > 0)
+    ) {
+      suggestionSource = "memory+llm";
+    }
+  } catch (error) {
+    console.warn("LLM suggestion clean failed:", error?.message || error);
+  }
+
   let patientContinue = null;
   if (umr) {
     const lastPatientRx = await Prescription.findOne({
@@ -1475,15 +1621,40 @@ async function suggestFromPractice({
         .filter(Boolean);
 
       if (activeMeds.length || activeLabs.length) {
+        const seenMed = new Set();
+        const seenLab = new Set();
         patientContinue = {
           prescriptionId: lastPatientRx.prescriptionId,
           visitDate: lastPatientRx.date || lastPatientRx.createdAt,
-          medicines: activeMeds,
-          labs: activeLabs,
+          medicines: activeMeds.filter((name) => {
+            const key = normalizeMedKey(name);
+            if (!key || seenMed.has(key)) return false;
+            seenMed.add(key);
+            return true;
+          }),
+          labs: activeLabs.filter((name) => {
+            const key = normalizeLabKey(name);
+            if (!key || seenLab.has(key)) return false;
+            seenLab.add(key);
+            return true;
+          }),
         };
       }
     }
   }
+
+  const continueMedKeys = new Set(
+    (patientContinue?.medicines || []).map((name) => normalizeMedKey(name)),
+  );
+  const continueLabKeys = new Set(
+    (patientContinue?.labs || []).map((name) => normalizeLabKey(name)),
+  );
+  medicinePills = medicinePills.filter(
+    (pill) => !continueMedKeys.has(normalizeMedKey(pill.name)),
+  );
+  labPills = labPills.filter(
+    (pill) => !continueLabKeys.has(normalizeLabKey(pill.name)),
+  );
 
   return {
     similarCaseCount,
@@ -1530,6 +1701,8 @@ module.exports = {
   normalizeMedKey,
   normalizeLabKey,
   normalizeBulletKey,
+  normalizeNoteIdeaKey,
+  caseMatchesContext,
   scoreCase,
   MIN_SIMILAR_CASES,
 };

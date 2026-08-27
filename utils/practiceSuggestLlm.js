@@ -1,6 +1,5 @@
 /**
- * Grounded LLM suggestions — only when doctor memory / packages are unavailable.
- * Never invent clinical facts; prefer exact memory hint phrases.
+ * Practice suggestions: memory first, then LLM to generate (if empty) or clean duplicates.
  */
 
 const {
@@ -47,6 +46,22 @@ function normalizeBulletKey(text) {
     .trim();
 }
 
+function normalizeNoteIdeaKey(text) {
+  return normalizeBulletKey(text)
+    .replace(/\b(c|h)\s+o\b/g, " ")
+    .replace(
+      /\b(c\/o|h\/o|since|for|with|associated|and|the|of|in|on|to|a|an|days?|weeks?|months?|years?|history|complaints?|mild|moderate|severe|high|grade|low|ago)\b/g,
+      " ",
+    )
+    .replace(/\b\d+\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function pillIdeaKey(text) {
+  return normalizeNoteIdeaKey(text) || normalizeBulletKey(text);
+}
+
 function tokenize(text) {
   const normalized = normalizeBulletKey(text);
   if (!normalized) return [];
@@ -59,11 +74,11 @@ function noteSectionTexts(noteContext = {}, section) {
 }
 
 function bulletAlreadyInNote(text, noteContext = {}) {
-  const key = normalizeBulletKey(text);
+  const key = pillIdeaKey(text);
   if (!key) return true;
   for (const section of ["complaints", "examination", "diagnosis", "advice"]) {
     for (const bullet of noteSectionTexts(noteContext, section)) {
-      if (normalizeBulletKey(bullet) === key) return true;
+      if (pillIdeaKey(bullet) === key) return true;
     }
   }
   return false;
@@ -133,12 +148,12 @@ function normalizeLlmNotePills(
         typeof item === "string" ? item : item?.text || "",
       ).trim();
       if (!text || text.length < 3) continue;
-      const key = normalizeBulletKey(text);
+      const key = pillIdeaKey(text);
       if (!key || used.has(key)) continue;
       if (!isGroundedSuggestion(text, groundingCorpus)) continue;
       used.add(key);
       pills.push(toNotePill(text, noteContext));
-      if (pills.length >= maxPerSection) break;
+      if (pills.length >= 2) break;
     }
     result[section] = pills;
   }
@@ -198,7 +213,7 @@ function normalizeLlmMedicinePills(
       alreadyInReview: currentMeds.has(key),
       source: "llm",
     });
-    if (pills.length >= 12) break;
+    if (pills.length >= 20) break;
   }
   return pills;
 }
@@ -243,7 +258,7 @@ function normalizeLlmNamePills(
       alreadyInReview: current.has(key),
       source: "llm",
     });
-    if (pills.length >= 10) break;
+    if (pills.length >= 15) break;
   }
   return pills;
 }
@@ -263,7 +278,7 @@ STRICT ACCURACY RULES:
 - examination = physical exam findings (e.g. throat congested, chest clear, tenderness) relevant to complaints.
 - diagnosis = working diagnoses supported by extracted complaints/exam.
 - advice = plan/follow-up/lifestyle/hydration advice.
-- Max 3 bullets per non-empty section. Prefer concise bullet points.`;
+- Max 2 bullets per non-empty section. Prefer concise bullet points.`;
 
 const ORDER_SYSTEM_PROMPT = `You are an expert Indian Outpatient (OPD) Physician AI. Suggest relevant, safe, standard tap-to-add OPD medicines, labs, and procedures matching the patient's complaints and provisional diagnosis when past doctor memory is unavailable.
 
@@ -292,7 +307,7 @@ CLINICAL RULES:
 2. If practiceMemoryHints has specific medicines/labs, prioritize those exact names.
 3. Do NOT invent dangerous or heavy specialty inpatient drugs.
 4. Do NOT duplicate medicines or labs already present in currentReview.
-5. Max 8 medicines, 6 labs, 4 procedures. Return clean, standard Indian brand/generic names.`;
+5. Suggest up to 5 medicines per type (tablets, syrups, injections, etc.) and up to 5 labs per type (blood, urine, imaging, cardiology). Max 20 medicines, 15 labs, 5 procedures. Return clean, standard Indian brand/generic names.`;
 
 function buildNotePillsFromHints(memoryHints = {}, noteContext = {}) {
   const sections = ["complaints", "examination", "diagnosis", "advice"];
@@ -308,7 +323,7 @@ function buildNotePillsFromHints(memoryHints = {}, noteContext = {}) {
       if (!key || used.has(key)) continue;
       used.add(key);
       pills.push(toNotePill(clean, noteContext, "memory"));
-      if (pills.length >= 6) break;
+      if (pills.length >= 2) break;
     }
     result[section] = pills;
   }
@@ -333,7 +348,7 @@ function mergeNotePills(primary = {}, secondary = {}) {
       ...(primary[section] || []),
       ...(secondary[section] || []),
     ]) {
-      const key = normalizeBulletKey(pill.text);
+      const key = pillIdeaKey(pill.text);
       if (!key || used.has(key)) continue;
       used.add(key);
       pills.push(pill);
@@ -454,9 +469,216 @@ async function suggestOrderPillsWithLlm({
   };
 }
 
+const CLEAN_SYSTEM_PROMPT = `You clean an Indian OPD doctor's tap-to-add suggestion list.
+
+You receive the patient's complaints/diagnosis AND the raw suggestion pills from this doctor's past practice.
+
+Return JSON only:
+{
+  "medicines": ["exact name from the input list"],
+  "labs": ["exact name from the input list"],
+  "procedures": ["exact name from the input list"],
+  "notes": {
+    "complaints": ["exact text from the input list"],
+    "examination": ["exact text from the input list"],
+    "diagnosis": ["exact text from the input list"],
+    "advice": ["exact text from the input list"]
+  }
+}
+
+RULES:
+1. Do NOT invent new medicines, labs, procedures, or note lines. Only pick from the provided lists.
+2. Merge duplicates / same drug (brand vs generic, spelling, Tab vs Tablet). Keep ONE name — the cleanest, most complete one from the list.
+3. Drop items that do not fit this patient's complaints and diagnosis.
+4. Keep ALL formulation types that appear in the input (tablets, syrups, drops, ointments, sachets, inhalers, injections, IV). Do not return only tablets. For each type that is present, keep 4–5 items when available.
+5. Drop only true duplicates and clearly unrelated items. Prefer the doctor's usual names. Order by usefulness for this case.`;
+
+function medicineFormCategory(pill) {
+  const type = String(pill?.type || "").toLowerCase();
+  const name = String(pill?.name || "").toLowerCase();
+  const blob = `${type} ${name}`;
+  if (/\b(inj|injection)\b/.test(blob) || name.startsWith("inj")) return "Injections";
+  if (/\b(iv|infusion)\b/.test(blob) || name.startsWith("iv ")) return "IV Fluids";
+  if (/\b(syp|syrup|susp|suspension|liquid)\b/.test(blob) || name.startsWith("syp")) {
+    return "Syrups & Liquids";
+  }
+  if (/\b(drop|drops)\b/.test(blob)) return "Drops";
+  if (/\b(oint|ointment|cream|gel|lotion)\b/.test(blob)) return "Ointments & Topicals";
+  if (/\b(sachet|powder)\b/.test(blob)) return "Sachets & Powders";
+  if (/\b(spray|inhaler|rotacap|respule)\b/.test(blob)) return "Inhalers & Sprays";
+  if (/\b(tab|tablet|cap|capsule)\b/.test(blob) || name.startsWith("tab") || name.startsWith("cap")) {
+    return "Tablets & Capsules";
+  }
+  return "Other Medicines";
+}
+
+function fillMissingMedCategories(cleaned = [], original = [], perCat = 5) {
+  if (!original.length) return cleaned;
+  const out = [...cleaned];
+  const used = new Set(
+    out.map((p) => `${medicineFormCategory(p)}::${pillIdeaKey(pillNameOf(p))}`),
+  );
+  const originalByCat = new Map();
+  for (const pill of original) {
+    const cat = medicineFormCategory(pill);
+    if (!originalByCat.has(cat)) originalByCat.set(cat, []);
+    originalByCat.get(cat).push(pill);
+  }
+  for (const [cat, pills] of originalByCat.entries()) {
+    const have = out.filter((p) => medicineFormCategory(p) === cat).length;
+    if (have > 0) continue;
+    for (const pill of pills) {
+      if (out.filter((p) => medicineFormCategory(p) === cat).length >= perCat) {
+        break;
+      }
+      const id = `${cat}::${pillIdeaKey(pillNameOf(pill))}`;
+      if (used.has(id)) continue;
+      used.add(id);
+      out.push(pill);
+    }
+  }
+  return out;
+}
+
+function pillNameOf(pill) {
+  return String(pill?.name || pill?.text || "").trim();
+}
+
+function matchOriginalPill(original = [], keepName) {
+  const key = normalizeBulletKey(keepName);
+  if (!key) return null;
+  let best = null;
+  let bestScore = 0;
+  for (const pill of original) {
+    const n = normalizeBulletKey(pillNameOf(pill));
+    if (!n) continue;
+    if (n === key) return pill;
+    if (n.includes(key) || key.includes(n)) {
+      const score =
+        Math.min(n.length, key.length) / Math.max(n.length, key.length);
+      if (score > bestScore) {
+        best = pill;
+        bestScore = score;
+      }
+    }
+  }
+  return bestScore >= 0.45 ? best : null;
+}
+
+function selectKeptPills(original = [], keptNames = []) {
+  if (!Array.isArray(keptNames) || !keptNames.length) return [];
+  const used = new Set();
+  const out = [];
+  for (const name of keptNames) {
+    const hit = matchOriginalPill(original, name);
+    if (!hit) continue;
+    const id = pillIdeaKey(pillNameOf(hit));
+    if (!id || used.has(id)) continue;
+    used.add(id);
+    out.push(hit);
+  }
+  return out;
+}
+
+function selectKeptNotePills(original = {}, kept = {}) {
+  const sections = ["complaints", "examination", "diagnosis", "advice"];
+  const result = {};
+  for (const section of sections) {
+    const source = original[section] || [];
+    const names = Array.isArray(kept?.[section])
+      ? kept[section]
+      : source.map((p) => p.text);
+    const selected = selectKeptPills(
+      source.map((p) => ({ ...p, name: p.text })),
+      names,
+    ).map((p) => ({
+      ...p,
+      text: p.text || p.name,
+    }));
+    result[section] = selected.length ? selected : source;
+  }
+  return result;
+}
+
+async function cleanPracticeSuggestionsWithLlm({
+  extractedClinical = {},
+  noteContext = {},
+  medicinePills = [],
+  labPills = [],
+  procedurePills = [],
+  notePills = {},
+}) {
+  const hasWork =
+    medicinePills.length > 1 ||
+    labPills.length > 1 ||
+    procedurePills.length > 1 ||
+    ["complaints", "examination", "diagnosis", "advice"].some(
+      (section) => (notePills[section] || []).length > 1,
+    );
+  if (!hasWork) {
+    return { medicinePills, labPills, procedurePills, notePills };
+  }
+
+  const parsed = await callSuggestJsonCompletion(
+    [
+      { role: "system", content: CLEAN_SYSTEM_PROMPT },
+      {
+        role: "user",
+        content: JSON.stringify({
+          patient: {
+            complaints: noteContext.complaints || [],
+            diagnosis: noteContext.diagnosis || [],
+            examination: noteContext.examination || [],
+            clinicalNote: extractedClinical.clinicalNote || "",
+          },
+          rawSuggestions: {
+            medicines: medicinePills.map((p) => ({
+              name: p.name,
+              type: p.type || "",
+              category: medicineFormCategory(p),
+              dosage: p.dosage || "",
+            })),
+            labs: labPills.map((p) => ({ name: p.name })),
+            procedures: procedurePills.map((p) => ({ name: p.name })),
+            notes: {
+              complaints: (notePills.complaints || []).map((p) => p.text),
+              examination: (notePills.examination || []).map((p) => p.text),
+              diagnosis: (notePills.diagnosis || []).map((p) => p.text),
+              advice: (notePills.advice || []).map((p) => p.text),
+            },
+          },
+        }),
+      },
+    ],
+    2048,
+  );
+
+  const cleanedMeds = fillMissingMedCategories(
+    selectKeptPills(
+      medicinePills,
+      parsed.medicines || parsed.medicinePills || [],
+    ),
+    medicinePills,
+    5,
+  );
+  const cleanedLabs = selectKeptPills(labPills, parsed.labs || parsed.labPills || []);
+  const cleanedProcs = selectKeptPills(
+    procedurePills,
+    parsed.procedures || parsed.procedurePills || [],
+  );
+
+  return {
+    medicinePills: cleanedMeds.length ? cleanedMeds : medicinePills,
+    labPills: cleanedLabs.length ? cleanedLabs : labPills,
+    procedurePills: cleanedProcs.length ? cleanedProcs : procedurePills,
+    notePills: selectKeptNotePills(notePills, parsed.notes || {}),
+  };
+}
+
 module.exports = {
   suggestNotePillsWithLlm,
   suggestOrderPillsWithLlm,
+  cleanPracticeSuggestionsWithLlm,
   buildNotePillsFromHints,
   mergeNotePills,
   countNotePills,

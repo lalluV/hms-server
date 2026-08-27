@@ -115,6 +115,42 @@ function composeNoteFromSections(sections) {
   return blocks.join("\n\n");
 }
 
+function peelHistoryOfFromComplaints(sections) {
+  const next = { ...sections };
+  const complaints = Array.isArray(next.complaints) ? [...next.complaints] : [];
+  const history = Array.isArray(next.history) ? [...next.history] : [];
+  const kept = [];
+  const alreadyHas = (text) =>
+    history.some((h) =>
+      String(h)
+        .toLowerCase()
+        .includes(String(text).toLowerCase().slice(0, 24)),
+    );
+  const pushHistory = (raw) => {
+    const peeled = String(raw || "")
+      .replace(/\.+$/, "")
+      .trim();
+    if (!peeled || alreadyHas(peeled)) return;
+    history.push(peeled.charAt(0).toUpperCase() + peeled.slice(1));
+  };
+  for (const bullet of complaints) {
+    const s = String(bullet || "").trim();
+    const mid = s.match(/^(.*?)\.\s*History of\s+(.+)$/i);
+    const only = s.match(/^History of\s+(.+)$/i);
+    if (mid && mid[1].trim()) {
+      kept.push(mid[1].trim());
+      pushHistory(mid[2]);
+    } else if (only) {
+      pushHistory(only[1]);
+    } else {
+      kept.push(bullet);
+    }
+  }
+  next.complaints = kept;
+  if (history.length) next.history = history;
+  return next;
+}
+
 /**
  * Layout-only: turn single-line "Complaints: … Advice: …" into labeled bullets.
  * Does not invent clinical content.
@@ -128,8 +164,9 @@ function formatDoctorNotesLayout(noteText) {
     "$1\n$2:",
   );
 
-  const sections = parseComposedNoteSections(text);
+  let sections = parseComposedNoteSections(text);
   if (Object.keys(sections).length) {
+    sections = peelHistoryOfFromComplaints(sections);
     return composeNoteFromSections(sections) || text;
   }
   return text;
@@ -193,6 +230,8 @@ IPD WARD FOLLOW-UP MODE — PATCH ONLY (CRITICAL — KEEP OUTPUT TINY)
 - RESTART (IPD WARD):
   * When doctor asks to restart / resume a previously stopped ward medicine → medicineOps op "restart" with match = chart name.
 - assistantReply is required: one short spoken sentence confirming the action.
+- CLINICAL ROUTING: symptom-only text → Complaints, not a medicine. A diagnostic label/abbreviation → Diagnosis only (expanded English), never Complaints. Investigation abbreviations → labOps with THAT test's conventional name; never remap to fit diagnosis; never medicines; never notes.
+- MEDICINE NAMES: keep EVERY spoken product token (brand + letter suffix + strength). Never drop suffixes or treat them as times unless they are explicit frequency/time words. Never rewrite a brand to its salt. Expand to generic only when the entire mention is a generic abbreviation with no brand tokens. Adding a medicine does not invent notes.
 `;
 
 function buildIpdReviewFollowUpUserPrompt(
