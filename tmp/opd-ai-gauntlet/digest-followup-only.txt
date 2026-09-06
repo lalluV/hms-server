@@ -1,0 +1,41 @@
+FOLLOWUP-ONLY 2026-08-26T23:21:04.032Z  4 PASS / 0 FAIL / 4 of 119
+
+84	PASS	FU 200/7394ms	add mp, pv, pf, uti, gabapin me, dolo, cbp
+  meds: Gabapin ME, Dolo
+  slots: Gabapin ME:Morning; Dolo:Morning
+  labs: MP (Malaria Parasite), PV (Plasmodium vivax), PF (Plasmodium falciparum), CBP (Complete Blood Picture)
+  procs: -
+  notes: • Diagnosed with urinary tract infection | • Diagnosed with malaria parasite infection | • Diagnosed with Plasmodium vivax infection | • Diagnosed with Plasmodium falciparum infection
+  reply: Added diagnoses, medicines, and lab tests as requested.
+  FAIL: -
+provider: -
+
+89	PASS	FU 200/5583ms	c/o malena 1d, k/c/o pud on pan 40, o/e pallor, npo, ppi inf, cbp lft, usg abd, no nsaids, if hb<7 transfuse
+  meds: Pan 40, PPI infusion
+  slots: Pan 40:Morning; PPI infusion:-
+  labs: CBP (Complete Blood Picture), LFT (Liver Function Test), USG Abdomen
+  procs: -
+  notes: Complaints: | • Malena for 1 day. | • malena 1d |  | History: | • Known case of peptic ulcer disease on Pan 40. |  | Examination: | • Pallor observed. |  | Advice: | • Nil per oral. No NSAIDs. If hemoglobin less than 7, transfuse blood.
+  reply: Updated chart with complaints, history, examination, investigations, medicines, and advice as requested.
+  FAIL: -
+provider: -
+
+90	PASS	FU 200/4987ms	k/c/o ckd on nodosis, c/o loin pain, usg kub, kft, drotin 40 sos, plenty fluids, no nsaids, no acei, if creat>3 refer nephro
+  meds: Nodosis, Drotin 40
+  slots: Nodosis:-; Drotin 40:-
+  labs: USG KUB (Ultrasound Kidney Ureter Bladder), KFT (Kidney Function Test)
+  procs: -
+  notes: Complaints: | • loin pain |  | History: | • ckd on nodosis |  | Advice: | • Avoid NSAIDs
+  reply: Updated chart with CKD history, complaints, medicines, labs, and advice as requested.
+  FAIL: -
+provider: -
+
+91	PASS	FU 200/5334ms	k/c/o t2dm on metformin, c/o polyuria, hba1c, fbs, lantus 10iu m 15iu e 3d, no new metformin, review endo
+  meds: Lantus
+  slots: Lantus:Morning+Evening
+  labs: HbA1c (Glycated Hemoglobin), FBS (Fasting Blood Sugar)
+  procs: -
+  notes: Complaints: | • polyuria |  | History: | • t2dm on metformin
+  reply: Updated chart with diabetes history, symptoms, medicines, labs, and advice.
+  FAIL: -
+provider: -

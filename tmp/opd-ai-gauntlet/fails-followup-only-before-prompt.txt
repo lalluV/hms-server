@@ -1,0 +1,20 @@
+1	missing lab PV	uti, add mp, pv, pf, gabapin me 100 hs
+3	unwanted med conditional artesunate should be advice: pcm 650 | artesunate	fever 5d, mp pv pf, pcm 650 tid, if mp+ start artesunate
+4	missing no-syrup advice	add dolo 650 bd, cbp lft, cough 3 days, no syp
+5	missing med Gabapin ME | unwanted lab UTI must not be a lab: MP (Malaria Parasite) | UTI (Urinalysis)	gabapin me, mp, uti
+9a	missing med Gabapin ME suffix	gibapin me
+9b	missing med Gabapin ME suffix	gabapin me
+9c	missing med Gabapin ME 300	gabapin me 300
+16	IV defaulted to 5 days: 5 days	NS 1 pint 100ml/hr
+22a	missing lab AEC lab	aec
+28	k/c/o should be History not only Diagnosis	k/c/o dm t2, now polyuria
+43	tid used Night not Evening: Morning+Afternoon+Night	pcm 650 tid
+44	missing med Gabapin ME	gabapin me hs
+56	missing lab ASO	aso, throat swab, azithro
+58	unwanted lab exam as lab — should be Examination: Intraocular Pressure | Fundus Examination	iop, fundus, not labs-as-meds
+61	missing med Gabapin ME	insomnia, gabapin me hs, no diagnosis unless named
+63	missing lab ECG	chest pain, trop i, ecg, asprin 75
+65	missing lab EEG	seizure, eeg, levipil 500 bd
+66	missing med Nodosis | missing no NSAIDs	ckd, kft, no nsaids, nodosis
+67	missing lab KUB	stone, kub, drotin, plenty fluids
+73	FNAC dropped	fnac

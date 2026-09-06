@@ -1,0 +1,10 @@
+{
+  "generatedAt": "2026-08-26T19:05:23.153Z",
+  "caseCount": 92,
+  "followup": "http://localhost:3001/api/discharge-summary/review-followup",
+  "extract": "http://localhost:3001/api/discharge-summary/parse-clinical-note",
+  "files": {
+    "slim": "slim.json",
+    "raw": "results.jsonl"
+  }
+}

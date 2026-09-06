@@ -1,0 +1,7105 @@
+[
+  {
+    "id": "1",
+    "instruction": "uti, add mp, pv, pf, gabapin me 100 hs",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Updated the chart with the diagnosis of urinary tract infection, ordered investigations, and added Gabapin ME 100mg at night.",
+      "doctorNotes": "Diagnosis:\n• • Urinary tract infection",
+      "medicines": [
+        {
+          "name": "Gabapin ME 100",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet at night.",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Night"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Malaria Parasite",
+        "Peripheral Venous Smear",
+        "Peripheral Film"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Diagnosis:\n• Urinary tract infection",
+      "medicines": [
+        {
+          "name": "Gabapin ME 100",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet at night.",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Night"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Microscopic Examination of Urine",
+        "PV (Vaginal Swab/Examination)",
+        "PF (Peritoneal Fluid Analysis)"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "diagnosis": [
+          "Urinary tract infection"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 5256,
+    "extractMs": 3448,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "2",
+    "instruction": "c/o burning micturition 3d likely uti add cbp cue rbs nitrofurantoin 100 bd 5d",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have updated the chart with the patient's complaints, provisional diagnosis, ordered investigations, and prescribed medication.",
+      "doctorNotes": "Complaints:\n• Burning micturition for 3 days\n\nDiagnosis:\n• Likely urinary tract infection",
+      "medicines": [
+        {
+          "name": "nitrofurantoin 100",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening.",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Complete Blood Picture",
+        "Urine Routine Examination",
+        "Random Blood Sugar"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Burning micturition for 3 days\n\nDiagnosis:\n• Likely urinary tract infection",
+      "medicines": [
+        {
+          "name": "nitrofurantoin 100",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Complete Blood Picture",
+        "Urine Routine and Microscopy",
+        "Random Blood Sugar"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Burning micturition for 3 days"
+        ],
+        "diagnosis": [
+          "Likely urinary tract infection"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 5051,
+    "extractMs": 4208,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "3",
+    "instruction": "fever 5d, mp pv pf, pcm 650 tid, if mp+ start artesunate",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Updated the clinical chart with patient complaints, ordered investigations, and medication details.",
+      "doctorNotes": "Complaints:\n• Fever for 5 days\n\nAdvice:\n• If malaria parasite test is positive, start artesunate",
+      "medicines": [
+        {
+          "name": "pcm 650",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning, afternoon, and evening for 5 days.",
+          "unitSample": [
+            "",
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Afternoon",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "MP",
+        "PV",
+        "PF"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Fever for 5 days\n\nAdvice:\n• If malaria parasite test is positive, start Artesunate",
+      "medicines": [
+        {
+          "name": "PCM 650",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning, afternoon and evening for 5 days",
+          "unitSample": [
+            "",
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Afternoon",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "MP",
+        "PV",
+        "PF"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Fever for 5 days"
+        ],
+        "advice": [
+          "If malaria parasite test is positive, start Artesunate"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 4123,
+    "extractMs": 4859,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "4",
+    "instruction": "add dolo 650 bd, cbp lft, cough 3 days, no syp",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have updated the chart with the prescribed medication, ordered investigations, and documented the patient's symptoms.",
+      "doctorNotes": "Complaints:\n• Cough for 3 days\n\nAdvice:\n• No syrup advised",
+      "medicines": [
+        {
+          "name": "Dolo 650",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days.",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Complete Blood Picture",
+        "Liver Function Test"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Cough for 3 days",
+      "medicines": [
+        {
+          "name": "Dolo 650",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Complete Blood Picture",
+        "Liver Function Test"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Cough for 3 days"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 4123,
+    "extractMs": 5268,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "5",
+    "instruction": "gabapin me, mp, uti",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Updated the chart with the patient's complaints and diagnosis.",
+      "doctorNotes": "Complaints:\n• • Gabapin (pain/burning sensation)\n• • MP (myalgia/muscle pain)\n\nDiagnosis:\n• • Urinary tract infection",
+      "medicines": [],
+      "labTests": [
+        "Urine Routine/Microscopy"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Diagnosis:\n• Urinary tract infection",
+      "medicines": [
+        {
+          "name": "Gabapin ME",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "MP",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "diagnosis": [
+          "Urinary tract infection"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 4397,
+    "extractMs": 4833,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "6",
+    "instruction": "add mp pv pf",
+    "chart": "custom",
+    "followup": {
+      "assistantReply": "Updated the investigation orders with MP, PV, and PF tests.",
+      "doctorNotes": "Diagnosis:\n• • Urinary tract infection",
+      "medicines": [],
+      "labTests": [
+        "Malaria Parasite (MP)",
+        "Plasmodium vivax (PV)",
+        "Plasmodium falciparum (PF)"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [
+        "MP (Malaria Parasite)",
+        "PV (Plasmodium vivax)",
+        "PF (Plasmodium falciparum)"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 4655,
+    "extractMs": 4202,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "7",
+    "instruction": "cough",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have updated the chart to include the patient's presenting complaint of cough.",
+      "doctorNotes": "Complaints:\n• Cough",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Cough",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Cough"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 3415,
+    "extractMs": 4469,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "8a",
+    "instruction": "viral fever",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Updated the chart with the diagnosis of viral fever.",
+      "doctorNotes": "Diagnosis:\n• • Viral fever",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Fever with viral symptoms",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Fever with viral symptoms"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 4036,
+    "extractMs": 6843,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "8b",
+    "instruction": "fever 3d",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have updated the chart with the patient's presenting complaint of fever.",
+      "doctorNotes": "Complaints:\n• Fever for 3 days",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Fever for 3 days",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Fever for 3 days"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 4606,
+    "extractMs": 4438,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "9a",
+    "instruction": "gibapin me",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have added the requested medication to your chart.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "Gibapin",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days.",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "Gibapin ME",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 4355,
+    "extractMs": 5107,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "9b",
+    "instruction": "gabapin me",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have added Gabapin to the medication list.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "Gabapin",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening.",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "Gabapin ME",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 5098,
+    "extractMs": 6312,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "9c",
+    "instruction": "gabapin me 300",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have added Gabapin ME 300 to the medication list.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "Gabapin ME 300",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening.",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "Gabapin ME 300",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning for 5 days",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 4493,
+    "extractMs": 4892,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "10",
+    "instruction": "pan 40",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have added Pan 40 to the medication list.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "Pan 40",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning before food for 5 days.",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            true
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "Pan 40",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning before food for 5 days.",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            true
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 4775,
+    "extractMs": 4676,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "11",
+    "instruction": "pcm 650 bd",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Updated the medication list with PCM 650 mg.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "PCM 650",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days.",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "pcm 650",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 4588,
+    "extractMs": 5898,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "12",
+    "instruction": "telma am h 40",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Updated the medication list with Telma AM H 40.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "Telma AM H 40",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning.",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "Telma AM H 40",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning for 5 days",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 4303,
+    "extractMs": 4024,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "13",
+    "instruction": "wysolone 40 then 20 then 10 bd 3d each",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have updated the medication plan with the prescribed Wysolone taper.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "Wysolone 40",
+          "type": "Tablet",
+          "duration": "3 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 3 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "Wysolone 20",
+          "type": "Tablet",
+          "duration": "3 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 3 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "Wysolone 10",
+          "type": "Tablet",
+          "duration": "3 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 3 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "Wysolone 40mg",
+          "type": "Tablet",
+          "duration": "3 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 3 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "Wysolone 20mg",
+          "type": "Tablet",
+          "duration": "3 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 3 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "Wysolone 10mg",
+          "type": "Tablet",
+          "duration": "3 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 3 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 5092,
+    "extractMs": 5023,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "14",
+    "instruction": "hctz 12.5",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Added medicine Hydrochlorothiazide 12.5 mg tablet.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "hctz 12.5",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning for 5 days",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "hctz 12.5",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "\"\"",
+            "\"\""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 4171,
+    "extractMs": 6502,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "15",
+    "instruction": "azithro 500 od 3d",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have added the prescribed antibiotic course to your chart.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "azithro 500",
+          "type": "Tablet",
+          "duration": "3 days",
+          "directions": "Take 1 tablet in the morning for 3 days.",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "azithro 500",
+          "type": "Tablet",
+          "duration": "3 days",
+          "directions": "Take 1 tablet in the morning for 3 days",
+          "unitSample": [
+            "\"\""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 3338,
+    "extractMs": 6387,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "16",
+    "instruction": "NS 1 pint 100ml/hr",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "IV fluid Normal Saline 1 pint at 100 ml per hour added.",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 2870,
+    "extractMs": 3183,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "18",
+    "instruction": "add tsh ft3 ft4",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Added thyroid function tests.",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [
+        "tsh",
+        "ft3",
+        "ft4"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [
+        "TSH",
+        "FT3",
+        "FT4"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 2341,
+    "extractMs": 3934,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "17",
+    "instruction": "lali b inj stat",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Added Lali B injection stat.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "lali b inj",
+          "type": "Injection",
+          "duration": "Once",
+          "directions": "Give one injection immediately",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "lali b inj",
+          "type": "Injection",
+          "duration": "Once",
+          "directions": "Give 1 injection immediately",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 3579,
+    "extractMs": 4689,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "19",
+    "instruction": "hbsag anti hcv hiv",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have updated the chart with the requested laboratory investigations.",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [
+        "HBsAg",
+        "Anti-HCV",
+        "HIV"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [
+        "HBsAg",
+        "Anti-HCV",
+        "HIV"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 1432,
+    "extractMs": 2817,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "20a",
+    "instruction": "usg abd",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have added the requested ultrasound investigation to your chart.",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [
+        "USG Abdomen"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [
+        "USG Abdomen"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 3476,
+    "extractMs": 2594,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "20b",
+    "instruction": "cxr pa",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have added the requested chest X-ray to your investigation list.",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [
+        "Chest X-ray PA view"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [
+        "Chest X-ray PA view"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 2987,
+    "extractMs": 2393,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "21a",
+    "instruction": "ps for mp",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have updated the chart with the requested investigations.",
+      "doctorNotes": "• Peripheral Smear for Malaria Parasite ordered.",
+      "medicines": [],
+      "labTests": [
+        "Peripheral Smear for Malaria Parasite"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [
+        "Peripheral Smear for Malarial Parasite"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 2834,
+    "extractMs": 2664,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "21b",
+    "instruction": "mp pv pf",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Updated the laboratory investigations based on the provided clinical codes.",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [
+        "Malaria Parasite (MP)",
+        "Plasmodium vivax (PV)",
+        "Plasmodium falciparum (PF)"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [
+        "MP (Malaria Parasite)",
+        "PV (Plasmodium vivax)",
+        "PF (Plasmodium falciparum)"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 2462,
+    "extractMs": 3433,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "22a",
+    "instruction": "aec",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "The patient presents with acute exacerbation of chronic obstructive pulmonary disease.",
+      "doctorNotes": "Complaints:\n• Acute exacerbation of chronic obstructive pulmonary disease\n\nDiagnosis:\n• Acute exacerbation of chronic obstructive pulmonary disease",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 3937,
+    "extractMs": 3371,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "22b",
+    "instruction": "ace",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "The patient's clinical status is stable with no new complaints or diagnostic findings.",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 3275,
+    "extractMs": 4565,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "23",
+    "instruction": "crp",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have added the CRP test to your laboratory investigations.",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [
+        "CRP"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [
+        "CRP"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 4373,
+    "extractMs": 3813,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "24",
+    "instruction": "add ra factor ana",
+    "chart": "custom",
+    "followup": {
+      "assistantReply": "I have added the requested laboratory investigations to your chart.",
+      "doctorNotes": "Diagnosis:\n• • Rheumatoid arthritis",
+      "medicines": [],
+      "labTests": [
+        "Rheumatoid Factor",
+        "Antinuclear Antibody"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [
+        "RA factor",
+        "ANA"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 4135,
+    "extractMs": 3712,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "25",
+    "instruction": "c/o headache vomiting photophobia",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Documented patient's complaints of headache, vomiting, and photophobia.",
+      "doctorNotes": "Complaints:\n• Headache\n• Vomiting\n• Photophobia",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Headache\n• Vomiting\n• Photophobia",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Headache",
+          "Vomiting",
+          "Photophobia"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 2722,
+    "extractMs": 4447,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "26",
+    "instruction": "migraine",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Recorded migraine as a complaint.",
+      "doctorNotes": "Complaints:\n• Patient complains of migraine.",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Diagnosis:\n• Migraine",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "diagnosis": [
+          "Migraine"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 3000,
+    "extractMs": 2169,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "27",
+    "instruction": "c/o headache, migraine",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Documented headache and migraine complaint.",
+      "doctorNotes": "Complaints:\n• Headache\n\nDiagnosis:\n• Migraine",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Patient complains of headache\n• Patient complains of migraine",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Patient complains of headache",
+          "Patient complains of migraine"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 4153,
+    "extractMs": 4314,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "28",
+    "instruction": "k/c/o dm t2, now polyuria",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Chart updated with history and complaints.",
+      "doctorNotes": "Complaints:\n• Polyuria\n\nHistory:\n• Known case of type 2 diabetes mellitus",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Increased frequency of urination\n\nHistory:\n• Known case of type 2 diabetes mellitus",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Increased frequency of urination"
+        ],
+        "history": [
+          "Known case of type 2 diabetes mellitus"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 4390,
+    "extractMs": 3752,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "29",
+    "instruction": "advise rest hydration review 5d",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Advice for rest, hydration, and review in 5 days noted.",
+      "doctorNotes": "Advice:\n• Advise rest\n• Advise hydration\n• Advise review after 5 days",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Advice:\n• Advise rest and hydration\n• Review after 5 days",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "advice": [
+          "Advise rest and hydration",
+          "Review after 5 days"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 3060,
+    "extractMs": 3498,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "30",
+    "instruction": "o/e throat congested, no lymphadenopathy",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Examination shows congested throat with no lymphadenopathy.",
+      "doctorNotes": "Examination:\n• Throat is congested\n• No lymphadenopathy",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Examination:\n• Throat is congested\n• No lymphadenopathy detected",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "examination": [
+          "Throat is congested",
+          "No lymphadenopathy detected"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 2701,
+    "extractMs": 3578,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "31",
+    "instruction": "dd viral vs strep",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Provisional diagnosis of viral versus streptococcal infection noted.",
+      "doctorNotes": "Diagnosis:\n• • Provisional diagnosis of viral infection versus streptococcal infection",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Diagnosis:\n• Differential diagnosis includes viral infection versus streptococcal infection",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "diagnosis": [
+          "Differential diagnosis includes viral infection versus streptococcal infection"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 2818,
+    "extractMs": 3873,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "32",
+    "instruction": "dolo650 bd5d pcm sos",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Added paracetamol 650 mg tablet twice daily for 5 days and as needed.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "dolo650",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "pcm",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet only if fever for 5 days",
+          "unitSample": [],
+          "dosageTimes": [],
+          "amounts": [],
+          "beforeFood": [],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "dolo650 pcm",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening and take 1 tablet only if fever for 5 days",
+          "unitSample": [
+            "\"\"",
+            "\"\""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 5179,
+    "extractMs": 5090,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "33",
+    "instruction": "tab.dolo,syp.ascoril,cbp",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Added medicines tab.dolo and syp.ascoril, and lab test CBP.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "tab.dolo",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "syp.ascoril",
+          "type": "Syrup",
+          "duration": "5 days",
+          "directions": "Take 1 ml in the morning and 1 ml in the evening for 5 days",
+          "unitSample": [
+            "ml",
+            "ml"
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "CBP"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "Dolo",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning, afternoon and evening for 5 days",
+          "unitSample": [
+            "",
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Afternoon",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "Ascoril",
+          "type": "Syrup",
+          "duration": "5 days",
+          "directions": "Take 1 teaspoonful in the morning, afternoon and evening for 5 days",
+          "unitSample": [
+            "ml",
+            "ml",
+            "ml"
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Afternoon",
+            "Evening"
+          ],
+          "amounts": [
+            5,
+            5,
+            5
+          ],
+          "beforeFood": [
+            false,
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Complete Blood Picture"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 5382,
+    "extractMs": 5694,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "34",
+    "instruction": "pt c/o cough n cold.. add azithro n cbp",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have updated the chart with the patient's complaints and the ordered medication and investigation.",
+      "doctorNotes": "Complaints:\n• Cough\n• Cold",
+      "medicines": [
+        {
+          "name": "Azithromycin",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning for 5 days.",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Complete Blood Picture"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Cough\n• Cold",
+      "medicines": [
+        {
+          "name": "Azithromycin",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning for 5 days",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Complete Blood Picture"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Cough",
+          "Cold"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 3479,
+    "extractMs": 3686,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "35",
+    "instruction": "GABAPIN-ME 100 HS 10D",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Updated the prescription for Gabapin-ME 100.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "GABAPIN-ME 100",
+          "type": "Tablet",
+          "duration": "10 days",
+          "directions": "Take 1 tablet at night for 10 days.",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Night"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "GABAPIN-ME 100",
+          "type": "Tablet",
+          "duration": "10 days",
+          "directions": "Take 1 tablet at night for 10 days",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Night"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 3559,
+    "extractMs": 3546,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "36",
+    "instruction": "mp+pv+pf",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have updated the laboratory investigations based on the provided clinical codes.",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [
+        "Malaria Parasite (MP)",
+        "Plasmodium vivax (PV)",
+        "Plasmodium falciparum (PF)"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [
+        "Malaria Parasite (MP)",
+        "Plasmodium vivax (PV)",
+        "Plasmodium falciparum (PF)"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 3263,
+    "extractMs": 3197,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "38",
+    "instruction": "febrile, ?malaria , mp pv pf , pcm tds",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Updated the chart with symptoms, provisional diagnosis, laboratory investigations, and medication.",
+      "doctorNotes": "Complaints:\n• Fever\n\nDiagnosis:\n• Provisional diagnosis of malaria",
+      "medicines": [
+        {
+          "name": "pcm",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning, afternoon and evening for 5 days.",
+          "unitSample": [
+            "",
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Afternoon",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Malaria Parasite (MP) - Plasmodium vivax (PV)",
+        "Malaria Parasite (MP) - Plasmodium falciparum (PF)"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Fever\n\nDiagnosis:\n• Malaria",
+      "medicines": [
+        {
+          "name": "PCM",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning, afternoon and evening for 5 days",
+          "unitSample": [
+            "",
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Afternoon",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Malaria Parasite (MP) - PV/PF"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Fever"
+        ],
+        "diagnosis": [
+          "Malaria"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 4642,
+    "extractMs": 2911,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "37",
+    "instruction": "uti?? add nitro 100bd n cue",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have updated the chart with the provisional diagnosis and the prescribed medication.",
+      "doctorNotes": "Diagnosis:\n• • Urinary tract infection",
+      "medicines": [
+        {
+          "name": "nitro 100",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days.",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "CUE"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Diagnosis:\n• Urinary tract infection\n\nAdvice:\n• Follow up as needed",
+      "medicines": [
+        {
+          "name": "Nitro 100",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Urine Routine and Microscopy"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "diagnosis": [
+          "Urinary tract infection"
+        ],
+        "advice": [
+          "Follow up as needed"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 4310,
+    "extractMs": 4659,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "39",
+    "instruction": "bukhar 3 din, cbp, dolo bd",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Updated the chart with fever complaints, ordered CBP, and added Dolo 650mg.",
+      "doctorNotes": "Complaints:\n• Fever for 3 days",
+      "medicines": [
+        {
+          "name": "Dolo 650mg",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days.",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Complete Blood Picture"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Fever for 3 days",
+      "medicines": [
+        {
+          "name": "Dolo",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Complete Blood Picture"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Fever for 3 days"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 4105,
+    "extractMs": 3166,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "40",
+    "instruction": "wysolone 40mg/30/20/10 bd 2d each",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have updated the medication plan with the prescribed Wysolone taper.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "Wysolone 40mg",
+          "type": "Tablet",
+          "duration": "2 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 2 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "Wysolone 30mg",
+          "type": "Tablet",
+          "duration": "2 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 2 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "Wysolone 20mg",
+          "type": "Tablet",
+          "duration": "2 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 2 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "Wysolone 10mg",
+          "type": "Tablet",
+          "duration": "2 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 2 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "Wysolone 40mg",
+          "type": "Tablet",
+          "duration": "2 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 2 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "Wysolone 30mg",
+          "type": "Tablet",
+          "duration": "2 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 2 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "Wysolone 20mg",
+          "type": "Tablet",
+          "duration": "2 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 2 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "Wysolone 10mg",
+          "type": "Tablet",
+          "duration": "2 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 2 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 4991,
+    "extractMs": 5102,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "41",
+    "instruction": "insulin 10 morning 15 evening",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Added insulin with specified morning and evening doses.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "insulin",
+          "type": "Injection",
+          "duration": "5 days",
+          "directions": "Take 10 units of insulin in the morning and 15 units in the evening for 5 days",
+          "unitSample": [
+            "IU",
+            "IU"
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            10,
+            15
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "insulin",
+          "type": "Injection",
+          "duration": "5 days",
+          "directions": "Take 10 units of insulin in the morning and 15 units of insulin in the evening for 5 days",
+          "unitSample": [
+            "IU",
+            "IU"
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            10,
+            15
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 4653,
+    "extractMs": 5964,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "42",
+    "instruction": "dolo 650 bd",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Added Dolo 650 tablet twice daily for 5 days.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "dolo 650",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "dolo 650",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "\"\"",
+            "\"\""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 5007,
+    "extractMs": 6419,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "43",
+    "instruction": "pcm 650 tid",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Added PCM 650 tablet three times a day.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "pcm 650",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning, afternoon and evening for 5 days",
+          "unitSample": [
+            "",
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Afternoon",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "pcm 650",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning, afternoon and evening for 5 days",
+          "unitSample": [
+            "\"\"",
+            "\"\"",
+            "\"\""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Afternoon",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 5147,
+    "extractMs": 5787,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "44",
+    "instruction": "gabapin me hs",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Added gabapin me at night.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "gabapin me",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet at night for 5 days",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Night"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "gabapin",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet at night for 5 days",
+          "unitSample": [
+            "\"\""
+          ],
+          "dosageTimes": [
+            "Night"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 4320,
+    "extractMs": 5608,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "45",
+    "instruction": "pcm 650 sos fever",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Noted fever and prescribed PCM 650 mg as needed.",
+      "doctorNotes": "Complaints:\n• Fever",
+      "medicines": [
+        {
+          "name": "pcm 650",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet only if fever for 5 days",
+          "unitSample": [],
+          "dosageTimes": [],
+          "amounts": [],
+          "beforeFood": [],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Fever",
+      "medicines": [
+        {
+          "name": "pcm 650",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet only if fever for 5 days",
+          "unitSample": [],
+          "dosageTimes": [],
+          "amounts": [],
+          "beforeFood": [],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Fever"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 3891,
+    "extractMs": 4515,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "46",
+    "instruction": "pcm od 5d then stop",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Stopped PCM after 5 days as instructed.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "pcm",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning for 5 days then stop",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "PCM",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning for 5 days, then stop.",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 3952,
+    "extractMs": 2449,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "47",
+    "instruction": "denv ns1 igm, plat count, pcm, no nsaids",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Ordered Dengue NS1 IgM and platelet count, prescribed Paracetamol, and advised against NSAIDs.",
+      "doctorNotes": "Advice:\n• Avoid NSAIDs.",
+      "medicines": [
+        {
+          "name": "PCM",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning, afternoon, and evening for 5 days.",
+          "unitSample": [
+            "",
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Afternoon",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Dengue NS1 IgM",
+        "Platelet count"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Advice:\n• Avoid all NSAIDs",
+      "medicines": [
+        {
+          "name": "PCM",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning, afternoon and evening for 5 days",
+          "unitSample": [
+            "",
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Afternoon",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Dengue NS1 Antigen IgM",
+        "Platelet Count"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "advice": [
+          "Avoid all NSAIDs"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 2393,
+    "extractMs": 2795,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "48",
+    "instruction": "enteric fever, blood c/s, cefixime 200 bd",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Updated the chart with the diagnosis of enteric fever, ordered blood culture and sensitivity, and prescribed Cefixime.",
+      "doctorNotes": "Diagnosis:\n• • Enteric fever",
+      "medicines": [
+        {
+          "name": "Cefixime 200",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days.",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Blood culture and sensitivity"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Diagnosis:\n• Enteric fever",
+      "medicines": [
+        {
+          "name": "cefixime 200",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Blood culture and sensitivity"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "diagnosis": [
+          "Enteric fever"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 2292,
+    "extractMs": 2192,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "50",
+    "instruction": "menorrhagia 6m, usg pelvis, primolut n",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have updated the chart with the patient's complaints, requested ultrasound, and prescribed medication.",
+      "doctorNotes": "Complaints:\n• Menorrhagia for 6 months",
+      "medicines": [
+        {
+          "name": "Primolut N",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days.",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "USG Pelvis"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Menorrhagia for 6 months",
+      "medicines": [
+        {
+          "name": "Primolut N",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "USG Pelvis"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Menorrhagia for 6 months"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 1846,
+    "extractMs": 2548,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "49",
+    "instruction": "g2p1, 32w, leaking pv, nfhs, inj betnesol 12mg 2 doses",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Updated the patient chart with obstetric history, presenting complaints, and the ordered corticosteroid course.",
+      "doctorNotes": "Complaints:\n• Leaking per vaginum\n\nHistory:\n• G2P1\n• 32 weeks gestation\n• No fever, headache, or seizures",
+      "medicines": [
+        {
+          "name": "inj betnesol 12mg",
+          "type": "Injection",
+          "duration": "Once",
+          "directions": "Administer 2 doses as directed.",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            2
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Leaking per vaginum\n\nHistory:\n• Gravida 2, Para 1\n• 32 weeks gestation\n\nExamination:\n• No fetal heart sounds heard",
+      "medicines": [
+        {
+          "name": "inj betnesol 12mg",
+          "type": "Injection",
+          "duration": "Once",
+          "directions": "Administer 2 doses as directed",
+          "unitSample": [],
+          "dosageTimes": [],
+          "amounts": [],
+          "beforeFood": [],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Leaking per vaginum"
+        ],
+        "history": [
+          "Gravida 2, Para 1",
+          "32 weeks gestation"
+        ],
+        "examination": [
+          "No fetal heart sounds heard"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 2037,
+    "extractMs": 4897,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "51",
+    "instruction": "6mo, loose stools 8 times, zinc 20 od 14d, ors, stool r/e",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Updated the chart with zinc, ORS, and stool routine examination for the patient's loose stools.",
+      "doctorNotes": "Complaints:\n• Loose stools 8 times per day\n\nHistory:\n• 6 months old",
+      "medicines": [
+        {
+          "name": "zinc 20",
+          "type": "Tablet",
+          "duration": "14 days",
+          "directions": "Take 1 tablet in the morning for 14 days.",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "ORS",
+          "type": "Sachet",
+          "duration": "5 days",
+          "directions": "Take as needed for hydration.",
+          "unitSample": [],
+          "dosageTimes": [],
+          "amounts": [],
+          "beforeFood": [],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Stool Routine Examination"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Loose stools for 6 months, 8 times per day.",
+      "medicines": [
+        {
+          "name": "zinc 20",
+          "type": "Tablet",
+          "duration": "14 days",
+          "directions": "Take 1 tablet in the morning for 14 days.",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "ors",
+          "type": "Sachet",
+          "duration": "5 days",
+          "directions": "Prepare and consume as directed.",
+          "unitSample": [],
+          "dosageTimes": [],
+          "amounts": [],
+          "beforeFood": [],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Stool Routine Examination"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Loose stools for 6 months, 8 times per day."
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 2280,
+    "extractMs": 2711,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "52",
+    "instruction": "wheeze, neb duolin x 3, no tab",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Patient presented with wheezing and was managed with nebulization.",
+      "doctorNotes": "Complaints:\n• Wheeze\n\nAdvice:\n• No oral tablets advised",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [
+        "Nebulization with Duolin (3 sessions)"
+      ],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Wheeze",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [
+        "Nebulization with Duolin",
+        "Nebulization with Duolin",
+        "Nebulization with Duolin"
+      ],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Wheeze"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 1931,
+    "extractMs": 2021,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "53",
+    "instruction": "twisted ankle, xray ap lat, rest, no wt bearing, diclo 50 bd sos",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have updated the chart with the patient's complaints, ordered the requested X-ray, and added the prescribed medication and advice.",
+      "doctorNotes": "Complaints:\n• Twisted ankle\n\nAdvice:\n• Rest the affected ankle\n• Avoid weight bearing on the affected ankle",
+      "medicines": [
+        {
+          "name": "Diclo 50",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening only if needed for pain.",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "X-ray Ankle AP and Lateral view"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Twisted ankle\n\nAdvice:\n• Rest the affected ankle\n• Avoid weight bearing on the affected limb",
+      "medicines": [
+        {
+          "name": "Diclo 50",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet only when needed for pain, up to twice a day.",
+          "unitSample": [],
+          "dosageTimes": [],
+          "amounts": [],
+          "beforeFood": [],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "X-ray Ankle AP and Lateral view"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Twisted ankle"
+        ],
+        "advice": [
+          "Rest the affected ankle",
+          "Avoid weight bearing on the affected limb"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 2127,
+    "extractMs": 2368,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "54",
+    "instruction": "oa knee, physio, not a medicine",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Updated the chart with the diagnosis of osteoarthritis of the knee and a referral for physiotherapy.",
+      "doctorNotes": "Diagnosis:\n• • Osteoarthritis of the knee\n\nAdvice:\n• • Physiotherapy advised",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [
+        "Physiotherapy"
+      ],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "History:\n• Osteoarthritis of the knee\n\nAdvice:\n• Physiotherapy recommended",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "history": [
+          "Osteoarthritis of the knee"
+        ],
+        "advice": [
+          "Physiotherapy recommended"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 2028,
+    "extractMs": 3833,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "55",
+    "instruction": "wax, syringing, not a tablet",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Added procedure for wax syringing.",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [
+        "wax syringing"
+      ],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [
+        "ear syringing"
+      ],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 2766,
+    "extractMs": 3781,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "56",
+    "instruction": "aso, throat swab, azithro",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Added lab tests and medicine as requested.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "azithro",
+          "type": "Other",
+          "duration": "5 days",
+          "directions": "Take 1 dose in the morning for 5 days",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "aso",
+        "throat swab"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "azithro",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning for 5 days",
+          "unitSample": [
+            "\"\""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "ASO",
+        "Throat Swab"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 3493,
+    "extractMs": 5298,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "57",
+    "instruction": "red eye, moxi drops 1-1-1, no systemic",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Red eye complaint noted and moxi drops prescribed.",
+      "doctorNotes": "Complaints:\n• Red eye\n\nHistory:\n• No systemic symptoms",
+      "medicines": [
+        {
+          "name": "moxi drops",
+          "type": "Drops",
+          "duration": "5 days",
+          "directions": "Instill 1 drop in the affected eye in the morning, afternoon and evening for 5 days",
+          "unitSample": [
+            "drop",
+            "drop",
+            "drop"
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Afternoon",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Red eye",
+      "medicines": [
+        {
+          "name": "moxi drops",
+          "type": "Drops",
+          "duration": "5 days",
+          "directions": "Instill 1 drop in the affected eye in the morning, afternoon and evening for 5 days",
+          "unitSample": [
+            "drop",
+            "drop",
+            "drop"
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Afternoon",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Red eye"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 4216,
+    "extractMs": 5888,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "58",
+    "instruction": "iop, fundus, not labs-as-meds",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "IOP and fundus are examination findings, not labs or medicines.",
+      "doctorNotes": "Examination:\n• Intraocular pressure measurement\n• Fundus examination",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Examination:\n• Intraocular pressure measurement done\n• Fundus examination done",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [
+        "Intraocular pressure measurement",
+        "Fundus examination"
+      ],
+      "vitals": {},
+      "noteSections": {
+        "examination": [
+          "Intraocular pressure measurement done",
+          "Fundus examination done"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 2792,
+    "extractMs": 5029,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "60",
+    "instruction": "betnovate",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Added Betnovate ointment as a medicine.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "betnovate",
+          "type": "Ointment",
+          "duration": "5 days",
+          "directions": "Apply as directed for 5 days",
+          "unitSample": [],
+          "dosageTimes": [],
+          "amounts": [],
+          "beforeFood": [],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "betnovate",
+          "type": "Ointment",
+          "duration": "5 days",
+          "directions": "Apply the ointment as directed for 5 days",
+          "unitSample": [],
+          "dosageTimes": [],
+          "amounts": [],
+          "beforeFood": [],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 3090,
+    "extractMs": 4588,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "59",
+    "instruction": "tinea cruris, itra 100 bd 7d, koh",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Added complaints, medicine, and lab test as instructed.",
+      "doctorNotes": "Complaints:\n• Tinea cruris",
+      "medicines": [
+        {
+          "name": "itra 100",
+          "type": "Tablet",
+          "duration": "7 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 7 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "KOH"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Itching and rash in the groin area\n\nDiagnosis:\n• Tinea cruris (fungal infection of the groin)",
+      "medicines": [
+        {
+          "name": "itra 100",
+          "type": "Tablet",
+          "duration": "7 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 7 days",
+          "unitSample": [
+            "\"\"",
+            "\"\""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "KOH test"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Itching and rash in the groin area"
+        ],
+        "diagnosis": [
+          "Tinea cruris (fungal infection of the groin)"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 7465,
+    "extractMs": 7583,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "61",
+    "instruction": "insomnia, gabapin me hs, no diagnosis unless named",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have updated the chart to include the patient's complaint of insomnia and the prescribed medication.",
+      "doctorNotes": "Complaints:\n• Insomnia",
+      "medicines": [
+        {
+          "name": "Gabapin ME",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet at night.",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Night"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Insomnia",
+      "medicines": [
+        {
+          "name": "gabapin me",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet at night for 5 days",
+          "unitSample": [
+            "\"\""
+          ],
+          "dosageTimes": [
+            "Night"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Insomnia"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 1697,
+    "extractMs": 5827,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "62",
+    "instruction": "low mood 2w",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Noted low mood for 2 weeks.",
+      "doctorNotes": "Complaints:\n• Low mood for 2 weeks",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• low mood for 2 weeks",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "low mood for 2 weeks"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 2689,
+    "extractMs": 3548,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "63",
+    "instruction": "chest pain, trop i, ecg, asprin 75",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Added complaints, lab tests, and medicine as per the input.",
+      "doctorNotes": "Complaints:\n• Chest pain",
+      "medicines": [
+        {
+          "name": "asprin 75",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "trop i",
+        "ecg"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Chest pain",
+      "medicines": [
+        {
+          "name": "asprin 75",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "\"\"",
+            "\"\""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "trop i",
+        "ecg"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Chest pain"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 4401,
+    "extractMs": 6237,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "64",
+    "instruction": "cva, ct brain, ecosprin gold",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Documented cerebrovascular accident, ordered CT brain and ecosprin gold.",
+      "doctorNotes": "History:\n• Cerebrovascular accident",
+      "medicines": [
+        {
+          "name": "ecosprin gold",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "CT brain"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Diagnosis:\n• Cerebrovascular accident",
+      "medicines": [
+        {
+          "name": "Ecosprin Gold",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning.",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "CT Brain"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "diagnosis": [
+          "Cerebrovascular accident"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 5614,
+    "extractMs": 2659,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "65",
+    "instruction": "seizure, eeg, levipil 500 bd",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Updated the chart with seizure complaint, EEG investigation, and Levipil prescription.",
+      "doctorNotes": "Complaints:\n• Seizure",
+      "medicines": [
+        {
+          "name": "Levipil 500",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days.",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "EEG"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Seizure",
+      "medicines": [
+        {
+          "name": "Levipil 500",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "EEG"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Seizure"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 1941,
+    "extractMs": 2290,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "66",
+    "instruction": "ckd, kft, no nsaids, nodosis",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Updated the chart with CKD diagnosis, KFT investigation, and clinical advice.",
+      "doctorNotes": "History:\n• • Chronic kidney disease\n\nDiagnosis:\n• • Chronic kidney disease\n\nAdvice:\n• • Avoid NSAIDs\n• • No dose adjustment required",
+      "medicines": [],
+      "labTests": [
+        "Kidney Function Test"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "History:\n• Chronic kidney disease\n\nAdvice:\n• Avoid non-steroidal anti-inflammatory drugs",
+      "medicines": [],
+      "labTests": [
+        "Kidney function test"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "history": [
+          "Chronic kidney disease"
+        ],
+        "advice": [
+          "Avoid non-steroidal anti-inflammatory drugs"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 1771,
+    "extractMs": 1746,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "67",
+    "instruction": "stone, kub, drotin, plenty fluids",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have updated the chart with the reported stone symptoms, KUB investigation, Drotin prescription, and fluid advice.",
+      "doctorNotes": "Complaints:\n• Stone\n\nAdvice:\n• Increase intake of fluids",
+      "medicines": [
+        {
+          "name": "Drotin",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning, afternoon and evening for 5 days.",
+          "unitSample": [
+            "",
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Afternoon",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "KUB"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Renal stone\n\nDiagnosis:\n• Nephrolithiasis\n\nAdvice:\n• Increase oral fluid intake",
+      "medicines": [
+        {
+          "name": "Drotin",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning, afternoon and evening for 5 days",
+          "unitSample": [
+            "",
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Afternoon",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "KUB Ultrasound"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Renal stone"
+        ],
+        "diagnosis": [
+          "Nephrolithiasis"
+        ],
+        "advice": [
+          "Increase oral fluid intake"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 2369,
+    "extractMs": 2309,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "68",
+    "instruction": "pain abd, usg, pantop 40 od bbf",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have updated the chart with the patient's abdominal pain, the ordered ultrasound, and the prescribed Pantoprazole.",
+      "doctorNotes": "Complaints:\n• Abdominal pain",
+      "medicines": [
+        {
+          "name": "Pantop 40",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning before breakfast.",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            true
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "USG Abdomen"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Abdominal pain",
+      "medicines": [
+        {
+          "name": "Pantop 40",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning before food for 5 days",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            true
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "USG Abdomen"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Abdominal pain"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 1843,
+    "extractMs": 2601,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "69",
+    "instruction": "ugib, npo, ppi inf, not 5d default if IV",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Updated the chart with the diagnosis of upper gastrointestinal bleeding and relevant management orders.",
+      "doctorNotes": "Diagnosis:\n• • Upper gastrointestinal bleeding\n\nAdvice:\n• • Keep patient nil per oral (NPO)",
+      "medicines": [
+        {
+          "name": "PPI infusion",
+          "type": "Injection",
+          "duration": "Once",
+          "directions": "Administer as an intravenous infusion.",
+          "unitSample": [],
+          "dosageTimes": [],
+          "amounts": [],
+          "beforeFood": [],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Diagnosis:\n• Upper gastrointestinal bleeding\n\nAdvice:\n• Keep patient nil per os (NPO).",
+      "medicines": [
+        {
+          "name": "Proton pump inhibitor infusion",
+          "type": "Injection",
+          "duration": "Once",
+          "directions": "Administer as an infusion.",
+          "unitSample": [],
+          "dosageTimes": [],
+          "amounts": [],
+          "beforeFood": [],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [
+        "NPO"
+      ],
+      "vitals": {},
+      "noteSections": {
+        "diagnosis": [
+          "Upper gastrointestinal bleeding"
+        ],
+        "advice": [
+          "Keep patient nil per os (NPO)."
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 1876,
+    "extractMs": 2355,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "70",
+    "instruction": "sob, spo2, cxr, duolin neb, deriphyllin",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have updated the chart with the reported symptoms, investigations, and procedures.",
+      "doctorNotes": "Complaints:\n• Shortness of breath",
+      "medicines": [],
+      "labTests": [
+        "Chest X-ray"
+      ],
+      "procedures": [
+        "Duolin nebulization",
+        "Deriphyllin injection"
+      ],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Shortness of breath",
+      "medicines": [
+        {
+          "name": "Deriphyllin",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "SPO2",
+        "Chest X-ray"
+      ],
+      "procedures": [
+        "Duolin nebulization"
+      ],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Shortness of breath"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 1840,
+    "extractMs": 2386,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "71",
+    "instruction": "sputum afb x 2",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have added the requested sputum AFB tests to the lab orders.",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [
+        "Sputum AFB x 2"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [
+        "Sputum Acid Fast Bacilli Test 1",
+        "Sputum Acid Fast Bacilli Test 2"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 2127,
+    "extractMs": 4810,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "72",
+    "instruction": "anemia, cbp p/s, iron profile",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have updated the chart with the diagnosis and ordered investigations.",
+      "doctorNotes": "Diagnosis:\n• • Anemia",
+      "medicines": [],
+      "labTests": [
+        "Complete Blood Picture",
+        "Peripheral Smear",
+        "Iron Profile"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Diagnosis:\n• Anemia",
+      "medicines": [],
+      "labTests": [
+        "Complete Blood Picture",
+        "Iron Profile"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "diagnosis": [
+          "Anemia"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 1764,
+    "extractMs": 4763,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "74",
+    "instruction": "add",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "The chart remains unchanged as no new clinical information was provided.",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 2650,
+    "extractMs": 4337,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "73",
+    "instruction": "fnac",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "FNAC investigation ordered.",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [
+        "FNAC"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [
+        "Fine Needle Aspiration Cytology"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 2945,
+    "extractMs": 4693,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "75",
+    "instruction": "same as last time",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "No new clinical information to update.",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 3995,
+    "extractMs": 5864,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "76a",
+    "instruction": "stop all",
+    "chart": "custom",
+    "followup": {
+      "assistantReply": "Stopped all medicines as requested.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "Dolo 650",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Stop this medicine",
+          "unitSample": [],
+          "dosageTimes": [],
+          "amounts": [],
+          "beforeFood": [],
+          "action": "add"
+        },
+        {
+          "name": "Pantop 40",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Stop this medicine",
+          "unitSample": [],
+          "dosageTimes": [],
+          "amounts": [],
+          "beforeFood": [],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "CBP (Complete blood picture)"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 8271,
+    "extractMs": 5677,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "76b",
+    "instruction": "stop dolo",
+    "chart": "custom",
+    "followup": {
+      "assistantReply": "Stopped Dolo 650 as requested.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "Dolo 650",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Stop this medicine",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "Pantop 40",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "dolo",
+          "type": "Tablet",
+          "duration": "",
+          "directions": "",
+          "unitSample": [],
+          "dosageTimes": [],
+          "amounts": [],
+          "beforeFood": [],
+          "action": "stop"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 8228,
+    "extractMs": 6121,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "77",
+    "instruction": "replace pantop with rabeprazole 20",
+    "chart": "custom",
+    "followup": {
+      "assistantReply": "Replaced Pantop 40 with Rabeprazole 20 as requested.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "Rabeprazole 20",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "rabeprazole 20",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "\"\"",
+            "\"\""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 6136,
+    "extractMs": 5971,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "78",
+    "instruction": "continue everything add cbp",
+    "chart": "custom",
+    "followup": {
+      "assistantReply": "Continuing all medicines and adding complete blood picture test.",
+      "doctorNotes": "Diagnosis:\n• Viral fever",
+      "medicines": [
+        {
+          "name": "Dolo 650",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "Pantop 40",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Complete Blood Picture"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Advice:\n• Continue all existing medications.\n• Complete Blood Picture ordered.",
+      "medicines": [],
+      "labTests": [
+        "Complete Blood Picture"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "advice": [
+          "Continue all existing medications.",
+          "Complete Blood Picture ordered."
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 5295,
+    "extractMs": 1867,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "79",
+    "instruction": "not malaria",
+    "chart": "custom",
+    "followup": {
+      "assistantReply": "Malaria diagnosis negated, no new complaints or treatments added.",
+      "doctorNotes": "Diagnosis:\n• Malaria",
+      "medicines": [],
+      "labTests": [
+        "MP (Malaria parasite)",
+        "PV (Plasmodium vivax)",
+        "PF (Plasmodium falciparum)"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Diagnosis:\n• Malaria ruled out",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "diagnosis": [
+          "Malaria ruled out"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 3411,
+    "extractMs": 1843,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "80",
+    "instruction": "maybe uti",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Updated the chart with the provisional diagnosis of urinary tract infection.",
+      "doctorNotes": "Diagnosis:\n• • Urinary tract infection",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Diagnosis:\n• Urinary tract infection",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "diagnosis": [
+          "Urinary tract infection"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 1964,
+    "extractMs": 1912,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "81",
+    "instruction": "k/c/o htn dm, c/o fever chills 4d, o/e febrile, ?malaria, mp pv pf, cbp, pcm 650 tds, doxy 100 bd, gabapin me hs, review 3d if fever persists, no cipro",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Updated clinical chart with history, complaints, examination, provisional diagnosis, investigations, and medication orders.",
+      "doctorNotes": "Complaints:\n• Fever for 4 days\n• Chills for 4 days\n\nHistory:\n• Known case of hypertension\n• Known case of diabetes mellitus\n\nExamination:\n• Patient is febrile\n\nDiagnosis:\n• Malaria\n\nAdvice:\n• Review after 3 days if fever persists\n• Do not take Ciprofloxacin",
+      "medicines": [
+        {
+          "name": "pcm 650",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning, afternoon, and evening for 5 days.",
+          "unitSample": [
+            "",
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Afternoon",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "doxy 100",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and evening for 5 days.",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "gabapin me",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet at night for 5 days.",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Night"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Malaria Parasite (MP) Peripheral Smear (PV) Plasmodium Falciparum (PF)",
+        "Complete Blood Picture (CBP)"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Fever for 4 days\n• Chills for 4 days\n\nHistory:\n• Known case of hypertension\n• Known case of diabetes mellitus\n\nExamination:\n• Patient is febrile\n\nDiagnosis:\n• Malaria\n\nAdvice:\n• Review after 3 days if fever persists\n• Do not take Ciprofloxacin",
+      "medicines": [
+        {
+          "name": "PCM 650",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning, afternoon and evening for 5 days",
+          "unitSample": [
+            "",
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Afternoon",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "Doxy 100",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and evening for 5 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "Gabapin ME",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet at night for 5 days",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Night"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Malaria Parasite (MP) peripheral smear",
+        "Plasmodium falciparum (Pf) test",
+        "Complete Blood Picture (CBP)"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Fever for 4 days",
+          "Chills for 4 days"
+        ],
+        "history": [
+          "Known case of hypertension",
+          "Known case of diabetes mellitus"
+        ],
+        "examination": [
+          "Patient is febrile"
+        ],
+        "diagnosis": [
+          "Malaria"
+        ],
+        "advice": [
+          "Review after 3 days if fever persists",
+          "Do not take Ciprofloxacin"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 2982,
+    "extractMs": 3256,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "82",
+    "instruction": "post lscs day 3, wound soak, dressing, not inj unless named, cbp",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Updated the chart with post-operative status, procedure, and investigation.",
+      "doctorNotes": "Complaints:\n• Wound soak\n\nHistory:\n• Post-lower segment caesarean section day 3",
+      "medicines": [],
+      "labTests": [
+        "Complete Blood Picture"
+      ],
+      "procedures": [
+        "Wound dressing"
+      ],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "History:\n• Post-lower segment caesarean section day 3\n\nAdvice:\n• Perform wound soak and dressing\n• Complete blood picture ordered",
+      "medicines": [],
+      "labTests": [
+        "Complete Blood Picture"
+      ],
+      "procedures": [
+        "Wound soak and dressing"
+      ],
+      "vitals": {},
+      "noteSections": {
+        "history": [
+          "Post-lower segment caesarean section day 3"
+        ],
+        "advice": [
+          "Perform wound soak and dressing",
+          "Complete blood picture ordered"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 1694,
+    "extractMs": 2171,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "83",
+    "instruction": "child 2y, barking cough, steam, no codeine, xray if stridor",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Updated the clinical chart with the patient's presenting symptoms and advice.",
+      "doctorNotes": "Complaints:\n• Barking cough\n\nHistory:\n• Child, 2 years old\n\nAdvice:\n• Use steam inhalation\n• Do not use codeine\n• Perform X-ray if stridor develops",
+      "medicines": [],
+      "labTests": [],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Barking cough\n\nAdvice:\n• Use steam inhalation\n• Avoid codeine\n• Perform chest X-ray if stridor develops",
+      "medicines": [],
+      "labTests": [
+        "Chest X-ray"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": {
+        "complaints": [
+          "Barking cough"
+        ],
+        "advice": [
+          "Use steam inhalation",
+          "Avoid codeine",
+          "Perform chest X-ray if stridor develops"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 1831,
+    "extractMs": 1918,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "84",
+    "instruction": "add mp, pv, pf, uti, gabapin me, dolo, cbp",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "I have updated the chart with the requested investigations and medications.",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "Gabapin ME",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening.",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "Dolo",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning, afternoon, and evening.",
+          "unitSample": [
+            "",
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Afternoon",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "MP (Malaria Parasite)",
+        "PV (Plasmodium vivax)",
+        "PF (Plasmodium falciparum)",
+        "UTI (Urine Routine and Microscopy)",
+        "CBP (Complete Blood Picture)"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "98.6",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "",
+      "medicines": [
+        {
+          "name": "Gabapin ME",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "Dolo",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning, afternoon and evening for 5 days",
+          "unitSample": [
+            "",
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Afternoon",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false,
+            false
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Malaria Parasite (MP)",
+        "Peripheral Smear (PV)",
+        "Plasmodium falciparum (PF)",
+        "Urine Routine and Microscopy (UTI)",
+        "Complete Blood Picture (CBP)"
+      ],
+      "procedures": [],
+      "vitals": {},
+      "noteSections": null,
+      "error": null
+    },
+    "followupMs": 2200,
+    "extractMs": 2808,
+    "followupStatus": 200,
+    "extractStatus": 200
+  },
+  {
+    "id": "85",
+    "instruction": "k/c/o t2dm, c/o burning micturition n fever 3d, ?uti ?malaria, o/e temp 101, add mp pv pf cue cbp, nitrofurantoin 100 bd 5d, pcm 650 tds sos, gabapin me 100 hs, pantop 40 od bbf, review 5d, plenty fluids, no nsaid",
+    "chart": "empty",
+    "followup": {
+      "assistantReply": "Updated clinical chart with investigations, medications, and advice for UTI and malaria evaluation.",
+      "doctorNotes": "Complaints:\n• Burning micturition\n• Fever for 3 days\n\nHistory:\n• Known case of Type 2 Diabetes Mellitus\n\nExamination:\n• Temperature 101 F\n\nDiagnosis:\n• Provisional diagnosis of Urinary Tract Infection\n• Provisional diagnosis of Malaria\n\nAdvice:\n• Review after 5 days\n• Increase intake of fluids\n• Avoid NSAIDs",
+      "medicines": [
+        {
+          "name": "Nitrofurantoin 100",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days.",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "PCM 650",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet only if needed for fever.",
+          "unitSample": [],
+          "dosageTimes": [],
+          "amounts": [],
+          "beforeFood": [],
+          "action": "add"
+        },
+        {
+          "name": "Gabapin ME 100",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet at night for 5 days.",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Night"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "Pantop 40",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning before breakfast for 5 days.",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            true
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "Malaria Parasite (MP)",
+        "Peripheral Smear (PV)",
+        "Plasmodium Falciparum (PF)",
+        "Complete Blood Picture (CBP)"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "70",
+        "height": "166",
+        "temperature": "101",
+        "spo2": "98",
+        "heartRate": "72",
+        "respiratoryRate": "16",
+        "bloodPressure": "120/80",
+        "grbs": "",
+        "urineOutput": ""
+      },
+      "noteSections": null,
+      "error": null
+    },
+    "extract": {
+      "assistantReply": "",
+      "doctorNotes": "Complaints:\n• Burning micturition\n• Fever for 3 days\n\nHistory:\n• Known case of type 2 diabetes mellitus\n\nExamination:\n• Temperature 101 F\n\nDiagnosis:\n• Urinary tract infection\n• Malaria\n\nAdvice:\n• Review after 5 days\n• Take plenty of fluids\n• Avoid NSAIDs",
+      "medicines": [
+        {
+          "name": "nitrofurantoin 100",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning and 1 tablet in the evening for 5 days",
+          "unitSample": [
+            "",
+            ""
+          ],
+          "dosageTimes": [
+            "Morning",
+            "Evening"
+          ],
+          "amounts": [
+            1,
+            1
+          ],
+          "beforeFood": [
+            false,
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "pcm 650",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet only when needed for fever",
+          "unitSample": [],
+          "dosageTimes": [],
+          "amounts": [],
+          "beforeFood": [],
+          "action": "add"
+        },
+        {
+          "name": "gabapin me 100",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet at night",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Night"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            false
+          ],
+          "action": "add"
+        },
+        {
+          "name": "pantop 40",
+          "type": "Tablet",
+          "duration": "5 days",
+          "directions": "Take 1 tablet in the morning before food",
+          "unitSample": [
+            ""
+          ],
+          "dosageTimes": [
+            "Morning"
+          ],
+          "amounts": [
+            1
+          ],
+          "beforeFood": [
+            true
+          ],
+          "action": "add"
+        }
+      ],
+      "labTests": [
+        "MP",
+        "PV",
+        "PF",
+        "CUE",
+        "CBP"
+      ],
+      "procedures": [],
+      "vitals": {
+        "weight": "",
+        "height": "",
+        "temperature": "101 F",
+        "spo2": "",
+        "heartRate": "",
+        "respiratoryRate": "",
+        "bloodPressure": "",
+        "grbs": "",
+        "urineOutput": "",
+        "inputIV": "",
+        "inputOral": "",
+        "inputOthers": "",
+        "outputUrine": "",
+        "outputDrain": "",
+        "outputOthers": ""
+      },
+      "noteSections": {
+        "complaints": [
+          "Burning micturition",
+          "Fever for 3 days"
+        ],
+        "history": [
+          "Known case of type 2 diabetes mellitus"
+        ],
+        "examination": [
+          "Temperature 101 F"
+        ],
+        "diagnosis": [
+          "Urinary tract infection",
+          "Malaria"
+        ],
+        "advice": [
+          "Review after 5 days",
+          "Take plenty of fluids",
+          "Avoid NSAIDs"
+        ]
+      },
+      "error": null
+    },
+    "followupMs": 2940,
+    "extractMs": 3715,
+    "followupStatus": 200,
+    "extractStatus": 200
+  }
+]
