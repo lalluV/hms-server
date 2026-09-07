@@ -286,10 +286,11 @@ Return JSON only:
 {
   "medicinePills": [
     {
-      "name": "Dolo 650mg",
+      "name": "Dolo 650",
       "dosage": "650mg",
       "frequency": {"value": 2, "unit": "/Day"},
       "duration": {"value": 5, "unit": "Days"},
+      "quantity": 10,
       "directions": "After food (BD)",
       "type": "Tablet"
     }
@@ -302,12 +303,20 @@ Return JSON only:
   ]
 }
 
-CLINICAL RULES:
-1. Suggest frontline standard Indian OPD medications appropriate for the diagnosis (e.g. Paracetamol/Dolo for fever/body pain, PPIs like Pantoprazole for GERD/gastritis, Levocetirizine for allergic URTI, ORS for gastroenteritis).
-2. If practiceMemoryHints has specific medicines/labs, prioritize those exact names.
-3. Do NOT invent dangerous or heavy specialty inpatient drugs.
-4. Do NOT duplicate medicines or labs already present in currentReview.
-5. Suggest up to 5 medicines per type (tablets, syrups, injections, etc.) and up to 5 labs per type (blood, urine, imaging, cardiology). Max 20 medicines, 15 labs, 5 procedures. Return clean, standard Indian brand/generic names.`;
+CLINICAL & PRESCRIBING RULES:
+1. SUGGEST COMPLETE INDIAN OPD REGIMEN (PRIMARY + ADD-ON MEDS):
+   - In addition to frontline primary medications, include standard supportive add-on medications that Indian OPD doctors routinely co-prescribe:
+     * Gastroprotective PPIs (e.g. "Pantop 40") alongside NSAIDs, antibiotics, or steroids.
+     * Symptomatic relief (e.g. "Dolo 650" SOS for fever/pain; "Vomistop" for nausea; "Ascoril-LS" or antiallergics for respiratory symptoms; ORS for diarrhea).
+     * Nutrient / gut support (e.g. B-complex, Probiotics) with antibiotic courses.
+2. NO FORMULATION TYPE IN MEDICINE NAME:
+   - Strip prefixes like "Tab", "Syp", "Inj", "Cap" from medicine.name. Put the formulation type into "type" ("Tablet", "Capsules", "Syrup", "Injection", "Ointment", "Drops", "Inhaler").
+3. KEEP STRENGTH IN MEDICINE NAME:
+   - Include standard strength in name (e.g. "Dolo 650", "Augmentin 625", "Pantop 40", "Azithro 500").
+4. ACCURATE DEFAULT QUANTITIES:
+   - Tablets/Capsules: daily doses × days (e.g. 10 for 5 days BD). Syrups/Topicals/Drops/Inhalers/Insulin: 1.
+5. FORMULATION DIVERSITY:
+   - Suggest up to 4-5 medicines per type (tablets, syrups, injections, topicals, drops) matching the clinical picture.`;
 
 function buildNotePillsFromHints(memoryHints = {}, noteContext = {}) {
   const sections = ["complaints", "examination", "diagnosis", "advice"];
@@ -469,13 +478,20 @@ async function suggestOrderPillsWithLlm({
   };
 }
 
-const CLEAN_SYSTEM_PROMPT = `You clean an Indian OPD doctor's tap-to-add suggestion list.
+const CLEAN_SYSTEM_PROMPT = `You are a senior Indian OPD Consultant AI polishing an outpatient doctor's tap-to-add suggestion list.
 
-You receive the patient's complaints/diagnosis AND the raw suggestion pills from this doctor's past practice.
+You receive the patient's complaints/diagnosis AND raw suggestion pills gathered from this doctor's past practice history.
 
 Return JSON only:
 {
-  "medicines": ["exact name from the input list"],
+  "medicines": [
+    {
+      "name": "Dolo 650",
+      "type": "Tablet",
+      "quantity": 10,
+      "match": "exact or closest name from the input list"
+    }
+  ],
   "labs": ["exact name from the input list"],
   "procedures": ["exact name from the input list"],
   "notes": {
@@ -487,11 +503,38 @@ Return JSON only:
 }
 
 RULES:
-1. Do NOT invent new medicines, labs, procedures, or note lines. Only pick from the provided lists.
-2. Merge duplicates / same drug (brand vs generic, spelling, Tab vs Tablet). Keep ONE name — the cleanest, most complete one from the list.
-3. Drop items that do not fit this patient's complaints and diagnosis.
-4. Keep ALL formulation types that appear in the input (tablets, syrups, drops, ointments, sachets, inhalers, injections, IV). Do not return only tablets. For each type that is present, keep 4–5 items when available.
-5. Drop only true duplicates and clearly unrelated items. Prefer the doctor's usual names. Order by usefulness for this case.`;
+1. MIRROR THIS DOCTOR'S PRESCRIBING MINDSET:
+   - Your primary job is to show what THIS doctor actually prescribes in their mind for this condition based on their past Rx history.
+   - Retain the doctor's preferred authentic brand names (e.g. "Augmentin 625", "Pantop 40", "Dolo 650", "Ascoril-LS", "Wysolone 20mg", "Azithro 500") rather than substituting generic names.
+
+2. ALWAYS PRESERVE ADD-ON & SUPPORTIVE MEDICATIONS:
+   - Indian OPD doctors routinely co-prescribe supportive, prophylactic, or symptom-relief add-on medications alongside primary therapy:
+     * Gastroprotective PPIs / antacids (e.g. Pantoprazole, Rabeprazole) when prescribing NSAIDs, antibiotics, or steroids.
+     * Gut & nutrient support (e.g. B-complex, Becosules, Probiotics / Sporlac, Vitamin C / Limcee, Zinc) with antibiotics or infections.
+     * Symptom-relief & SOS drugs (e.g. Paracetamol / Dolo for fever or body ache, Ondansetron / Domperidone for nausea/vomiting, cough syrups / antihistamines for cough/cold, ORS for gastroenteritis / dehydration).
+     * Topical / soothing add-ons (e.g. lubricating eye drops with antibiotic eye drops; moisturizers with topical corticosteroids).
+   - If the doctor prescribed these add-on medications in past similar cases, NEVER drop them as "unrelated"! Keep them so the doctor sees their complete clinical regimen.
+
+3. NO FORMULATION TYPE IN MEDICINE NAME:
+   - The formulation type belongs strictly in the "type" field ("Tablet", "Capsules", "Injection", "Syrup", "Ointment", "Gel", "Sachet", "Drops", "Inhaler", "Spray").
+   - Strip prefixes like "Tab", "Tablet", "Cap", "Capsule", "Syp", "Syrup", "Inj", "Injection", "Oint", "Drops" from medicine.name (e.g. "Tab Dolo 650" -> name: "Dolo 650", type: "Tablet"; "Inj Lantus" -> name: "Lantus", type: "Injection"; "Syp Ascoril" -> name: "Ascoril", type: "Syrup").
+
+4. KEEP STRENGTH IN MEDICINE NAME & FIX TYPOS:
+   - Keep the strength in the name (e.g. "Wysolone 20mg", "Dolo 650", "Augmentin 625", "Pantop 40", "Azithro 500").
+   - Correct obvious spelling errors and transcription typos in drug names without changing the intended drug or brand.
+
+5. ACCURATE DEFAULT QUANTITY:
+   - Populate an accurate integer "quantity" for each medicine:
+     * Tablets/Capsules/Sachets: total units based on standard course (e.g. BD for 5 days = 10; BD for 7 days = 14; SOS default = 10).
+     * Syrups/Ointments/Creams/Gels/Drops/Inhalers/Sprays: quantity = 1 (1 container/bottle/tube).
+     * Injections: exact count of ampoules/vials (e.g. 1 vial for multi-dose insulin pens/vials like Lantus; 1 or 2 for stat doses).
+
+6. FORMULATION DIVERSITY:
+   - Keep ALL formulation types that appear in the doctor's past practice for this case (tablets, syrups, drops, ointments, sachets, inhalers, injections). Do not collapse everything into only tablets. Keep up to 4-5 items per formulation type when present.
+
+7. DROP ONLY TRUE DUPLICATES AND BLATANTLY UNRELATED ITEMS:
+   - Merge duplicates of the same drug.
+   - Drop items that belong to completely unrelated specialties or conditions (e.g. do not suggest glaucoma drops for acute gastroenteritis, or antiepileptics for simple fungal skin infection), but KEEP all plausible primary and add-on medications for this case.`;
 
 function medicineFormCategory(pill) {
   const type = String(pill?.type || "").toLowerCase();
@@ -510,6 +553,15 @@ function medicineFormCategory(pill) {
     return "Tablets & Capsules";
   }
   return "Other Medicines";
+}
+
+function stripFormulationPrefix(name = "") {
+  return String(name || "")
+    .replace(
+      /^(?:tab|tablet|tablets|cap|capsule|capsules|syp|syrup|inj|injection|injections|oint|ointment|cream|gel|sachet|sachets|drops?|spray|inhaler)\.?\s+/i,
+      "",
+    )
+    .trim();
 }
 
 function fillMissingMedCategories(cleaned = [], original = [], perCat = 5) {
@@ -534,7 +586,10 @@ function fillMissingMedCategories(cleaned = [], original = [], perCat = 5) {
       const id = `${cat}::${pillIdeaKey(pillNameOf(pill))}`;
       if (used.has(id)) continue;
       used.add(id);
-      out.push(pill);
+      out.push({
+        ...pill,
+        name: stripFormulationPrefix(pill.name) || pill.name,
+      });
     }
   }
   return out;
@@ -565,17 +620,45 @@ function matchOriginalPill(original = [], keepName) {
   return bestScore >= 0.45 ? best : null;
 }
 
-function selectKeptPills(original = [], keptNames = []) {
-  if (!Array.isArray(keptNames) || !keptNames.length) return [];
+function selectKeptPills(original = [], keptItems = []) {
+  if (!Array.isArray(keptItems) || !keptItems.length) return [];
   const used = new Set();
   const out = [];
-  for (const name of keptNames) {
-    const hit = matchOriginalPill(original, name);
+  for (const item of keptItems) {
+    const keepName =
+      typeof item === "string" ? item : item?.match || item?.name || "";
+    const hit = matchOriginalPill(original, keepName);
     if (!hit) continue;
     const id = pillIdeaKey(pillNameOf(hit));
     if (!id || used.has(id)) continue;
     used.add(id);
-    out.push(hit);
+
+    let cleanName = hit.name;
+    let cleanType = hit.type;
+    let cleanQuantity = hit.quantity;
+
+    if (typeof item === "object" && item !== null) {
+      if (item.name && typeof item.name === "string" && item.name.trim()) {
+        cleanName = stripFormulationPrefix(item.name);
+      }
+      if (item.type && typeof item.type === "string" && item.type.trim()) {
+        cleanType = item.type.trim();
+      }
+      if (item.quantity != null) {
+        cleanQuantity = item.quantity;
+      }
+    } else if (typeof item === "string" && item.trim()) {
+      cleanName = stripFormulationPrefix(item);
+    } else {
+      cleanName = stripFormulationPrefix(hit.name);
+    }
+
+    out.push({
+      ...hit,
+      name: cleanName || hit.name,
+      type: cleanType || hit.type,
+      ...(cleanQuantity != null ? { quantity: cleanQuantity } : {}),
+    });
   }
   return out;
 }
