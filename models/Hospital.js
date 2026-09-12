@@ -51,6 +51,20 @@ const hospitalSchema = new mongoose.Schema(
       receiptFooterNote: { type: String },
       /** Bill Print Configuration (TatvaPractice / modern clinic format) */
       billPrintSettings: { type: mongoose.Schema.Types.Mixed, default: {} },
+      /** Daily Owner Financial & Operational Digest Settings */
+      dailyDigest: {
+        enabled: { type: Boolean, default: false },
+        recipients: [
+          {
+            name: { type: String },
+            phone: { type: String, required: true },
+            role: { type: String, default: "Owner" },
+          },
+        ],
+        scheduledTime: { type: String, default: "21:00" }, // 24-hr format HH:mm
+        lastSentDate: { type: String }, // YYYY-MM-DD
+        lastSentAt: { type: Date },
+      },
     },
     // Tenant Database Fields
     /** "shared" = data in hms_shared (multi-tenant); "isolated" = dedicated hms_hospital_{id} DB */

@@ -9,7 +9,12 @@ applyTenantEntitlements(router, { moduleKey: "pharmacy" });
 const multer = require("multer");
 const path = require("path");
 const axios = require("axios");
-// Meilisearch removed - using MongoDB search for tenant data
+const { scanPharmacyInvoice } = require("../services/pharmacyInvoiceAiService");
+
+const uploadMemory = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB limit
+});
 
 /**
  * Helper function to manually populate master medicine data
@@ -561,6 +566,32 @@ router.get("/search/health", async (req, res) => {
     res.json({
       status: "unhealthy",
       error: error.message,
+    });
+  }
+});
+
+// POST /api/pharmacy/ai-invoice-scan - Multimodal AI extraction of purchase invoice to cart
+router.post("/ai-invoice-scan", uploadMemory.single("invoice"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No invoice file uploaded. Please upload a PDF or image." });
+    }
+
+    const hospitalId = req.hospitalId;
+    const result = await scanPharmacyInvoice({
+      buffer: req.file.buffer,
+      mimeType: req.file.mimetype,
+      hospitalId,
+    });
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error("AI invoice scanning error:", error);
+    res.status(500).json({
+      message: error.message || "Failed to scan pharmacy invoice",
     });
   }
 });

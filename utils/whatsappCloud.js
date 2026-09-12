@@ -59,6 +59,12 @@ const TEMPLATE_CATALOG = {
     /** body: patient, hospital, testsSummary */
     hasUrlButton: true,
   },
+  daily_financial_digest: {
+    envKey: "WHATSAPP_TEMPLATE_DAILY_DIGEST",
+    defaultName: "daily_financial_digest",
+    defaultLanguage: "en",
+    hasUrlButton: false,
+  },
 };
 
 function normalizeDestination(rawPhone) {
@@ -299,6 +305,108 @@ async function sendLabReportWhatsApp({
   });
 }
 
+/**
+ * Send a direct text message via Meta WhatsApp Cloud API.
+ * Ideal for daily administrative digests or conversational responses within 24h window.
+ */
+async function sendWhatsAppTextMessage({ phone, message }) {
+  const { accessToken, phoneNumberId } = getCredentials();
+
+  if (!accessToken || !phoneNumberId) {
+    const error = new Error(
+      "WhatsApp Cloud API is not configured. Set WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID."
+    );
+    error.code = "WHATSAPP_NOT_CONFIGURED";
+    throw error;
+  }
+
+  const destination = normalizeDestination(phone);
+  if (!destination) {
+    const error = new Error(`Invalid or missing mobile number: "${phone}".`);
+    error.code = "INVALID_DESTINATION";
+    throw error;
+  }
+
+  const payload = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: destination,
+    type: "text",
+    text: {
+      preview_url: false,
+      body: String(message || ""),
+    },
+  };
+
+  const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`;
+
+  try {
+    const response = await axios.post(url, payload, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      timeout: 15000,
+    });
+    return {
+      success: true,
+      destination,
+      type: "text",
+      data: response.data,
+    };
+  } catch (err) {
+    const metaError =
+      err.response?.data?.error?.message ||
+      err.response?.data?.error?.error_user_msg ||
+      err.response?.data?.message ||
+      err.message ||
+      "Failed to send WhatsApp message via Meta Cloud API.";
+    const apiError = new Error(metaError);
+    apiError.code = "WHATSAPP_SEND_FAILED";
+    apiError.status = err.response?.status;
+    apiError.details = err.response?.data;
+    throw apiError;
+  }
+}
+
+/**
+ * Send Daily Financial and Operations Digest to Hospital Owner / Director.
+ * Tries template if configured, otherwise sends rich direct text message.
+ */
+async function sendDailyDigestWhatsApp({
+  phone,
+  hospitalName,
+  dateStr,
+  summaryText,
+  fullFormattedMessage,
+}) {
+  // If specific template override is configured, attempt template first
+  if (process.env.WHATSAPP_TEMPLATE_DAILY_DIGEST) {
+    try {
+      return await sendWhatsAppTemplate({
+        phone,
+        templateKey: "daily_financial_digest",
+        bodyParams: [
+          hospitalName || "Hospital",
+          dateStr || "Today",
+          summaryText || fullFormattedMessage || "Summary report ready.",
+        ],
+      });
+    } catch (templateErr) {
+      console.warn(
+        "Template send failed for daily digest, falling back to direct text:",
+        templateErr.message
+      );
+    }
+  }
+
+  // Fallback to direct rich text message
+  return sendWhatsAppTextMessage({
+    phone,
+    message: fullFormattedMessage || summaryText,
+  });
+}
+
 function mapWhatsAppHttpError(error, res) {
   if (error.code === "WHATSAPP_NOT_CONFIGURED") {
     return res.status(503).json({
@@ -324,8 +432,10 @@ module.exports = {
   TEMPLATE_CATALOG,
   normalizeDestination,
   sendWhatsAppTemplate,
+  sendWhatsAppTextMessage,
   sendPrescriptionWhatsApp,
   sendAppointmentWhatsApp,
   sendLabReportWhatsApp,
+  sendDailyDigestWhatsApp,
   mapWhatsAppHttpError,
 };

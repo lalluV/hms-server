@@ -52,14 +52,28 @@ router.post("/", async (req, res) => {
     } = req.body;
 
     // Validate required fields
-    if (!name || !code) {
+    if (!name) {
       return res
         .status(400)
-        .json({ message: "Hospital name and code are required" });
+        .json({ message: "Hospital name is required" });
+    }
+
+    // Auto-generate code if not provided
+    let finalCode = code;
+    if (!finalCode || !finalCode.trim()) {
+      const cleanSlug = (name || "hospital")
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9\s-]/g, "")
+        .replace(/\s+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 24);
+      finalCode = `${cleanSlug || "hospital"}-${Math.floor(1000 + Math.random() * 9000)}`;
     }
 
     // Normalize hospital code for subdomain use (lowercase, trimmed)
-    const normalizedCode = code.toLowerCase().trim();
+    const normalizedCode = finalCode.toLowerCase().trim();
     
     // Validate hospital code format (alphanumeric, hyphens, underscores only - URL-safe for subdomains)
     const codePattern = /^[a-z0-9_-]+$/;

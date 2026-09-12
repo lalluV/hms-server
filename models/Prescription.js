@@ -71,6 +71,10 @@ const prescriptionSchema = new mongoose.Schema(
     },
     dispensedAt: { type: Date },
     dispensedBy: { type: String },
+
+    // Follow-up Planning
+    followUpDate: { type: String }, // YYYY-MM-DD
+    followUpNotes: { type: String },
   },
   { strict: true, timestamps: true },
 );
@@ -78,6 +82,7 @@ const prescriptionSchema = new mongoose.Schema(
 prescriptionSchema.index({ hospitalId: 1, patientId: 1, createdAt: -1 });
 prescriptionSchema.index({ hospitalId: 1, pharmacyStatus: 1, createdAt: -1 });
 prescriptionSchema.index({ hospitalId: 1, doctorId: 1, date: -1 });
+prescriptionSchema.index({ hospitalId: 1, followUpDate: 1 });
 prescriptionSchema.index({ hospitalId: 1, prescriptionId: 1 }, { unique: true });
 
 module.exports = mongoose.model("Prescription", prescriptionSchema);

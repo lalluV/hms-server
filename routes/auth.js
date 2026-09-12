@@ -45,10 +45,24 @@ router.post("/register-hospital", authLimiter, async (req, res) => {
     } = req.body;
 
     // Validate required fields
-    if (!hospitalName || !hospitalCode) {
+    if (!hospitalName) {
       return res
         .status(400)
-        .json({ message: "Hospital name and code are required" });
+        .json({ message: "Hospital name is required" });
+    }
+
+    // If hospitalCode not provided, auto-generate from hospitalName with 4-digit code
+    let codeToUse = hospitalCode;
+    if (!codeToUse && hospitalName) {
+      const cleanSlug = hospitalName
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9\s-]/g, "")
+        .replace(/\s+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 24);
+      codeToUse = `${cleanSlug || "hospital"}-${Math.floor(1000 + Math.random() * 9000)}`;
     }
 
     if (!adminUsername || !adminEmail || !adminPassword) {
@@ -58,7 +72,7 @@ router.post("/register-hospital", authLimiter, async (req, res) => {
     }
 
     // Normalize hospital code for subdomain use (lowercase, trimmed)
-    const normalizedCode = hospitalCode.toLowerCase().trim();
+    const normalizedCode = codeToUse.toLowerCase().trim();
 
     // Validate hospital code format (alphanumeric, hyphens, underscores only - URL-safe for subdomains)
     const codePattern = /^[a-z0-9_-]+$/;
@@ -457,27 +471,45 @@ router.post("/login", authLimiter, extractSubdomain, requireSubdomain, async (re
 // @route   GET api/auth/tenant-info
 // @desc    Get tenant information from subdomain (for debugging)
 // @access  Public
-router.get("/tenant-info", extractSubdomain, (req, res) => {
-  res.json({
-    detectedHost: req.headers.host || "unknown",
-    detectedOrigin: req.headers.origin || null,
-    detectedReferer: req.headers.referer || null,
-    hospitalCode: req.hospitalCode || null,
-    hospital: req.hospital
-      ? {
-          id: req.hospital._id,
-          name: req.hospital.name,
-          code: req.hospital.code,
-          active: req.hospital.active,
-          databaseStatus: req.hospital.databaseStatus,
-        }
-      : null,
-    detectionMethods: {
-      fromHost: !!(req.headers.host && req.hospitalCode),
-      fromOrigin: !!(req.headers.origin && req.hospitalCode),
-      fromReferer: !!(req.headers.referer && req.hospitalCode),
-    },
-  });
+router.get("/tenant-info", extractSubdomain, async (req, res) => {
+  try {
+    let hospital = req.hospital;
+    let hospitalCode = req.hospitalCode;
+
+    // Fallback: If no hospital was identified from subdomain (e.g. accessed on bare localhost or IP),
+    // look up the primary active hospital so local login displays real hospital info.
+    if (!hospital) {
+      hospital = await Hospital.findOne({ active: true }).sort({ createdAt: 1 });
+      if (hospital) {
+        hospitalCode = hospital.code;
+      }
+    }
+
+    res.json({
+      detectedHost: req.headers.host || "unknown",
+      detectedOrigin: req.headers.origin || null,
+      detectedReferer: req.headers.referer || null,
+      hospitalCode: hospitalCode || null,
+      hospital: hospital
+        ? {
+            id: hospital._id,
+            name: hospital.name,
+            code: hospital.code,
+            active: hospital.active,
+            databaseStatus: hospital.databaseStatus,
+          }
+        : null,
+      detectionMethods: {
+        fromHost: !!(req.headers.host && req.hospitalCode),
+        fromOrigin: !!(req.headers.origin && req.hospitalCode),
+        fromReferer: !!(req.headers.referer && req.hospitalCode),
+        fallback: !req.hospital && !!hospital,
+      },
+    });
+  } catch (error) {
+    console.error("Error retrieving tenant info:", error);
+    res.status(500).json({ message: "Error retrieving tenant info" });
+  }
 });
 
 // @route   GET api/auth/me
@@ -509,7 +541,21 @@ router.get("/me", auth, async (req, res) => {
       ? toClientPayloadFromHospital(masterHospital)
       : null;
 
-    res.json({ ...staff.toObject(), entitlements });
+    res.json({
+      ...staff.toObject(),
+      entitlements,
+      hospitalName: masterHospital?.name || staff.hospitalName || "Hospital",
+      hospital: masterHospital
+        ? {
+            id: masterHospital._id.toString(),
+            name: masterHospital.name,
+            code: masterHospital.code,
+            city: masterHospital.city,
+            phone: masterHospital.phone,
+            email: masterHospital.email,
+          }
+        : null,
+    });
   } catch (err) {
     console.error("Error fetching current user:", err.message);
     res.status(500).json({

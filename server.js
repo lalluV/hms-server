@@ -11,6 +11,7 @@ const { initializeMasterDatabase } = require("./utils/tenantDb");
 
 const securityHeaders = require("./middleware/securityHeaders");
 const { createRateLimiter } = require("./middleware/rateLimiter");
+const { startDigestScheduler } = require("./services/digestScheduler");
 
 const app = express();
 
@@ -114,6 +115,9 @@ app.use("/api/pharmacy-receipts", require("./routes/pharmacyReceipts"));
 app.use("/api/diagnostics-receipts", require("./routes/diagnosticsReceipts"));
 app.use("/api/discharge-summary", require("./routes/dischargeSummary"));
 app.use("/api/opd-ai", require("./routes/opdAi"));
+app.use("/api/ipd-ai", require("./routes/ipdAi"));
+app.use("/api/era-ai", require("./routes/ipdAi"));
+app.use("/api/discharge-ai", require("./routes/dischargeAi"));
 app.use("/api/gemini-live", require("./routes/geminiLive"));
 app.use("/api/healeka-agent", require("./routes/healekaAgent"));
 app.use("/api/consents", require("./routes/consentRoutes"));
@@ -127,6 +131,7 @@ app.use("/api/stamps", require("./routes/stamps"));
 app.use("/api/upload", require("./routes/upload"));
 app.use("/api/diagnostics-users", require("./routes/diagnosticsUsers"));
 app.use("/api/dashboard", require("./routes/dashboard"));
+app.use("/api/certificates", require("./routes/certificates"));
 app.use("/api/commissions", require("./routes/commissions"));
 app.use("/api/hospitals", require("./routes/hospitals"));
 app.use("/api/master-medicines", require("./routes/masterMedicines"));
@@ -147,6 +152,9 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, "0.0.0.0", async () => {
   console.log(`🚀 Server running on port ${PORT}`);
+
+  // Initialize Daily WhatsApp Digest background scheduler
+  startDigestScheduler();
 
   // Initialize Meilisearch and index master data after server starts
   setTimeout(async () => {
