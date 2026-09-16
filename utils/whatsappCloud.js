@@ -24,30 +24,40 @@ const TEMPLATE_CATALOG = {
   prescription_ready: {
     envKey: "WHATSAPP_TEMPLATE_PRESCRIPTION",
     defaultName: "prescription_ready",
+    /** Meta language for this template (prescription uses en_US; lab uses en) */
+    defaultLanguage: "en_US",
     /** body: patient, hospital, doctor */
     hasUrlButton: true,
   },
   appointment_booked: {
     envKey: "WHATSAPP_TEMPLATE_APPOINTMENT_BOOKED",
     defaultName: "appointment_booked",
+    /** Meta language for this template (prescription uses en_US; lab uses en) */
+    defaultLanguage: "en",
     /** body: patient, hospital, doctor, date, time */
     hasUrlButton: false,
   },
   appointment_confirmed: {
     envKey: "WHATSAPP_TEMPLATE_APPOINTMENT_CONFIRMED",
     defaultName: "appointment_confirmed",
+    /** Meta language for this template (prescription uses en_US; lab uses en) */
+    defaultLanguage: "en",
     /** body: patient, hospital, doctor, date, time */
     hasUrlButton: false,
   },
   appointment_rescheduled: {
     envKey: "WHATSAPP_TEMPLATE_APPOINTMENT_RESCHEDULED",
     defaultName: "appointment_rescheduled",
+    /** Meta language for this template (prescription uses en_US; lab uses en) */
+    defaultLanguage: "en",
     /** body: patient, hospital, doctor, newDate, newTime */
     hasUrlButton: false,
   },
   appointment_cancelled: {
     envKey: "WHATSAPP_TEMPLATE_APPOINTMENT_CANCELLED",
     defaultName: "appointment_cancelled",
+    /** Meta language for this template (prescription uses en_US; lab uses en) */
+    defaultLanguage: "en",
     /** body: patient, hospital, doctor, date, time */
     hasUrlButton: false,
   },
