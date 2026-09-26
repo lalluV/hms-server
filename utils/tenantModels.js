@@ -88,6 +88,26 @@ const patientSchema = new mongoose.Schema(
     doctorId: { type: String },
     patient_status: { type: String },
     dischargeDate: { type: String },
+    dischargeTime: { type: String },
+    lengthOfStay: { type: Number, default: 1 },
+    dischargeCondition: { type: String, default: "Stable" },
+    dischargeDestination: { type: String, default: "Home" },
+    dischargeTo: { type: String },
+    finalDiagnosis: { type: String },
+    hospitalCourse: { type: String },
+    dischargeInstructions: { type: String },
+    dangerSigns: { type: String },
+    followUpPlan: { type: String },
+    counselling: { type: String },
+    summarySections: [mongoose.Schema.Types.Mixed],
+    dischargeMedications: [mongoose.Schema.Types.Mixed],
+    repeatLabs: [mongoose.Schema.Types.Mixed],
+    procedures: [mongoose.Schema.Types.Mixed],
+    dischargeSummary: { type: String },
+    dischargeSummaryType: { type: String, default: "standard" },
+    dischargeSummaryTimestamp: { type: Date },
+    dischargeSummaryStatus: { type: String, default: "draft" },
+    dischargeSummaryMeta: mongoose.Schema.Types.Mixed,
     dischargedAt: { type: String },
 
     // Registration & Audit
@@ -223,6 +243,31 @@ function registerTenantModels(connection) {
         insulinChart: [mongoose.Schema.Types.Mixed],
       });
     }
+    if (!patientModel.schema.paths.dischargeMedications) {
+      patientModel.schema.add({
+        dischargeDate: { type: String },
+        dischargeTime: { type: String },
+        lengthOfStay: { type: Number, default: 1 },
+        dischargeCondition: { type: String, default: "Stable" },
+        dischargeDestination: { type: String, default: "Home" },
+        dischargeTo: { type: String },
+        finalDiagnosis: { type: String },
+        hospitalCourse: { type: String },
+        dischargeInstructions: { type: String },
+        dangerSigns: { type: String },
+        followUpPlan: { type: String },
+        counselling: { type: String },
+        summarySections: [mongoose.Schema.Types.Mixed],
+        dischargeMedications: [mongoose.Schema.Types.Mixed],
+        repeatLabs: [mongoose.Schema.Types.Mixed],
+        procedures: [mongoose.Schema.Types.Mixed],
+        dischargeSummary: { type: String },
+        dischargeSummaryType: { type: String, default: "standard" },
+        dischargeSummaryTimestamp: { type: Date },
+        dischargeSummaryStatus: { type: String, default: "draft" },
+        dischargeSummaryMeta: mongoose.Schema.Types.Mixed,
+      });
+    }
     // ERA personal history extensions (safe to re-add)
     const ph = patientModel.schema.path("personalHistory");
     if (ph?.schema && !ph.schema.paths.maritalStatus) {
@@ -281,6 +326,8 @@ function registerTenantModels(connection) {
     { name: "Parameter", path: "../models/Parameter" },
     { name: "Prescription", path: "../models/Prescription" },
     { name: "IPAdmission", path: "../models/IPAdmission" },
+    { name: "DischargeSummary", path: "../models/DischargeSummary" },
+    { name: "DischargeDraft", path: "../models/DischargeDraft" },
   ];
 
   // Register each model if not already registered
@@ -349,6 +396,8 @@ const TENANT_MODELS = [
   "Parameter",
   "Prescription",
   "IPAdmission",
+  "DischargeSummary",
+  "DischargeDraft",
 ];
 
 /**

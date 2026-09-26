@@ -642,6 +642,18 @@ router.put("/hospital-profile", auth, async (req, res) => {
       "dateFormat",
       "billPrintSettings",
     ];
+    const incomingBillPrint = req.body.settings?.billPrintSettings;
+    if (
+      incomingBillPrint !== undefined &&
+      (incomingBillPrint === null ||
+        typeof incomingBillPrint !== "object" ||
+        Array.isArray(incomingBillPrint))
+    ) {
+      return res
+        .status(400)
+        .json({ message: "billPrintSettings must be an object." });
+    }
+
     if (req.body.settings && typeof req.body.settings === "object") {
       hospital.settings = hospital.settings || {};
       for (const key of settingFields) {

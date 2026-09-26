@@ -380,6 +380,19 @@ async function sendWhatsAppTextMessage({ phone, message }) {
 }
 
 /**
+ * Approved template variables cannot contain line breaks, tabs, or long runs of spaces.
+ */
+function toWhatsAppTemplateParam(value) {
+  const text = String(value ?? "")
+    .replace(/\*/g, "")
+    .replace(/[\u2013\u2014]/g, "-")
+    .replace(/[\r\n\t]+/g, " | ")
+    .replace(/ {2,}/g, " ")
+    .trim();
+  return (text || "-").slice(0, 1024);
+}
+
+/**
  * Send Daily Financial and Operations Digest to Hospital Owner / Director.
  * Tries template if configured, otherwise sends rich direct text message.
  */
@@ -397,9 +410,11 @@ async function sendDailyDigestWhatsApp({
         phone,
         templateKey: "daily_financial_digest",
         bodyParams: [
-          hospitalName || "Hospital",
-          dateStr || "Today",
-          summaryText || fullFormattedMessage || "Summary report ready.",
+          toWhatsAppTemplateParam(hospitalName || "Hospital"),
+          toWhatsAppTemplateParam(dateStr || "Today"),
+          toWhatsAppTemplateParam(
+            fullFormattedMessage || summaryText || "Summary report ready.",
+          ),
         ],
       });
     } catch (templateErr) {

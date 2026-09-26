@@ -73,6 +73,9 @@ const ipAdmissionSchema = new mongoose.Schema(
     procedures: [mongoose.Schema.Types.Mixed],
     treatment: [mongoose.Schema.Types.Mixed],
     casualtyTreatment: [mongoose.Schema.Types.Mixed],
+    otNotes: { type: String },
+    surgeryNotes: { type: String },
+    summarySections: [mongoose.Schema.Types.Mixed],
 
     // Discharge Summary & Medical Orders
     dischargeDate: { type: String },

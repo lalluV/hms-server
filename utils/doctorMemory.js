@@ -1100,9 +1100,9 @@ function buildNotePills(
   noteContext = {},
   caseScores = new Map(),
 ) {
-  const sections = ["complaints", "examination", "diagnosis", "advice"];
+  const sections = ["examination", "diagnosis", "advice"];
   const used = new Set();
-  const result = {};
+  const result = { complaints: [] };
 
   for (const section of sections) {
     const pills = aggregateTextPills(

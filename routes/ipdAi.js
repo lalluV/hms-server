@@ -2,7 +2,7 @@
  * IPD & ERA AI Clinical Engine & Routes
  * Self-contained module for In-Hospital Care: Inpatient Ward Rounds (IPD)
  * and Emergency Response & Casualty Admission (ERA).
- * 
+ *
  * Rules:
  * - In-hospital care: NO default durations (duration: "" / continuous hospital administration).
  * - IPD: Ward round progress notes, tracking ongoing ward treatment (origin: "visit"),
@@ -14,7 +14,9 @@
 const express = require("express");
 const router = express.Router();
 const axios = require("axios");
-const { aiCompletionWithFallback } = require("../utils/aiCompletionWithFallback");
+const {
+  aiCompletionWithFallback,
+} = require("../utils/aiCompletionWithFallback");
 
 const OPENAI_API_BASE_URL = "https://api.openai.com/v1";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -455,10 +457,7 @@ function mergeInpatientChartDelta(
         if (activeIdx < addedMedIndex)
           addedMedIndex = Math.max(0, addedMedIndex - 1);
         const medName =
-          existing?.name ||
-          op?.medicine?.name ||
-          target ||
-          "Medicine";
+          existing?.name || op?.medicine?.name || target || "Medicine";
         medicines.push({
           ...existing,
           name: medName,
@@ -468,7 +467,9 @@ function mergeInpatientChartDelta(
         });
       } else if (target) {
         medicines.push({
-          ...(op.medicine && typeof op.medicine === "object" ? op.medicine : {}),
+          ...(op.medicine && typeof op.medicine === "object"
+            ? op.medicine
+            : {}),
           name: String(op?.medicine?.name || target).trim(),
           action: "stop",
           origin: "visit",
@@ -485,9 +486,7 @@ function mergeInpatientChartDelta(
       );
       medicines.splice(addedMedIndex++, 0, {
         ...(op.medicine && typeof op.medicine === "object" ? op.medicine : {}),
-        name:
-          String(op?.medicine?.name || target).trim() ||
-          target,
+        name: String(op?.medicine?.name || target).trim() || target,
         duration: "",
         action: "restart",
         origin: "visit",
@@ -651,7 +650,7 @@ IPD WARD ROUND FOLLOW-UP MODE — PATCH ONLY (CRITICAL — KEEP OUTPUT TINY)
 
 4. WARD NOTES (SOAP):
 - Keep clinical facts cleanly placed by meaning:
-  - Symptoms/fever/pain -> noteOps section: "complaints"
+  - Symptoms/fever/pain -> DO NOT process into complaints for now; only process diagnosis, labs, and medications.
   - Past history -> noteOps section: "history"
   - Physical exam / vitals findings -> noteOps section: "examination"
   - Provisional / confirmed diagnosis -> noteOps section: "diagnosis"
@@ -715,30 +714,45 @@ Return exactly this JSON shape:
 
 const ERA_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM = `
 
-ERA (EMERGENCY CASUALTY & ADMISSION) FOLLOW-UP MODE — PATCH ONLY
-1. IN-HOSPITAL EMERGENCY CARE (NO 5-DAY DURATIONS):
-- Patient is in Emergency / Casualty undergoing acute assessment and admission.
-- Duration is "" (NOT "5 days"). STAT doses or continuous hospital medications.
+ERA FOLLOW-UP MODE — SAME PATCH RULES AS AN IPD WARD PROGRESS NOTE (CRITICAL — KEEP OUTPUT TINY)
+1. GROUND TRUTH & MINIMAL PATCHING:
+- CURRENT CHART is the chart exactly as it stands right now.
+- Items are tagged origin: "review" (added in this draft) or "visit" (already on the chart).
+- INSTRUCTION is the single new update requested right now.
+- Output ONLY operations for items INSTRUCTION explicitly names or changes. Unmentioned items remain untouched.
+- If instruction does not name or refer to a medicine, medicineOps MUST be []. Same for labs, procedures, and vitals.
+- NEVER invent a standard casualty bundle. Do NOT add CBC, CBP, RBS, GRBS, LFT, RFT, ECG, X-ray, Pantop, PCM, IV fluids, or any other medicine or test unless that exact order was spoken.
+- A symptom, diagnosis, or exam finding is NOT an order. "Fever", "chest pain", "viral fever", "GCS 15", or "BP 120/80" must not create medicines or labs.
+- Match existing items using their exact "name" from CURRENT CHART.
 
-2. CASUALTY vs. WARD MEDICATION SPLITTING (CRITICAL):
-- Distinguish between medicines administered in Casualty right now vs continued on the ward:
-  * STAT doses, IV push, emergency nebulizations, IV bolus, "given now", "in casualty" -> eraRoute: "given_in_er".
-  * Regular admissions orders to continue on the ward -> eraRoute: "continue_on_ward".
-  * Default continue_on_ward if unclear.
-- When doctor asks to stop or discontinue an ongoing medicine -> op: "stop", match: exact medicine name from CURRENT CHART, and populate medicine: { "name": "<name>" }.
+2. IN-HOSPITAL DURATION RULE (same as ward progress note):
+- DO NOT default medicine duration to "5 days". Leave duration "" unless the doctor stated a course length.
+- IV fluids: rate in ml/hr or hours when stated, else leave duration "".
 
-3. EMERGENCY VITALS & TRIAGE EXAMINATION:
-- Emergency Vitals: Include blood sugar ("bloodSugar" or "grbs") and "urineOutput" (in ml) when mentioned alongside BP, PR, Temp, SpO2.
-- Triage Examination (populate under eraManualExamPatch when mentioned):
-  * "gcs": Glasgow Coma Scale formatted strictly as "E#V#M#" (e.g. "E3V4M5").
-  * "consciousness": One of "Alert", "Oriented", "Drowsy", "Confused", "Stuporous", "Unconscious".
-  * "pupils": Pupil reaction text (e.g. "Equal and reactive to light").
-  * "personalHistory": { "alcohol": true/false, "smoking": true/false, "illicitDrugs": true/false }.
+3. STOPS & REMOVES (same as ward progress note):
+- When doctor says "stop med", "stop medicine", "discontinue med", "stop this medication", etc.:
+  * If CURRENT CHART has an ongoing medicine or draft medicine, target that medicine with op: "stop", match: exact name from CURRENT CHART, and populate medicine: { "name": "<name>" }.
+  * Never return empty medicineOps when the doctor instructs to stop or discontinue a medication.
+- Standalone remove command on a draft order (origin: "review") -> op: "remove".
+- Ongoing chart medicine (origin: "visit") -> op: "stop".
 
-4. ASSISTANT REPLY:
-- assistantReply is required: ONE short, natural spoken sentence confirming the casualty orders or triage findings.
+4. NOTES (same as ward progress note):
+- Symptoms/fever/pain -> DO NOT process into complaints for now; only process diagnosis, labs, and medications that were explicitly named.
+- Past history -> noteOps section: "history"
+- Physical exam / vitals findings -> noteOps section: "examination"
+- Provisional / confirmed diagnosis -> noteOps section: "diagnosis"
+- Advice, diet, nursing care -> noteOps section: "advice"
+- Do not add a note bullet for a fact the instruction did not state.
 
-Return exactly this JSON shape:
+5. ERA EXTRAS — ONLY WHEN SPOKEN (do not invent):
+- If a NAMED medicine was ordered: STAT / IV push / IV bolus / "given now" / "in casualty" -> eraRoute "given_in_er". A named medicine to continue on the ward -> eraRoute "continue_on_ward". If the route was not stated, use "continue_on_ward". Do not add a medicine just to fill a route.
+- Vitals: bloodSugar / grbs and urineOutput only when a number was spoken. Leave vitalsPatch {} when no vital was spoken.
+- eraManualExamPatch only for facts spoken now: gcs as E#V#M#, consciousness one of Alert|Oriented|Drowsy|Confused|Stuporous|Unconscious, pupils text, personalHistory alcohol/smoking/illicitDrugs. Omit the object entirely when none of these were spoken.
+
+6. ASSISTANT REPLY:
+- assistantReply is required: ONE short, natural spoken sentence confirming ONLY what this instruction changed. If nothing was ordered, do not mention medicines or labs.
+
+Return exactly this JSON shape. The sample values show allowed keys only. Copy nothing from the sample. Use [] and {} for every section the instruction did not change. Omit eraManualExamPatch unless a triage fact was spoken:
 {
   "assistantReply": "one short natural spoken sentence",
   "clearReviewMedicines": false,
@@ -801,11 +815,21 @@ Return exactly this JSON shape:
   ]
 }`;
 
-function buildInpatientReviewFollowUpUserPrompt(instruction, currentChart, isEra = false) {
-  const chart = currentChart && typeof currentChart === "object" ? currentChart : {};
-  return `SETTING: ${isEra ? "ERA (Emergency Casualty & Admission)" : "IPD (Ward progress note)"}.
+function buildInpatientReviewFollowUpUserPrompt(
+  instruction,
+  currentChart,
+  isEra = false,
+) {
+  const chart =
+    currentChart && typeof currentChart === "object" ? currentChart : {};
+  return `SETTING: ${isEra ? "ERA (Emergency Casualty & Admission) — use the SAME patch rules as an IPD ward progress note" : "IPD (Ward progress note)"}.
 IN-HOSPITAL CARE: DURATION is "" (do NOT default to 5 days; continuous hospital orders).
-${isEra ? 'SPLIT MEDICINES: "eraRoute": "given_in_er" for casualty stat/now, vs "continue_on_ward" for ward.' : '"stop" discontinues an ongoing ward medicine. "restart" reactivates a previously stopped medicine.'}
+${
+  isEra
+    ? `PATCH ONLY what INSTRUCTION explicitly names. If no medicine is named, medicineOps MUST be []. Same for labs, procedures, and vitals. Do NOT invent a casualty order set.
+ERA route tags apply only to a medicine the doctor named: "given_in_er" for stat/now/casualty, otherwise "continue_on_ward". GCS, pupils, sugar, and urine output only when spoken.`
+    : `"stop" discontinues an ongoing ward medicine. "restart" reactivates a previously stopped medicine.`
+}
 
 CURRENT CHART (ground truth — patch only what instruction changes):
 ${JSON.stringify(chart)}
@@ -813,7 +837,7 @@ ${JSON.stringify(chart)}
 INSTRUCTION:
 ${instruction}
 
-REMINDER: Output minimal JSON patch for ${isEra ? "ERA emergency orders" : "IPD ward orders"} only.`;
+REMINDER: Output a minimal JSON patch for what this instruction changes. Leave every other array empty.`;
 }
 
 function parseFollowUpDeltaJson(content) {
@@ -980,7 +1004,10 @@ router.post("/review-followup", async (req, res) => {
         content = retry?.data?.choices?.[0]?.message?.content?.trim() || "{}";
         delta = parseFollowUpDeltaJson(content);
       } catch (retryErr) {
-        console.error(`${isEra ? "ERA" : "IPD"} AI retry failed:`, retryErr.message);
+        console.error(
+          `${isEra ? "ERA" : "IPD"} AI retry failed:`,
+          retryErr.message,
+        );
         return res.status(500).json({ error: "Failed to parse AI response" });
       }
     }
@@ -991,7 +1018,10 @@ router.post("/review-followup", async (req, res) => {
     });
 
     console.log(`=== [${isEra ? "ERA" : "IPD"} AI FINAL RESULT] ===`);
-    console.log("Medicines:", merged.medicines.map((m) => m.name));
+    console.log(
+      "Medicines:",
+      merged.medicines.map((m) => m.name),
+    );
     console.log(
       "Labs:",
       merged.labTests.map((t) => (typeof t === "string" ? t : t?.name)),
@@ -1079,7 +1109,7 @@ router.post("/review-followup/reply-stream", async (req, res) => {
         messages: [
           {
             role: "system",
-            content: `You are a concise medical voice assistant for an Indian hospital ${isEra ? "Emergency Room / Casualty" : "Inpatient Ward"}. Reply in ONE short, natural spoken sentence confirming the clinical order or change. Plain English, warm, professional.`,
+            content: `You are a concise medical voice assistant for an Indian hospital ${isEra ? "Emergency Room / Casualty" : "Inpatient Ward"}. Reply in ONE short, natural spoken sentence confirming ONLY what the doctor just said. Do not mention medicines, labs, or orders they did not name. Plain English, warm, professional.`,
           },
           {
             role: "user",
@@ -1135,7 +1165,10 @@ router.post("/review-followup/reply-stream", async (req, res) => {
       safeEnd();
     });
   } catch (err) {
-    console.warn("Inpatient AI reply stream upstream error:", err?.message || err);
+    console.warn(
+      "Inpatient AI reply stream upstream error:",
+      err?.message || err,
+    );
     res.write(
       isEra
         ? "Got it — updating casualty chart."

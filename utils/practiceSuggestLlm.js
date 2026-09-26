@@ -2,9 +2,7 @@
  * Practice suggestions: memory first, then LLM to generate (if empty) or clean duplicates.
  */
 
-const {
-  aiCompletionWithFallback,
-} = require("./aiCompletionWithFallback");
+const { aiCompletionWithFallback } = require("./aiCompletionWithFallback");
 
 const PARSE_NOTE_MODEL =
   process.env.GEMINI_PARSE_MODEL ||
@@ -185,7 +183,10 @@ function normalizeLlmMedicinePills(
   for (const item of raw) {
     const name = String(item?.name || "").trim();
     if (!name) continue;
-    const key = name.toLowerCase().replace(/^(tab|cap|syp|inj)\.?\s+/i, "").trim();
+    const key = name
+      .toLowerCase()
+      .replace(/^(tab|cap|syp|inj)\.?\s+/i, "")
+      .trim();
     if (seen.has(key)) continue;
     if (strictHints) {
       const nameKey = normalizeBulletKey(name);
@@ -540,16 +541,27 @@ function medicineFormCategory(pill) {
   const type = String(pill?.type || "").toLowerCase();
   const name = String(pill?.name || "").toLowerCase();
   const blob = `${type} ${name}`;
-  if (/\b(inj|injection)\b/.test(blob) || name.startsWith("inj")) return "Injections";
-  if (/\b(iv|infusion)\b/.test(blob) || name.startsWith("iv ")) return "IV Fluids";
-  if (/\b(syp|syrup|susp|suspension|liquid)\b/.test(blob) || name.startsWith("syp")) {
+  if (/\b(inj|injection)\b/.test(blob) || name.startsWith("inj"))
+    return "Injections";
+  if (/\b(iv|infusion)\b/.test(blob) || name.startsWith("iv "))
+    return "IV Fluids";
+  if (
+    /\b(syp|syrup|susp|suspension|liquid)\b/.test(blob) ||
+    name.startsWith("syp")
+  ) {
     return "Syrups & Liquids";
   }
   if (/\b(drop|drops)\b/.test(blob)) return "Drops";
-  if (/\b(oint|ointment|cream|gel|lotion)\b/.test(blob)) return "Ointments & Topicals";
+  if (/\b(oint|ointment|cream|gel|lotion)\b/.test(blob))
+    return "Ointments & Topicals";
   if (/\b(sachet|powder)\b/.test(blob)) return "Sachets & Powders";
-  if (/\b(spray|inhaler|rotacap|respule)\b/.test(blob)) return "Inhalers & Sprays";
-  if (/\b(tab|tablet|cap|capsule)\b/.test(blob) || name.startsWith("tab") || name.startsWith("cap")) {
+  if (/\b(spray|inhaler|rotacap|respule)\b/.test(blob))
+    return "Inhalers & Sprays";
+  if (
+    /\b(tab|tablet|cap|capsule)\b/.test(blob) ||
+    name.startsWith("tab") ||
+    name.startsWith("cap")
+  ) {
     return "Tablets & Capsules";
   }
   return "Other Medicines";
@@ -744,7 +756,10 @@ async function cleanPracticeSuggestionsWithLlm({
     medicinePills,
     5,
   );
-  const cleanedLabs = selectKeptPills(labPills, parsed.labs || parsed.labPills || []);
+  const cleanedLabs = selectKeptPills(
+    labPills,
+    parsed.labs || parsed.labPills || [],
+  );
   const cleanedProcs = selectKeptPills(
     procedurePills,
     parsed.procedures || parsed.procedurePills || [],

@@ -1,324 +1,219 @@
-const mongoose = require("mongoose");
-const dayjs = require("dayjs");
+const {
+  HOSPITAL_TZ,
+  eventDateExpr,
+  dayKeyExpr,
+  computeDashboardStatistics,
+} = require("./dashboardStats");
 
-/**
- * Currency formatter for Indian Rupees
- */
+const LAB_EXCLUDED_TYPES = [
+  "lab-purchase",
+  "lab-purchase-return",
+  "lab-Indent",
+  "lab-indent",
+];
+
+const CLOSED_ADMISSION_STATUSES = ["Discharged", "Expired", "LAMA", "Transferred"];
+
 function formatCurrency(amount = 0) {
-  const num = Number(amount) || 0;
-  return `₹${num.toLocaleString("en-IN", {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
     maximumFractionDigits: 0,
-    minimumFractionDigits: 0,
-  })}`;
+  }).format(Number(amount) || 0);
 }
 
-/**
- * Aggregates daily metrics for a specific hospital across OPD, Lab, Pharmacy, IPD, and Expenses.
- *
- * @param {object} tenantDb - Active Mongoose connection/model resolver for the hospital tenant
- * @param {string|mongoose.Types.ObjectId} hospitalId - Hospital Identifier
- * @param {Date|string} [targetDate] - Target date to calculate (defaults to current time)
- */
-async function computeHospitalDailyDigest(tenantDb, hospitalId, targetDate = new Date()) {
-  const Patient = tenantDb.model("Patient");
-  const Appointment = tenantDb.model("Appointment");
-  const Consultation = tenantDb.model("Consultation");
-  const DiagnosticsReceipt = tenantDb.model("DiagnosticsReceipt");
-  const PharmacyReceipt = tenantDb.model("PharmacyReceipt");
-  const AdvanceReceipt = tenantDb.model("AdvanceReceipt");
-  const IPAdmission = tenantDb.model("IPAdmission");
-  const Expense = tenantDb.model("Expense");
+function calendarDate(targetDate = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: HOSPITAL_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(targetDate instanceof Date ? targetDate : new Date(targetDate));
+}
 
+function formatDigestDate(dateStr) {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const utc = new Date(Date.UTC(year, month - 1, day));
+  return {
+    formattedDate: new Intl.DateTimeFormat("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(utc),
+    dayOfWeek: new Intl.DateTimeFormat("en-GB", {
+      weekday: "long",
+      timeZone: "UTC",
+    }).format(utc),
+  };
+}
+
+function hospitalMatch(hospitalId) {
+  const mongoose = require("mongoose");
   const hospitalObjId = mongoose.Types.ObjectId.isValid(hospitalId)
     ? new mongoose.Types.ObjectId(hospitalId)
     : hospitalId;
+  return { hospitalId: { $in: [hospitalId, hospitalObjId] } };
+}
 
-  const matchFilter = {
-    hospitalId: { $in: [hospitalId, hospitalObjId] },
-  };
+function dayStages(primary, fallback, dateStr) {
+  return [
+    { $addFields: { eventDate: eventDateExpr(primary, fallback) } },
+    { $addFields: { dayKey: dayKeyExpr("$eventDate") } },
+    { $match: { dayKey: dateStr } },
+  ];
+}
 
-  const startOfDay = dayjs(targetDate).startOf("day").toDate();
-  const endOfDay = dayjs(targetDate).endOf("day").toDate();
-  const dateStr = dayjs(targetDate).format("YYYY-MM-DD");
+async function countOnDay(Model, match, primary, fallback, dateStr) {
+  const rows = await Model.aggregate([
+    { $match: match },
+    ...dayStages(primary, fallback, dateStr),
+    { $count: "total" },
+  ]);
+  return rows[0]?.total || 0;
+}
 
-  const todayDateFilter = {
-    ...matchFilter,
-    $or: [
-      { createdAt: { $gte: startOfDay, $lte: endOfDay } },
-      { date: { $gte: startOfDay, $lte: endOfDay } },
-      { date: dateStr },
-      { date: new RegExp(`^${dateStr}`) },
-    ],
-  };
+/**
+ * Today's operational digest. Money figures use the same calculation as the
+ * dashboard "Today" view so WhatsApp and the dashboard stay in agreement.
+ */
+async function computeHospitalDailyDigest(tenantDb, hospitalId, targetDate = new Date()) {
+  const dateStr = calendarDate(targetDate || new Date());
+  const stats = await computeDashboardStatistics(
+    tenantDb,
+    hospitalId,
+    "today",
+    dateStr,
+  );
+
+  const Consultation = tenantDb.model("Consultation");
+  const DiagnosticsReceipt = tenantDb.model("DiagnosticsReceipt");
+  const PharmacyReceipt = tenantDb.model("PharmacyReceipt");
+  const Appointment = tenantDb.model("Appointment");
+  const IPAdmission = tenantDb.model("IPAdmission");
+  const Patient = tenantDb.model("Patient");
+  const match = hospitalMatch(hospitalId);
 
   const [
-    consultationsToday,
-    diagnosticsToday,
-    pharmacySalesToday,
-    advanceReceiptsToday,
-    expensesToday,
-    admissionsTodayCount,
-    dischargesTodayCount,
-    activeAdmittedCount,
-    todayAppointmentsCount,
+    consultations,
+    labBills,
+    pharmacyBills,
+    appointments,
+    admissions,
+    discharges,
+    inpatients,
+    registrations,
   ] = await Promise.all([
-    // 1. OPD Consultations today
-    Consultation.find(todayDateFilter).select("items date createdAt").lean(),
-
-    // 2. Diagnostics / Lab Receipts today
-    DiagnosticsReceipt.find({
-      ...matchFilter,
-      $or: [
-        { createdAt: { $gte: startOfDay, $lte: endOfDay } },
-        { date: { $gte: startOfDay, $lte: endOfDay } },
-        { date: dateStr },
-      ],
-    }).select("totalAmount paymentType paymentStatus items totalTests").lean(),
-
-    // 3. Pharmacy Sales today
-    PharmacyReceipt.find({
-      ...matchFilter,
-      type: "pharmacy-sale",
-      $or: [
-        { createdAt: { $gte: startOfDay, $lte: endOfDay } },
-        { date: { $gte: startOfDay, $lte: endOfDay } },
-        { date: dateStr },
-      ],
-    }).select("totalAmount paymentType paymentMethod paid due paymentSplit").lean(),
-
-    // 4. IP Advance Receipts today
-    AdvanceReceipt.find({
-      ...matchFilter,
-      $or: [
-        { createdAt: { $gte: startOfDay, $lte: endOfDay } },
-        { date: { $gte: startOfDay, $lte: endOfDay } },
-        { date: dateStr },
-      ],
-    }).select("advanceAmount paymentMode").lean(),
-
-    // 5. Expenses logged today
-    Expense.find({
-      ...matchFilter,
-      $or: [
-        { createdAt: { $gte: startOfDay, $lte: endOfDay } },
-        { date: { $gte: startOfDay, $lte: endOfDay } },
-        { date: dateStr },
-      ],
-    }).select("amount category description").lean(),
-
-    // 6. IP Admissions today
-    IPAdmission.countDocuments({
-      ...matchFilter,
-      $or: [
-        { createdAt: { $gte: startOfDay, $lte: endOfDay } },
-        { admissionDate: dateStr },
-        { admissionDate: new RegExp(`^${dateStr}`) },
-      ],
-    }),
-
-    // 7. IP Discharges today
-    IPAdmission.countDocuments({
-      ...matchFilter,
-      patient_status: "Discharged",
-      $or: [
-        { updatedAt: { $gte: startOfDay, $lte: endOfDay } },
-        { dischargeDate: dateStr },
-        { dischargeDate: new RegExp(`^${dateStr}`) },
-      ],
-    }),
-
-    // 8. Currently Admitted In-Patients
-    IPAdmission.countDocuments({
-      ...matchFilter,
-      patient_status: "Admitted",
-    }),
-
-    // 9. Appointments today
-    Appointment.countDocuments({
-      ...matchFilter,
-      $or: [
-        { appointmentDate: { $gte: startOfDay, $lte: endOfDay } },
-        { appointmentDate: dateStr },
-        { appointmentDate: new RegExp(`^${dateStr}`) },
-      ],
-    }),
+    countOnDay(Consultation, match, "$createdAt", "$date", dateStr),
+    countOnDay(
+      DiagnosticsReceipt,
+      { ...match, type: { $nin: LAB_EXCLUDED_TYPES } },
+      "$createdAt",
+      "$date",
+      dateStr,
+    ),
+    countOnDay(
+      PharmacyReceipt,
+      { ...match, type: { $in: ["pharmacy-sale", "pharmacy"] } },
+      "$createdAt",
+      "$date",
+      dateStr,
+    ),
+    countOnDay(Appointment, match, "$appointmentDate", "$createdAt", dateStr),
+    countOnDay(IPAdmission, match, "$admissionDate", "$createdAt", dateStr),
+    countOnDay(
+      IPAdmission,
+      { ...match, patient_status: { $in: CLOSED_ADMISSION_STATUSES } },
+      "$dischargeDate",
+      "$dischargedAt",
+      dateStr,
+    ),
+    IPAdmission.countDocuments({ ...match, patient_status: "Admitted" }),
+    countOnDay(Patient, match, "$createdAt", "$registration_date", dateStr),
   ]);
 
-  // Compute OPD totals
-  let opdRevenue = 0;
-  for (const c of consultationsToday) {
-    if (Array.isArray(c.items)) {
-      for (const it of c.items) {
-        const rate = Number(it?.charges || it?.rate || 0);
-        const qty = Number(it?.quantity || 1);
-        opdRevenue += rate * qty;
-      }
-    }
-  }
+  const streams = [
+    { id: "consultation", name: "Doctor Consultations", amount: stats.consultationRevenue || 0 },
+    { id: "lab", name: "Laboratory & Diagnostics", amount: stats.labRevenue || 0 },
+    { id: "procedures", name: "Procedures & Surgeries", amount: stats.procedureRevenue || 0 },
+    { id: "services", name: "Clinical Services", amount: stats.serviceRevenue || 0 },
+    { id: "pharmacy", name: "Pharmacy", amount: stats.pharmacyRevenue || 0 },
+    { id: "ward", name: "IPD Wards & Beds", amount: stats.wardRevenue || 0 },
+  ];
 
-  // Compute Lab totals
-  let labRevenue = 0;
-  let labTestsCount = 0;
-  for (const d of diagnosticsToday) {
-    labRevenue += Number(d.totalAmount || 0);
-    labTestsCount += Number(d.totalTests || (Array.isArray(d.items) ? d.items.length : 1));
-  }
-
-  // Compute Pharmacy totals & payment splits
-  let pharmaTotal = 0;
-  let pharmaCash = 0;
-  let pharmaDigital = 0;
-  let pharmaDue = 0;
-
-  for (const p of pharmacySalesToday) {
-    const amt = Number(p.totalAmount || 0);
-    pharmaTotal += amt;
-    const mode = String(p.paymentType || p.paymentMethod || "").toLowerCase();
-    const paidAmt = Number(p.paid ?? amt);
-    const dueAmt = Number(p.due || 0);
-
-    if (mode.includes("cash")) {
-      pharmaCash += paidAmt;
-    } else if (mode.includes("upi") || mode.includes("online") || mode.includes("card") || mode.includes("gpay") || mode.includes("phonepe")) {
-      pharmaDigital += paidAmt;
-    } else {
-      // Default to cash if unspecified
-      pharmaCash += paidAmt;
-    }
-    pharmaDue += dueAmt;
-  }
-
-  // Compute Advance receipts totals
-  let advanceTotal = 0;
-  for (const adv of advanceReceiptsToday) {
-    advanceTotal += Number(adv.advanceAmount || 0);
-  }
-
-  // Compute Expenses totals
-  let expensesTotal = 0;
-  for (const exp of expensesToday) {
-    expensesTotal += Number(exp.amount || 0);
-  }
-
-  // Gross and Net Daily Collections
-  const grossCollections = opdRevenue + labRevenue + pharmaTotal + advanceTotal;
-  const netCollections = grossCollections - expensesTotal;
-
-  // Approximate cash vs digital breakdown across hospital
-  const totalCash = pharmaCash + Math.round((opdRevenue + labRevenue + advanceTotal) * 0.4);
-  const totalDigital = Math.max(0, grossCollections - totalCash);
+  const grossCollections = Number(stats.totalRevenue) || 0;
+  const expenses = Number(stats.totalExpenses) || 0;
+  const { formattedDate, dayOfWeek } = formatDigestDate(dateStr);
 
   return {
     date: dateStr,
-    formattedDate: dayjs(targetDate).format("DD MMM YYYY"),
-    dayOfWeek: dayjs(targetDate).format("dddd"),
+    formattedDate,
+    dayOfWeek,
     timestamp: new Date().toISOString(),
-
-    // OPD
-    opd: {
-      visits: consultationsToday.length,
-      appointments: todayAppointmentsCount,
-      revenue: opdRevenue,
+    streams,
+    activity: {
+      appointments,
+      consultations,
+      labBills,
+      pharmacyBills,
+      admissions,
+      discharges,
+      inpatients,
+      registrations,
     },
-
-    // Diagnostics / Lab
-    lab: {
-      receipts: diagnosticsToday.length,
-      testsCount: labTestsCount,
-      revenue: labRevenue,
-    },
-
-    // Pharmacy
-    pharmacy: {
-      bills: pharmacySalesToday.length,
-      totalSales: pharmaTotal,
-      cash: pharmaCash,
-      digital: pharmaDigital,
-      due: pharmaDue,
-    },
-
-    // IPD
-    ipd: {
-      admissionsToday: admissionsTodayCount,
-      dischargesToday: dischargesTodayCount,
-      currentOccupancy: activeAdmittedCount,
-      advanceCollected: advanceTotal,
-    },
-
-    // Expenses
-    expenses: {
-      count: expensesToday.length,
-      total: expensesTotal,
-    },
-
-    // Grand Totals
     financials: {
       grossCollections,
-      netCollections,
-      estimatedCash: totalCash,
-      estimatedDigital: totalDigital,
+      expenses,
+      netCollections: grossCollections - expenses,
     },
   };
 }
 
-/**
- * Formats the daily summary into an attractive WhatsApp message.
- */
+function moneyLine(label, amount) {
+  return `${label} — *${formatCurrency(amount)}*`;
+}
+
+function countLine(label, count) {
+  return `${label} — *${Number(count) || 0}*`;
+}
+
 function formatDailyDigestWhatsAppMessage(hospitalName, digest) {
   const name = hospitalName || "Hospital";
-  const { formattedDate, dayOfWeek, opd, lab, pharmacy, ipd, expenses, financials } = digest;
+  const { formattedDate, dayOfWeek, streams, activity, financials } = digest;
 
   const lines = [
-    `🏥 *${name.toUpperCase()}*`,
-    `📊 *Daily Operations & Financial Summary*`,
-    `📅 *Date:* ${formattedDate} (${dayOfWeek})`,
-    `─────────────────────────`,
-    `🩺 *OPD Consultations*`,
-    `• Visits Completed: *${opd.visits}*`,
-    `• Collections: *${formatCurrency(opd.revenue)}*`,
+    `*${name}*`,
+    `Daily digest · ${dayOfWeek}, ${formattedDate}`,
     ``,
-    `🧪 *Diagnostics & Lab*`,
-    `• Tests Done: *${lab.testsCount}* (Bills: ${lab.receipts})`,
-    `• Collections: *${formatCurrency(lab.revenue)}*`,
+    `*Gross collections*`,
+    `*${formatCurrency(financials.grossCollections)}*`,
     ``,
-    `💊 *Pharmacy Sales*`,
-    `• Total Sale Bills: *${pharmacy.bills}*`,
-    `• Pharmacy Revenue: *${formatCurrency(pharmacy.totalSales)}*`,
-    `  ├ Cash: ${formatCurrency(pharmacy.cash)}`,
-    `  └ Digital/UPI: ${formatCurrency(pharmacy.digital)}`,
+    `*Department revenue*`,
+    ...streams.map((stream) => moneyLine(stream.name, stream.amount)),
+    ``,
+    moneyLine("Expenses", financials.expenses),
+    moneyLine("Net", financials.netCollections),
+    ``,
+    `*Today's activity*`,
+    countLine("Appointments", activity.appointments),
+    countLine("Consultations", activity.consultations),
+    countLine("Lab bills", activity.labBills),
+    countLine("Pharmacy bills", activity.pharmacyBills),
+    countLine("Admissions", activity.admissions),
+    countLine("Discharges", activity.discharges),
+    countLine("Inpatients", activity.inpatients),
+    countLine("Registrations", activity.registrations),
   ];
-
-  if (pharmacy.due > 0) {
-    lines.push(`  └ Pending Due: ${formatCurrency(pharmacy.due)}`);
-  }
-
-  lines.push(
-    ``,
-    `🏨 *In-Patient (IPD)*`,
-    `• New Admissions: *${ipd.admissionsToday}*`,
-    `• Discharges: *${ipd.dischargesToday}*`,
-    `• Active In-Patients: *${ipd.currentOccupancy}*`,
-    `• IP Advance Collected: *${formatCurrency(ipd.advanceCollected)}*`,
-    `─────────────────────────`,
-    `💰 *TOTAL GROSS COLLECTION: ${formatCurrency(financials.grossCollections)}*`,
-    `  ├ Cash: ${formatCurrency(financials.estimatedCash)}`,
-    `  └ UPI / Digital: ${formatCurrency(financials.estimatedDigital)}`,
-    ``,
-    `📉 *Operating Expenses:* ${formatCurrency(expenses.total)}`,
-    `💎 *NET DAILY BALANCE: ${formatCurrency(financials.netCollections)}*`,
-    `─────────────────────────`,
-    `_Generated automatically via HMS Core_`
-  );
 
   return lines.join("\n");
 }
 
-/**
- * Compact summary for templates or SMS with strict character limits
- */
 function formatDailyDigestCompactSummary(hospitalName, digest) {
-  const { formattedDate, opd, lab, pharmacy, ipd, financials } = digest;
-  return `${formattedDate} Summary: OPD ${opd.visits} (${formatCurrency(opd.revenue)}), Lab ${lab.testsCount} (${formatCurrency(lab.revenue)}), Pharma ${formatCurrency(pharmacy.totalSales)}, IP Advance ${formatCurrency(ipd.advanceCollected)}. Total: ${formatCurrency(financials.grossCollections)}, Net: ${formatCurrency(financials.netCollections)}.`;
+  const { formattedDate, streams, financials } = digest;
+  const parts = streams.map(
+    (stream) => `${stream.name} ${formatCurrency(stream.amount)}`,
+  );
+  return `${hospitalName || "Hospital"} ${formattedDate}: ${parts.join(", ")}. Gross ${formatCurrency(financials.grossCollections)}, Expenses ${formatCurrency(financials.expenses)}, Net ${formatCurrency(financials.netCollections)}.`;
 }
 
 module.exports = {

@@ -26,11 +26,7 @@ const OPENAI_MODEL =
   process.env.OPENAI_MODEL ||
   "gpt-4.1-mini";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-// AI Write extract / review-followup / taper expand — Gemini 3.1 Flash Lite with GPT-4.1 Mini fallback.
-const PARSE_NOTE_MODEL =
-  process.env.GEMINI_PARSE_MODEL ||
-  process.env.GEMINI_TRANSCRIBE_MODEL ||
-  "gemini-3.1-flash-lite";
+// AI Write chart JSON uses gpt-6-luna (see aiCompletionWithFallback). Typing streams stay on OPENAI_MODEL.
 const PARSE_NOTE_TIMEOUT_MS =
   Number(process.env.GEMINI_PARSE_TIMEOUT_MS) ||
   Number(process.env.OPENAI_PARSE_TIMEOUT_MS) ||
@@ -55,16 +51,13 @@ const REVIEW_FOLLOWUP_DELTA_RETRY_MAX_TOKENS =
 const REVIEW_FOLLOWUP_REPLY_MAX_TOKENS = 60;
 
 /**
- * AI Write JSON completion via Gemini with instant failover to GPT-4.1 Mini
- * on 503 / high demand / timeouts. Returns standard OpenAI completion shape.
+ * AI Write JSON completion via gpt-6-luna, with Gemini 3.1 Flash Lite if Luna fails.
  */
 async function callParseClinicalNoteCompletion(
   messages,
   { timeoutMs = PARSE_NOTE_TIMEOUT_MS, maxTokens = PARSE_NOTE_MAX_TOKENS } = {},
 ) {
   return aiCompletionWithFallback(messages, {
-    geminiModel: PARSE_NOTE_MODEL,
-    openAiModel: OPENAI_MODEL,
     timeoutMs,
     maxTokens,
     responseJson: true,
@@ -312,7 +305,8 @@ Before writing:
 - For vitals: describe trends (e.g. "BP remained 120–140/70–85 mmHg; SpO2 stable at 96–98%")
 - For investigations.abnormalFindings: list only clinically significant results with interpretation
 - For insulinChart: summarize control status, dose range, and insulin types used
-- For emergencyAssessment: include MLC, chief complaints, systemic exam, allergies, past history as available
+- For Emergency / Casualty: ALWAYS include an "Emergency Assessment & Casualty Care" section whenever emergencyAssessment, MLC No, presenting complaints in ER, casualty treatment, or emergency medications are present
+- If summarySections exist in patientData, incorporate these case-tailored sections into the clinical summary and hospital course
 
 Patient Data:
 ${JSON.stringify(patientData, null, 2)}`;
@@ -1927,6 +1921,185 @@ router.post("/rewrite-section", async (req, res) => {
   }
 });
 
+/**
+ * POST /course-chat
+ * Body: { patientData, chatHistory, userPrompt, currentCourse }
+ * Synthesizes or iteratively edits the "Course in Hospital" clinical narrative
+ * using multi-day doctor notes, nurse notes, operative notes, lab trends, and radiology findings.
+ */
+router.post("/course-chat", async (req, res) => {
+  try {
+    const {
+      patientData = {},
+      chatHistory = [],
+      userPrompt = "",
+      currentCourse = "",
+    } = req.body;
+
+    const doctorNotesText = (patientData.doctorNotes || [])
+      .map(
+        (n) =>
+          `[${
+            n.timestamp
+              ? new Date(n.timestamp).toLocaleDateString("en-GB")
+              : "Note"
+          }]: ${n.content || n.note || ""}`,
+      )
+      .join("\n");
+
+    const nurseNotesText = (patientData.nurseNotes || [])
+      .map(
+        (n) =>
+          `[${
+            n.timestamp
+              ? new Date(n.timestamp).toLocaleDateString("en-GB")
+              : "Nurse"
+          }]: ${n.content || n.note || ""}`,
+      )
+      .join("\n");
+
+    const otNotesText =
+      patientData.otNotes ||
+      patientData.procedureNotes ||
+      patientData.operativeNotes ||
+      "";
+    const procedureName =
+      patientData.procedureName || patientData.surgeryName || "";
+    const complaints =
+      patientData.emergencyAssessment
+        ?.chiefComplaintsPresentIllnessHistory ||
+      patientData.chiefComplaints ||
+      "";
+    const admissionVitals = patientData.vitals?.admission
+      ? `BP: ${patientData.vitals.admission.bloodPressure || "—"}, HR: ${
+          patientData.vitals.admission.heartRate || "—"
+        }, Temp: ${patientData.vitals.admission.temperature || "—"}`
+      : "";
+    const dischargeVitals = patientData.vitals?.discharge
+      ? `BP: ${patientData.vitals.discharge.bloodPressure || "—"}, HR: ${
+          patientData.vitals.discharge.heartRate || "—"
+        }, Temp: ${patientData.vitals.discharge.temperature || "—"}`
+      : "";
+
+    // Labs and Radiology
+    const abnormalLabs = (patientData.investigations?.abnormalFindings || [])
+      .map(
+        (l) =>
+          `${l.testName}: ${l.result} ${l.units || ""} (${l.normalRange || ""})`,
+      )
+      .join(", ");
+
+    const radiologySummary = (patientData.radiologyReports || [])
+      .map(
+        (r) =>
+          `${r.testName || "Imaging"} (${r.date || ""}): ${
+            r.textReport || r.impression || "Report completed"
+          }`,
+      )
+      .join("; ");
+
+    const systemPrompt = `You are an expert clinical documentation assistant for hospital discharge summaries.
+Your task is to write and iteratively refine the "Course in Hospital" / Hospital Stay Narrative paragraph(s) for an inpatient being discharged.
+
+STRICT CLINICAL RULES:
+1. Synthesize the inpatient stay chronologically:
+   - Presenting complaints & pre-operative / admission clinical evaluation.
+   - Operative procedure performed & operative findings (if surgical).
+   - Post-operative / inpatient recovery trajectory (POD progress, diet step-up, fever/infection control, vitals stability).
+   - Status at discharge (afebrile, tolerating diet, stable vitals, wound status healthy).
+2. Incorporate relevant laboratory trends and radiology findings naturally when available.
+3. Use formal, professional, third-person medical prose ("The patient was admitted with... Underwent... Operative period was uneventful...").
+4. Length: 1 to 2 concise, high-impact paragraphs (100–180 words).
+5. Output format: You MUST return a JSON object with:
+   - "course": The refined clinical course narrative text.
+   - "reply": A concise 1-sentence response acknowledging what changes were made.`;
+
+    const userMessageContent = `
+PATIENT CLINICAL CONTEXT:
+- Patient: ${patientData.name || "Patient"}, ${patientData.age || ""}y / ${
+      patientData.gender || ""
+    }
+- Chief Complaints: ${complaints || "None specified"}
+- Procedure / Surgery: ${procedureName || "Medical Management"} ${
+      otNotesText ? `(${otNotesText})` : ""
+    }
+- Admission Vitals: ${admissionVitals || "Stable"}
+- Discharge Vitals: ${dischargeVitals || "Afebrile, Stable"}
+- Daily Doctor Notes:
+${doctorNotesText || "Daily inpatient progress notes indicate uneventful recovery."}
+- Nurse Notes:
+${nurseNotesText || "Vitals stable, oral intake tolerated."}
+- Key Lab Findings: ${abnormalLabs || "Within acceptable limits"}
+- Radiology / Imaging: ${radiologySummary || "None reported"}
+
+CURRENT COURSE NARRATIVE:
+${currentCourse || "(No narrative generated yet)"}
+
+DOCTOR'S INSTRUCTION / CHAT:
+${
+  userPrompt ||
+  "Synthesize a comprehensive initial Course in Hospital narrative from the inpatient stay data."
+}
+`;
+
+    const messages = [
+      { role: "system", content: systemPrompt },
+      ...chatHistory.slice(-6).map((m) => ({
+        role: m.role === "user" ? "user" : "assistant",
+        content: m.content || m.text || "",
+      })),
+      { role: "user", content: userMessageContent },
+    ];
+
+    try {
+      const response = await openaiApi.post("/chat/completions", {
+        model: OPENAI_MODEL,
+        messages,
+        response_format: { type: "json_object" },
+        max_tokens: 1500,
+        temperature: 0.2,
+      });
+
+      const raw = response.data?.choices?.[0]?.message?.content || "{}";
+      const parsed = JSON.parse(raw);
+
+      return res.json({
+        course: parsed.course || currentCourse,
+        reply: parsed.reply || "Updated the hospital stay course narrative.",
+      });
+    } catch (openaiErr) {
+      console.warn(
+        "OpenAI course chat failed, attempting Gemini fallback:",
+        openaiErr.message,
+      );
+
+      const fallbackResult = await callParseClinicalNoteCompletion(messages, {
+        timeoutMs: 30000,
+        maxTokens: 2000,
+      });
+
+      const raw = fallbackResult.choices?.[0]?.message?.content || "{}";
+      let parsed = {};
+      try {
+        parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+      } catch {
+        parsed = { course: raw, reply: "Updated course narrative." };
+      }
+
+      return res.json({
+        course: parsed.course || currentCourse,
+        reply: parsed.reply || "Updated the hospital stay course narrative.",
+      });
+    }
+  } catch (error) {
+    console.error("Error in course-chat endpoint:", error);
+    res.status(500).json({
+      error: "Failed to generate course narrative",
+      details: error.message,
+    });
+  }
+});
+
 function finalizeParsedClinicalNote(parsed, existingContext) {
   // Pass through model medicines/labs/procedures — no clinical rewrite.
   // Drop generic_name: name alone is brand or generic as spoken; salt field causes swaps.
@@ -2667,7 +2840,7 @@ router.post("/review-followup/reply-stream", async (req, res) => {
     upstream = await openaiApi.post(
       "/chat/completions",
       {
-        // Tiny UI stream — keep on OpenAI; chart JSON uses Gemini PARSE_NOTE_MODEL.
+        // Tiny UI stream — stay on GPT-4.1 Mini; chart JSON uses gpt-6-luna.
         model: OPENAI_MODEL,
         stream: true,
         temperature: 0.2,
@@ -2729,7 +2902,7 @@ router.post("/parse-clinical-note/reply-stream", async (req, res) => {
     upstream = await openaiApi.post(
       "/chat/completions",
       {
-        // Tiny UI stream — keep on OpenAI; chart JSON uses Gemini PARSE_NOTE_MODEL.
+        // Tiny UI stream — stay on GPT-4.1 Mini; chart JSON uses gpt-6-luna.
         model: OPENAI_MODEL,
         stream: true,
         temperature: 0.2,

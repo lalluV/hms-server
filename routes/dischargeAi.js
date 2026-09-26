@@ -1,7 +1,7 @@
 /**
  * Discharge AI Write Engine & Route
  * Single self-contained module for Inpatient Discharge Summary AI Write copilot.
- * 
+ *
  * Rules:
  * - Discharge care: Take-home medications WITH explicit duration (e.g. 5 days, like OPD).
  * - Extracts discharge fields: finalDiagnosis, dischargeInstructions, followUpPlan.
@@ -11,7 +11,9 @@
 const express = require("express");
 const router = express.Router();
 const axios = require("axios");
-const { aiCompletionWithFallback } = require("../utils/aiCompletionWithFallback");
+const {
+  aiCompletionWithFallback,
+} = require("../utils/aiCompletionWithFallback");
 
 const OPENAI_API_BASE_URL = "https://api.openai.com/v1";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -66,6 +68,8 @@ DISCHARGE SUMMARY FOLLOW-UP MODE — PATCH ONLY
 - "dischargeDestination": Destination: "Home" | "Outpatient Care" | "Another Hospital" | "Rehabilitation Center"
 - "dischargeInstructions": Patient counselling, diet advice, precautions, activity, wound care, red-flag warning signs.
 - "followUpPlan": Review timeline (e.g. "Review in OPD after 7 days with repeat CBC") and appointments.
+- "summarySections": Dynamic array of { "id": "string", "title": "string", "content": "string" }.
+  If the doctor dictates or requests to add, update, or remove a clinical section (e.g. "Add a section for Biopsy", "Update hospital course", "Remove operative notes"), update summarySections accordingly. Preserve existing sections unless modified.
 
 4. ASSISTANT REPLY:
 - assistantReply is required: ONE short, natural spoken sentence confirming the discharge updates.
@@ -80,7 +84,10 @@ Return exactly this JSON shape:
     "dischargeCondition": "",
     "dischargeDestination": "",
     "dischargeInstructions": "",
-    "followUpPlan": ""
+    "followUpPlan": "",
+    "summarySections": [
+      { "id": "unique_id", "title": "Section Title", "content": "Narrative content" }
+    ]
   },
   "medicineOps": [
     {
@@ -104,11 +111,12 @@ Return exactly this JSON shape:
 }`;
 
 function buildDischargeReviewFollowUpUserPrompt(instruction, currentChart) {
-  const chart = currentChart && typeof currentChart === "object" ? currentChart : {};
+  const chart =
+    currentChart && typeof currentChart === "object" ? currentChart : {};
   return `SETTING: DISCHARGE SUMMARY (Take-home discharge plan).
 DURATION: Required for medicines (e.g. "5 days", "10 days").
 LABS: Repeat or recommended investigations.
-DISCHARGE FIELDS: finalDiagnosis, dischargeCondition, dischargeDestination, dischargeInstructions, followUpPlan.
+DISCHARGE FIELDS: finalDiagnosis, dischargeCondition, dischargeDestination, dischargeInstructions, followUpPlan, summarySections.
 
 CURRENT CHART:
 ${JSON.stringify(chart)}
@@ -128,6 +136,12 @@ function parseFollowUpDeltaJson(content) {
   const endIdx = raw.lastIndexOf("}");
   if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
     raw = raw.substring(startIdx, endIdx + 1);
+  }
+
+  if (!raw || !raw.includes("{")) {
+    throw new Error(
+      `No JSON object detected in model response: "${raw.slice(0, 80)}"`,
+    );
   }
 
   return JSON.parse(raw);
@@ -185,11 +199,15 @@ router.post("/review-followup", async (req, res) => {
           dischargeInstructions: "",
           followUpPlan: "",
         },
-        assistantReply: "Hello Doctor. What are the discharge medications or instructions?",
+        assistantReply:
+          "Hello Doctor. What are the discharge medications or instructions?",
       });
     }
 
-    const userPrompt = buildDischargeReviewFollowUpUserPrompt(instruction, chart);
+    const userPrompt = buildDischargeReviewFollowUpUserPrompt(
+      instruction,
+      chart,
+    );
     const systemContent = `${DISCHARGE_AI_SYSTEM_PROMPT}\n${DISCHARGE_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM}`;
 
     const followUpMessages = [
@@ -227,7 +245,9 @@ router.post("/review-followup", async (req, res) => {
       !response?.data?.choices ||
       !response.data.choices[0]?.message?.content
     ) {
-      return res.status(500).json({ error: "Invalid response from Discharge AI" });
+      return res
+        .status(500)
+        .json({ error: "Invalid response from Discharge AI" });
     }
 
     let content = response.data.choices[0].message.content.trim();
@@ -235,7 +255,10 @@ router.post("/review-followup", async (req, res) => {
     try {
       delta = parseFollowUpDeltaJson(content);
     } catch (parseErr) {
-      console.warn("Failed to parse Discharge AI delta JSON, retrying:", parseErr.message);
+      console.warn(
+        "Failed to parse Discharge AI delta JSON, retrying:",
+        parseErr.message,
+      );
       try {
         const retry = await aiCompletionWithFallback(
           [
@@ -268,7 +291,9 @@ router.post("/review-followup", async (req, res) => {
       medicines = [];
     }
 
-    for (const op of Array.isArray(delta.medicineOps) ? delta.medicineOps : []) {
+    for (const op of Array.isArray(delta.medicineOps)
+      ? delta.medicineOps
+      : []) {
       const matchName = String(op?.match || op?.medicine?.name || "")
         .trim()
         .toLowerCase();
@@ -282,17 +307,24 @@ router.post("/review-followup", async (req, res) => {
         });
       } else if (kind === "remove" && matchName) {
         medicines = medicines.filter(
-          (m) => String(m?.name || "").trim().toLowerCase() !== matchName,
+          (m) =>
+            String(m?.name || "")
+              .trim()
+              .toLowerCase() !== matchName,
         );
       } else if (kind === "edit" && op.medicine) {
         const idx = medicines.findIndex(
-          (m) => String(m?.name || "").trim().toLowerCase() === matchName,
+          (m) =>
+            String(m?.name || "")
+              .trim()
+              .toLowerCase() === matchName,
         );
         if (idx >= 0) {
           medicines[idx] = {
             ...medicines[idx],
             ...op.medicine,
-            duration: op.medicine.duration || medicines[idx].duration || "5 days",
+            duration:
+              op.medicine.duration || medicines[idx].duration || "5 days",
           };
         } else {
           medicines.push({
@@ -367,6 +399,11 @@ router.post("/review-followup", async (req, res) => {
         incomingFields.followUpPlan !== undefined
           ? String(incomingFields.followUpPlan).trim()
           : existingFields.followUpPlan || "",
+      summarySections:
+        incomingFields.summarySections !== undefined &&
+        Array.isArray(incomingFields.summarySections)
+          ? incomingFields.summarySections
+          : existingFields.summarySections || [],
     };
 
     const result = {
@@ -386,6 +423,280 @@ router.post("/review-followup", async (req, res) => {
     return res.status(500).json({
       error: error?.message || "Internal server error in Discharge AI",
     });
+  }
+});
+
+/**
+ * POST /api/discharge-ai/synthesize-case
+ * Analyzes multi-day inpatient stay (admission, progress notes, nurse notes,
+ * operative notes, vitals, labs, radiology) and dynamically crafts case-tailored
+ * clinical sections (e.g. Surgical, Medical, Trauma, Pediatric, Obstetric).
+ */
+router.post("/synthesize-case", async (req, res) => {
+  try {
+    const { patient = {}, diagnosticsReceipts = [] } = req.body || {};
+    const umr = patient?.UMRNo || patient?.id;
+
+    // 1. Gather inpatient stay notes
+    const doctorNotes = (patient.doctorNotes || [])
+      .map(
+        (n) =>
+          `[${n.timestamp ? new Date(n.timestamp).toLocaleDateString() : ""}] Dr. ${n.doctor || ""}: ${n.content || ""}`,
+      )
+      .join("\n");
+    const nurseNotes = (patient.nurseNotes || [])
+      .map(
+        (n) =>
+          `[${n.timestamp ? new Date(n.timestamp).toLocaleDateString() : ""}] Nurse: ${n.content || ""}`,
+      )
+      .join("\n");
+    const otNotes =
+      patient.surgeryNotes ||
+      patient.otNotes ||
+      patient.operativeNotes ||
+      patient.operationNotes ||
+      "";
+    const emergencyNotes =
+      patient.chiefComplaintsPresentIllnessHistory ||
+      patient.emergencyAssessment?.chiefComplaintsPresentIllnessHistory ||
+      "";
+    const provisionalDiagnosis =
+      patient.provisionalDiagnosis ||
+      patient.emergencyAssessment?.provisionalDiagnosis ||
+      "";
+
+    // Emergency / Casualty assessment & ER treatment details
+    const emergencyAssessment = patient.emergencyAssessment || {};
+    const casualtyTreatmentList =
+      patient.casualtyTreatment || emergencyAssessment.casualtyTreatment || [];
+    const casualtyTreatmentStr = Array.isArray(casualtyTreatmentList)
+      ? casualtyTreatmentList
+          .map((m) =>
+            typeof m === "string"
+              ? m
+              : `${m.name || m.medicineName || "Medication"} ${m.dosages ? (typeof m.dosages === "object" ? JSON.stringify(m.dosages) : m.dosages) : m.frequency?.value ? `${m.frequency.value} ${m.frequency.unit || "/Day"}` : m.frequency || ""} - ${m.instructions || m.route || "Administered in ER"}`,
+          )
+          .join("; ")
+      : String(casualtyTreatmentList || "");
+
+    const mlcNo = patient.mlcNo || emergencyAssessment.mlcNo || "";
+    const consciousness =
+      patient.consciousness || emergencyAssessment.consciousness || "";
+    const gcs = patient.gcs || emergencyAssessment.gcs || "";
+    const pupils = patient.pupils || emergencyAssessment.pupils || "";
+    const emergencyExam =
+      patient.systemicExamination ||
+      emergencyAssessment.systemicExamination ||
+      "";
+    const emergencyVitals =
+      emergencyAssessment.vitals ||
+      (Array.isArray(patient.vitals) && patient.vitals[0]) ||
+      null;
+    const emergencyVitalsStr = emergencyVitals
+      ? typeof emergencyVitals === "object"
+        ? Object.entries(emergencyVitals)
+            .filter(
+              ([k, v]) =>
+                v && k !== "_id" && k !== "modifiedBy" && k !== "time",
+            )
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(", ")
+        : String(emergencyVitals)
+      : "";
+
+    const erTriageDetails = [
+      mlcNo ? `MLC No: ${mlcNo}` : null,
+      consciousness ? `Consciousness: ${consciousness}` : null,
+      gcs ? `GCS: ${gcs}` : null,
+      pupils ? `Pupils: ${pupils}` : null,
+      emergencyVitalsStr ? `Initial ER Vitals: ${emergencyVitalsStr}` : null,
+    ]
+      .filter(Boolean)
+      .join(" | ");
+
+    function isRadiologyItem(item) {
+      if (!item) return false;
+      const dept = String(item.deptname || item.department || "")
+        .trim()
+        .toLowerCase();
+      const subdept = String(item.subdeptname || "")
+        .trim()
+        .toLowerCase();
+      const category = String(item.category || "")
+        .trim()
+        .toLowerCase();
+      const name = String(item.name || item.testName || "")
+        .trim()
+        .toLowerCase();
+      const code = String(item.code || item.testCode || "")
+        .trim()
+        .toUpperCase();
+
+      if (code.startsWith("SCDR")) return true;
+
+      const labDepts = [
+        "pathology",
+        "biochemistry",
+        "hematology",
+        "microbiology",
+        "clinical pathology",
+        "serology",
+        "lab",
+        "laboratory",
+        "blood bank",
+        "histopathology",
+        "cytology",
+        "immunology",
+      ];
+      if (
+        labDepts.some(
+          (d) =>
+            dept === d ||
+            dept.startsWith(d) ||
+            subdept === d ||
+            subdept.startsWith(d) ||
+            category === d ||
+            category.startsWith(d),
+        )
+      ) {
+        return false;
+      }
+
+      if (
+        dept === "radiology" ||
+        dept.includes("radiology") ||
+        dept.includes("imaging")
+      )
+        return true;
+      if (
+        subdept === "radiology" ||
+        subdept.includes("radiology") ||
+        subdept.includes("imaging")
+      )
+        return true;
+      if (
+        category === "radiology" ||
+        category.includes("radiology") ||
+        category.includes("imaging")
+      )
+        return true;
+
+      const radiologyPattern =
+        /\b(x-ray|xray|ultrasound|usg|ct scan|ct-scan|\bct\b|mri|mri scan|echo|echocardiogram|2d echo|colour doppler|color doppler|doppler|mammography|radiography|radiology|fluoroscopy|dexa|pet-ct|pet ct|sonography|hrct|cect|ncct)\b/i;
+
+      return radiologyPattern.test(name) || radiologyPattern.test(category);
+    }
+
+    // 2. Gather lab & radiology highlights
+    const patientReceipts = (diagnosticsReceipts || []).filter(
+      (r) => r.patientId === umr || r.patientUmr === umr || r.umrNo === umr,
+    );
+    const labHighlights = [];
+    const radiologyHighlights = [];
+
+    patientReceipts.forEach((r) => {
+      (r.items || []).forEach((item) => {
+        if (isRadiologyItem(item)) {
+          radiologyHighlights.push(
+            `${item.name || "Imaging"}: ${item.textReport || item.impression || "Report completed"}`,
+          );
+        } else {
+          const params = Array.isArray(item.parameters) ? item.parameters : [];
+          if (params.length > 0) {
+            params.forEach((p) => {
+              if (p.isAbnormal || p.result) {
+                labHighlights.push(
+                  `${p.name}: ${p.result} ${p.units || ""} (Ref: ${typeof p.normal_range === "string" ? p.normal_range : "—"})${p.isAbnormal ? " [ABNORMAL]" : ""}`,
+                );
+              }
+            });
+          } else if (item.textReport || item.impression) {
+            labHighlights.push(
+              `${item.name || "Lab Investigation"}: ${item.textReport || item.impression}`,
+            );
+          }
+        }
+      });
+    });
+
+    const prompt = `You are a chief clinical scribe at an Indian hospital.
+Analyze the following inpatient hospitalization record for ${patient.name || "Patient"}, ${patient.age || ""} y/o ${patient.gender || ""}.
+Admitted on: ${patient.admissionDate || "N/A"}.
+
+CLINICAL STAY DATA:
+- Reason for Admission / Provisional Diagnosis: ${provisionalDiagnosis || "Not recorded"}
+- Emergency / Casualty Presentation & Complaints: ${emergencyNotes || "None documented"}
+- Emergency Triage & Vitals: ${erTriageDetails || "None recorded"}
+- Emergency / Casualty Medications Given (Immediate ER Care): ${casualtyTreatmentStr || "None recorded"}
+- Emergency Systemic Examination: ${emergencyExam || "None recorded"}
+- Operative / Surgical / OT Notes: ${typeof otNotes === "string" ? otNotes : JSON.stringify(otNotes) || "None"}
+- Doctor Daily Progress Notes:
+${doctorNotes || "No notes"}
+- Nurse Care Notes:
+${nurseNotes || "No notes"}
+- Key Lab Findings:
+${labHighlights.slice(0, 20).join("\n") || "No abnormal labs"}
+- Radiology & Imaging Studies:
+${radiologyHighlights.join("\n") || "No imaging studies"}
+
+TASK:
+Generate an intelligent, case-tailored discharge summary payload in valid JSON.
+DO NOT use hardcoded rigid templates. Adapt the clinical sections dynamically based on the specific case type:
+- If the patient had an Emergency / Casualty presentation or received casualty treatment: ALWAYS include a dedicated section titled "Emergency / Casualty Presentation & Immediate Stabilization" (or "Emergency Assessment & Casualty Care") detailing their emergency presentation, initial triage/vitals, and casualty treatment/medications given in the ER before transfer to ward/ICU/OT.
+- If Surgical / Trauma: Include sections like "Brief Clinical History & Reason for Admission", "Operative Findings & Procedure", "Hospital Stay & Post-Op Recovery", "Wound & Suture Care".
+- If Medical / Infection / Sepsis: Include sections like "Chief Complaints & History", "Hospital Stay & Antibiotic Response", "Significant Diagnostic Trends", "Condition at Discharge".
+- If Obstetric / Delivery: Include sections like "Obstetric Summary", "Delivery & Neonatal Details", "Post-Partum Recovery & Newborn Care".
+- If Pediatric: Include sections like "Birth & Developmental Summary", "Clinical Course", "Immunization & Dietary Advice".
+
+Return strictly valid JSON:
+{
+  "finalDiagnosis": "Confirmed clinical diagnosis at discharge",
+  "dischargeCondition": "Stable",
+  "dischargeDestination": "Home",
+  "summarySections": [
+    {
+      "id": "brief_history",
+      "title": "Brief Clinical History & Reason for Admission",
+      "content": "Crisp 2-3 sentence summary of presentation and indication for admission."
+    },
+    {
+      "id": "course",
+      "title": "Hospital Stay & Clinical Course",
+      "content": "Chronological narrative of treatment response, daily progress, and recovery."
+    }
+  ],
+  "dischargeInstructions": "Diet advice, wound/activity restrictions, and emergency red-flag warning signs",
+  "followUpPlan": "When and where to review in OPD"
+}`;
+
+    const completion = await aiCompletionWithFallback(
+      [{ role: "user", content: prompt }],
+      {
+        geminiModel: PARSE_NOTE_MODEL,
+        openAiModel: OPENAI_MODEL,
+        timeoutMs: Math.min(PARSE_NOTE_TIMEOUT_MS, 45000),
+        maxTokens: 4096,
+        responseJson: true,
+      },
+    );
+
+    const rawContent =
+      completion?.data?.choices?.[0]?.message?.content ||
+      completion?.choices?.[0]?.message?.content ||
+      completion?.content ||
+      "";
+
+    if (!rawContent) {
+      throw new Error("Empty response received from AI model");
+    }
+
+    const parsed = parseFollowUpDeltaJson(rawContent);
+    return res.json(parsed);
+  } catch (err) {
+    console.error("Error in /synthesize-case:", err);
+    return res
+      .status(500)
+      .json({ error: "Failed to synthesize case", details: err.message });
   }
 });
 
@@ -479,7 +790,10 @@ router.post("/review-followup/reply-stream", async (req, res) => {
       safeEnd();
     });
   } catch (err) {
-    console.warn("Discharge AI reply stream upstream error:", err?.message || err);
+    console.warn(
+      "Discharge AI reply stream upstream error:",
+      err?.message || err,
+    );
     res.write("Got it — updating discharge plan.");
     res.end();
   }

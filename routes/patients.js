@@ -941,7 +941,6 @@ router.put("/:id", async (req, res) => {
     delete body.procedures;
     delete body.insulinChart;
     delete body.transfers;
-    delete body.dischargeSummary;
     delete body._id;
     delete body.UMRNo;
     delete body.hospitalId;

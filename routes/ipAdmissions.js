@@ -14,6 +14,129 @@ function generateIpNumber() {
   return `IP-${year}-${rand}`;
 }
 
+function escapeRegex(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Match admissions by wardId and/or ward name. */
+function buildWardAdmissionFilter(wardId, wardName) {
+  const or = [];
+  const id = wardId && String(wardId).trim();
+  const name = wardName && String(wardName).trim();
+  if (id) or.push({ wardId: id });
+  if (name) {
+    or.push({
+      wardName: { $regex: `^${escapeRegex(name)}$`, $options: "i" },
+    });
+  }
+  if (!or.length) return null;
+  return or.length === 1 ? or[0] : { $or: or };
+}
+
+function normalizeWardName(name) {
+  return String(name || "")
+    .trim()
+    .toLowerCase();
+}
+
+function admissionRowMatchesWard(row, ward) {
+  const rowId = row?.wardId && String(row.wardId).trim();
+  const wardId = ward?.wardId && String(ward.wardId).trim();
+  if (rowId && wardId && rowId === wardId) return true;
+  const rowName = normalizeWardName(row?.wardName);
+  const wardName = normalizeWardName(ward?.wardName);
+  return Boolean(rowName && wardName && rowName === wardName);
+}
+
+async function buildStatusAdmissionCondition(status, hospitalId, Patient) {
+  if (!status || status === "all") return null;
+  if (status === "Admitted") {
+    return { patient_status: "Admitted" };
+  }
+  if (status === "Discharged") {
+    const dischargedPatients = await Patient.find({
+      hospitalId,
+      $or: [
+        { patient_status: "Discharged" },
+        {
+          active: false,
+          dischargeDate: { $exists: true, $nin: [null, ""] },
+        },
+      ],
+    })
+      .select("_id UMRNo")
+      .lean();
+
+    const patientIds = dischargedPatients.map((p) => p._id).filter(Boolean);
+    const umrs = dischargedPatients.map((p) => p.UMRNo).filter(Boolean);
+
+    const or = [{ patient_status: "Discharged" }];
+    if (patientIds.length) {
+      or.push({ patientId: { $in: patientIds } });
+    }
+    if (umrs.length) {
+      or.push({ UMRNo: { $in: umrs } });
+    }
+    return { $or: or };
+  }
+  return { patient_status: status };
+}
+
+/** Active census count — excludes stale Admitted rows for discharged patients. */
+async function countActiveCensusAdmissions(IPAdmission, Patient, filter) {
+  const patientCollection = Patient.collection.name;
+  const result = await IPAdmission.aggregate([
+    { $match: filter },
+    {
+      $lookup: {
+        from: patientCollection,
+        localField: "patientId",
+        foreignField: "_id",
+        as: "_patientDoc",
+      },
+    },
+    {
+      $addFields: {
+        _patient: { $arrayElemAt: ["$_patientDoc", 0] },
+      },
+    },
+    {
+      $match: {
+        patient_status: "Admitted",
+        $nor: [
+          { "_patient.active": false },
+          { "_patient.patient_status": "Discharged" },
+        ],
+      },
+    },
+    { $count: "total" },
+  ]);
+  return result[0]?.total ?? 0;
+}
+
+async function appendDoctorAdmissionScope(req, Patient, andConditions) {
+  const {
+    resolveRequestDoctorIds,
+    isDoctorRole,
+  } = require("../utils/doctorPatientAccess");
+  if (!isDoctorRole(req)) return;
+  const doctorIds = await resolveRequestDoctorIds(req);
+  if (!doctorIds.length) return;
+  const assignedPatients = await Patient.find({
+    hospitalId: req.hospitalId,
+    doctorId: { $in: doctorIds },
+  })
+    .select("_id")
+    .lean();
+  const assignedIds = assignedPatients.map((p) => p._id);
+  andConditions.push({
+    $or: [
+      { doctorId: { $in: doctorIds } },
+      ...(assignedIds.length ? [{ patientId: { $in: assignedIds } }] : []),
+    ],
+  });
+}
+
 /**
  * POST /api/ip-admissions
  * Admit a patient to Inpatient (Ward/Bed)
@@ -62,28 +185,34 @@ router.post("/", async (req, res) => {
     // Resolve patient
     let patient = null;
     if (patientId && mongoose.Types.ObjectId.isValid(patientId)) {
-      patient = await Patient.findOne({ _id: patientId, hospitalId: req.hospitalId });
+      patient = await Patient.findOne({
+        _id: patientId,
+        hospitalId: req.hospitalId,
+      });
     }
     if (!patient && UMRNo) {
       patient = await Patient.findOne({ UMRNo, hospitalId: req.hospitalId });
     }
 
     if (!patient) {
-      return res.status(404).json({ message: "Patient not found for IP admission" });
+      return res
+        .status(404)
+        .json({ message: "Patient not found for IP admission" });
     }
 
     const ipNumber = generateIpNumber();
 
-    const initialTransfer = wardId || wardName
-      ? [
-          {
-            wardId,
-            wardName,
-            price: Number(bedPrice || 0),
-            transferDate: admissionDate,
-          },
-        ]
-      : [];
+    const initialTransfer =
+      wardId || wardName
+        ? [
+            {
+              wardId,
+              wardName,
+              price: Number(bedPrice || 0),
+              transferDate: admissionDate,
+            },
+          ]
+        : [];
 
     const admission = new IPAdmission({
       ipNumber,
@@ -108,7 +237,8 @@ router.post("/", async (req, res) => {
       provisionalDiagnosis,
       paymentMethod: paymentMethod || patient.paymentMethod || "Personal",
       insurance_provider: insurance_provider || patient.insurance_provider,
-      insurance_providerId: insurance_providerId || patient.insurance_providerId,
+      insurance_providerId:
+        insurance_providerId || patient.insurance_providerId,
       policy_number: policy_number || patient.policy_number,
       coPayPercentage: coPayPercentage ?? patient.coPayPercentage ?? 0,
       coPayLimit: coPayLimit ?? patient.coPayLimit ?? 0,
@@ -165,6 +295,8 @@ router.get("/", async (req, res) => {
       fromDate = "",
       toDate = "",
       status = "Admitted",
+      wardId = "",
+      wardName = "",
     } = req.query;
 
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
@@ -173,8 +305,18 @@ router.get("/", async (req, res) => {
 
     const andConditions = [{ hospitalId: req.hospitalId }];
 
-    if (status && status !== "all") {
-      andConditions.push({ patient_status: status });
+    const statusCondition = await buildStatusAdmissionCondition(
+      status,
+      req.hospitalId,
+      Patient,
+    );
+    if (statusCondition) {
+      andConditions.push(statusCondition);
+    }
+
+    const wardFilter = buildWardAdmissionFilter(wardId, wardName);
+    if (wardFilter) {
+      andConditions.push(wardFilter);
     }
 
     if (fromDate || toDate) {
@@ -202,42 +344,35 @@ router.get("/", async (req, res) => {
       });
     }
 
-    // Doctors: admissions assigned to them (admission.doctorId or patient.doctorId)
-    const {
-      resolveRequestDoctorIds,
-      isDoctorRole,
-    } = require("../utils/doctorPatientAccess");
-    if (isDoctorRole(req)) {
-      const doctorIds = await resolveRequestDoctorIds(req);
-      if (doctorIds.length) {
-        const assignedPatients = await Patient.find({
-          hospitalId: req.hospitalId,
-          doctorId: { $in: doctorIds },
-        })
-          .select("_id")
-          .lean();
-        const assignedIds = assignedPatients.map((p) => p._id);
-        andConditions.push({
-          $or: [
-            { doctorId: { $in: doctorIds } },
-            ...(assignedIds.length
-              ? [{ patientId: { $in: assignedIds } }]
-              : []),
-          ],
-        });
-      }
-    }
+    await appendDoctorAdmissionScope(req, Patient, andConditions);
 
     const filter =
       andConditions.length === 1 ? andConditions[0] : { $and: andConditions };
 
+    const sort =
+      status === "Discharged"
+        ? {
+            dischargeDate: -1,
+            dischargedAt: -1,
+            admissionDate: -1,
+            createdAt: -1,
+          }
+        : { admissionDate: -1, createdAt: -1 };
+
+    const admissionsPromise = IPAdmission.find(filter)
+      .sort(sort)
+      .skip(skip)
+      .limit(limitNum)
+      .lean();
+
+    const totalPromise =
+      status === "Admitted"
+        ? countActiveCensusAdmissions(IPAdmission, Patient, filter)
+        : IPAdmission.countDocuments(filter);
+
     const [total, admissions] = await Promise.all([
-      IPAdmission.countDocuments(filter),
-      IPAdmission.find(filter)
-        .sort({ admissionDate: -1, createdAt: -1 })
-        .skip(skip)
-        .limit(limitNum)
-        .lean(),
+      totalPromise,
+      admissionsPromise,
     ]);
 
     const patientIds = [
@@ -257,116 +392,167 @@ router.get("/", async (req, res) => {
           _id: { $in: patientIds },
         })
           .select(
-            "name age gender phone UMRNo allergiesHistory paymentMethod insurance_provider active",
+            "name age gender phone UMRNo allergiesHistory paymentMethod insurance_provider active patient_status dischargeDate dischargedAt",
           )
           .lean()
       : [];
 
     const patientMap = new Map(patients.map((p) => [String(p._id), p]));
 
-    const rows = admissions.map((admission) => {
-      const patient = patientMap.get(String(admission.patientId || "")) || null;
-      return {
-        ...admission,
-        name: patient?.name || admission.patientName || "",
-        age: patient?.age,
-        gender: patient?.gender,
-        phone: patient?.phone,
-        allergiesHistory: patient?.allergiesHistory || "",
-        paymentMethod: admission.paymentMethod || patient?.paymentMethod,
-        insurance_provider:
-          admission.insurance_provider || patient?.insurance_provider,
-        active: admission.patient_status === "Admitted",
-        patient_type: "IP",
-        admissionId: admission._id,
-      };
-    });
+    const rows = admissions
+      .map((admission) => {
+        const patient =
+          patientMap.get(String(admission.patientId || "")) || null;
+        const resolvedStatus =
+          admission.patient_status === "Discharged" ||
+          patient?.patient_status === "Discharged" ||
+          patient?.active === false
+            ? "Discharged"
+            : admission.patient_status;
 
-    // Legacy fallback: IP patients with no IPAdmission row yet (pre-decouple / unmigrated)
-    if (
-      status === "Admitted" &&
-      pageNum === 1 &&
-      (!search || String(search).trim().length < 2)
-    ) {
-      const coveredPatientIds = new Set(
-        admissions.map((a) => String(a.patientId || "")).filter(Boolean),
-      );
-      const legacyFilter = {
-        hospitalId: req.hospitalId,
-        active: true,
-        $or: [{ patient_type: "IP" }, { patient_type: "OPtoIP" }],
-        ...(coveredPatientIds.size
-          ? {
-              _id: {
-                $nin: [...coveredPatientIds]
-                  .filter((id) => mongoose.Types.ObjectId.isValid(id))
-                  .map((id) => new mongoose.Types.ObjectId(id)),
-              },
-            }
-          : {}),
-      };
-      if (fromDate || toDate) {
-        const start = fromDate ? String(fromDate).slice(0, 10) : null;
-        const end = toDate ? String(toDate).slice(0, 10) : null;
-        const dateRange = {};
-        if (start) dateRange.$gte = start;
-        if (end) dateRange.$lte = end;
-        if (Object.keys(dateRange).length) {
-          legacyFilter.admissionDate = dateRange;
-        }
-      }
-
-      const legacyPatients = await Patient.find(legacyFilter)
-        .sort({ admissionDate: -1, registration_date: -1 })
-        .limit(Math.max(0, limitNum - rows.length))
-        .lean();
-
-      for (const patient of legacyPatients) {
-        rows.push({
-          _id: patient._id,
-          admissionId: patient.activeAdmissionId || null,
-          ipNumber: patient.ipNumber || `LEGACY-${patient.UMRNo}`,
-          UMRNo: patient.UMRNo,
-          patientId: patient._id,
-          name: patient.name,
-          patientName: patient.name,
-          age: patient.age,
-          gender: patient.gender,
-          phone: patient.phone,
-          allergiesHistory: patient.allergiesHistory || "",
-          admissionDate: patient.admissionDate,
-          admissionTime: patient.admissionTime,
-          wardName: patient.wardName,
-          wardId: patient.wardId,
-          selectedBed: patient.selectedBed,
-          consultantDoctor: patient.consultantDoctor,
-          doctorId: patient.doctorId,
-          patient_status: "Admitted",
-          active: true,
+        return {
+          ...admission,
+          name: patient?.name || admission.patientName || "",
+          age: patient?.age,
+          gender: patient?.gender,
+          phone: patient?.phone,
+          allergiesHistory: patient?.allergiesHistory || "",
+          paymentMethod: admission.paymentMethod || patient?.paymentMethod,
+          insurance_provider:
+            admission.insurance_provider || patient?.insurance_provider,
+          patient_status: resolvedStatus,
+          dischargeDate:
+            admission.dischargeDate ||
+            patient?.dischargeDate ||
+            admission.dischargeDate,
+          dischargedAt:
+            admission.dischargedAt ||
+            patient?.dischargedAt ||
+            admission.dischargedAt,
+          active: resolvedStatus === "Admitted",
           patient_type: "IP",
-          paymentMethod: patient.paymentMethod,
-          insurance_provider: patient.insurance_provider,
-          _legacyPatientRow: true,
-        });
-      }
-    }
-
-    const totalWithLegacy = Math.max(total, rows.length);
+          admissionId: admission._id,
+          _linkedPatientActive: patient?.active,
+          _linkedPatientStatus: patient?.patient_status,
+        };
+      })
+      .filter((row) => {
+        if (status === "Discharged") {
+          if (row.patient_status === "Discharged") return true;
+          if (row._linkedPatientActive === false) return true;
+          if (row._linkedPatientStatus === "Discharged") return true;
+          return false;
+        }
+        if (status !== "Admitted") return true;
+        if (row.patient_status !== "Admitted") return false;
+        if (row._linkedPatientActive === false) return false;
+        if (row._linkedPatientStatus === "Discharged") return false;
+        return true;
+      })
+      .map(({ _linkedPatientActive, _linkedPatientStatus, ...row }) => row);
 
     res.json({
       admissions: rows,
       patients: rows,
       pagination: {
         currentPage: pageNum,
-        totalPages: Math.max(1, Math.ceil(totalWithLegacy / limitNum)),
-        totalItems: totalWithLegacy,
+        totalPages: Math.max(1, Math.ceil(total / limitNum)),
+        totalItems: total,
         itemsPerPage: limitNum,
-        hasNextPage: pageNum * limitNum < totalWithLegacy,
+        hasNextPage: pageNum * limitNum < total,
         hasPrevPage: pageNum > 1,
       },
     });
   } catch (error) {
     console.error("Error fetching IP admissions list:", error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+/**
+ * GET /api/ip-admissions/ward-patient-counts
+ * Inpatient count per ward (IPAdmission rows only; matches roster filters).
+ */
+router.get("/ward-patient-counts", async (req, res) => {
+  try {
+    const IPAdmission = req.tenantDb.model("IPAdmission");
+    const Patient = req.tenantDb.model("Patient");
+    const Ward = req.tenantDb.model("Ward");
+    const status = req.query.status || "Admitted";
+
+    const andConditions = [{ hospitalId: req.hospitalId }];
+    const statusCondition = await buildStatusAdmissionCondition(
+      status,
+      req.hospitalId,
+      Patient,
+    );
+    if (statusCondition) {
+      andConditions.push(statusCondition);
+    }
+    await appendDoctorAdmissionScope(req, Patient, andConditions);
+
+    const filter =
+      andConditions.length === 1 ? andConditions[0] : { $and: andConditions };
+
+    const admissionRows = await IPAdmission.find(filter)
+      .select("wardId wardName patientId patient_status")
+      .lean();
+
+    let roster = [];
+    if (admissionRows.length) {
+      const patientIds = [
+        ...new Set(
+          admissionRows
+            .map((a) => a.patientId)
+            .filter(Boolean)
+            .filter((pid) => mongoose.Types.ObjectId.isValid(String(pid)))
+            .map((pid) => new mongoose.Types.ObjectId(String(pid))),
+        ),
+      ];
+      const patients = patientIds.length
+        ? await Patient.find({
+            hospitalId: req.hospitalId,
+            _id: { $in: patientIds },
+          })
+            .select("_id active patient_status")
+            .lean()
+        : [];
+      const patientById = new Map(patients.map((p) => [String(p._id), p]));
+
+      roster = admissionRows
+        .filter((row) => {
+          if (status !== "Admitted") return true;
+          if (row.patient_status !== "Admitted") return false;
+          const patient = patientById.get(String(row.patientId || ""));
+          if (patient?.active === false) return false;
+          if (patient?.patient_status === "Discharged") return false;
+          return true;
+        })
+        .map((row) => ({
+          wardId: row.wardId,
+          wardName: row.wardName,
+        }));
+    }
+
+    const wards = await Ward.find({
+      hospitalId: req.hospitalId,
+      status: { $ne: "inactive" },
+    })
+      .select("wardId wardName")
+      .lean();
+
+    const wardCounts = wards.map((ward) => ({
+      wardId: ward.wardId,
+      wardName: ward.wardName,
+      count: roster.filter((row) => admissionRowMatchesWard(row, ward)).length,
+    }));
+
+    res.json({
+      total: roster.length,
+      wardCounts,
+    });
+  } catch (error) {
+    console.error("Error fetching ward patient counts:", error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -404,10 +590,16 @@ router.get("/patient/:patientId", async (req, res) => {
 
     let patient = null;
     if (mongoose.Types.ObjectId.isValid(patientId)) {
-      patient = await Patient.findOne({ _id: patientId, hospitalId: req.hospitalId }).lean();
+      patient = await Patient.findOne({
+        _id: patientId,
+        hospitalId: req.hospitalId,
+      }).lean();
     }
     if (!patient) {
-      patient = await Patient.findOne({ UMRNo: patientId, hospitalId: req.hospitalId }).lean();
+      patient = await Patient.findOne({
+        UMRNo: patientId,
+        hospitalId: req.hospitalId,
+      }).lean();
     }
 
     if (!patient) {
@@ -486,7 +678,7 @@ router.put("/:id", async (req, res) => {
     const updated = await IPAdmission.findOneAndUpdate(
       query,
       { $set: req.body },
-      { new: true }
+      { new: true },
     );
 
     if (!updated) {
@@ -602,7 +794,8 @@ router.post("/:id/discharge", async (req, res) => {
     admission.finalDiagnosis = finalDiagnosis || admission.finalDiagnosis;
     admission.dischargeInstructions = dischargeInstructions;
     admission.followUpPlan = followUpPlan;
-    admission.dischargeMedications = dischargeMedications || admission.dischargeMedications;
+    admission.dischargeMedications =
+      dischargeMedications || admission.dischargeMedications;
     admission.dischargeSummary = dischargeSummary || admission.dischargeSummary;
     admission.dischargeSummaryType = dischargeSummaryType;
     admission.dischargeSummaryTimestamp = new Date().toISOString();
@@ -619,6 +812,7 @@ router.post("/:id/discharge", async (req, res) => {
     const patient = await Patient.findById(admission.patientId);
     if (patient) {
       patient.patient_type = "OP";
+      patient.active = false;
       patient.activeAdmissionId = null;
       patient.patient_status = "Discharged";
       patient.dischargeDate = dischargeDate;

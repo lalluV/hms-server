@@ -89,12 +89,20 @@ async function runDailyDigestForHospital(hospitalId, options = {}) {
     await hospital.save();
   }
 
+  const sent = results.filter((r) => r.status === "sent");
+  const failed = results.filter((r) => r.status === "failed");
+  const success = sent.length > 0;
+
   return {
-    success: results.some((r) => r.status === "sent"),
+    success,
     hospitalName: hospital.name,
     digest,
     fullMessage,
     results,
+    message: success
+      ? `Daily digest sent to ${sent.map((r) => r.phone).join(", ")}.`
+      : failed.map((r) => `${r.phone}: ${r.error}`).join(" ") ||
+        "Failed to send the daily digest.",
   };
 }
 

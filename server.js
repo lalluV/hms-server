@@ -38,13 +38,16 @@ app.use(
 
       // Allow localhost origins (development)
       const allowedOrigins = [
-        "http://localhost:5173",
-        "http://localhost:5174",
         "https://healeka.com", // Root domain
       ];
 
       // Check if origin is in allowed list
       if (allowedOrigins.indexOf(origin) !== -1) {
+        return callback(null, true);
+      }
+
+      // Loopback dev servers: http://localhost:5173 and http://127.0.0.1:5173
+      if (origin.match(/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/)) {
         return callback(null, true);
       }
 
@@ -67,7 +70,8 @@ app.use(
   }),
 );
 
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // Initialize master database connection (for shared data)
 mongoose
@@ -114,6 +118,7 @@ app.use("/api/indent-store", require("./routes/indentStoreRoutes"));
 app.use("/api/pharmacy-receipts", require("./routes/pharmacyReceipts"));
 app.use("/api/diagnostics-receipts", require("./routes/diagnosticsReceipts"));
 app.use("/api/discharge-summary", require("./routes/dischargeSummary"));
+app.use("/api/discharge-draft", require("./routes/dischargeDraft"));
 app.use("/api/opd-ai", require("./routes/opdAi"));
 app.use("/api/ipd-ai", require("./routes/ipdAi"));
 app.use("/api/era-ai", require("./routes/ipdAi"));
@@ -129,6 +134,7 @@ app.use(
 app.use("/api/doctor-memory", require("./routes/doctorMemory"));
 app.use("/api/stamps", require("./routes/stamps"));
 app.use("/api/upload", require("./routes/upload"));
+app.use("/api", require("./routes/upload"));
 app.use("/api/diagnostics-users", require("./routes/diagnosticsUsers"));
 app.use("/api/dashboard", require("./routes/dashboard"));
 app.use("/api/certificates", require("./routes/certificates"));

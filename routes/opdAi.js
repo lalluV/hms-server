@@ -7,7 +7,9 @@
 const express = require("express");
 const router = express.Router();
 const axios = require("axios");
-const { aiCompletionWithFallback } = require("../utils/aiCompletionWithFallback");
+const {
+  aiCompletionWithFallback,
+} = require("../utils/aiCompletionWithFallback");
 const {
   mergeNoteWithOps,
   formatDoctorNotesLayout,
@@ -58,7 +60,7 @@ REVIEW FOLLOW-UP MODE — UNIVERSAL CLINICAL RULES (PATCH ONLY)
 - INSTRUCTION is the single new update requested right now.
 - Output ONLY operations for items that INSTRUCTION explicitly changes. The app preserves every omitted item as-is.
 - FORBIDDEN: Re-listing unchanged medicines, labs, or notes. Output minimal ops only.
-- If the instruction does not name a medicine, medicineOps MUST be []. Same for labs/procedures. But if the instruction names or implies ANY clinical symptom (e.g. fever, pain, cough), you MUST emit noteOps under Complaints.
+- If the instruction does not name a medicine, medicineOps MUST be []. Same for labs/procedures. DO NOT emit or process Complaints for now. Focus strictly on Diagnosis, Labs, and Medications.
 - Match existing items using their exact "name" from CURRENT CHART.
 
 2. CONDITIONAL & CONTINGENT ORDERS vs IMMEDIATE ORDERS (CRITICAL):
@@ -96,10 +98,10 @@ REVIEW FOLLOW-UP MODE — UNIVERSAL CLINICAL RULES (PATCH ONLY)
     - "dd" or "d/d" = Differential Diagnosis (e.g. "dd viral vs strep" -> record under Diagnosis: "Differential Diagnosis: Viral vs Streptococcal pharyngitis", NEVER as lab tests).
   - Shorthand conjunctions: In dictations, "n", "+", and "&" mean "and" (e.g. "azithro n cbp" = Azithromycin and CBP test).
   - In multi-item or comma-separated dictations, parse EVERY single spoken token into its true clinical domain:
-  - DIAGNOSIS & COMPLAINTS (MANDATORY):
+  - DIAGNOSIS (MANDATORY) — DO NOT PROCESS COMPLAINTS FOR NOW:
+    - Do NOT emit noteOps for "complaints" or symptoms (e.g. fever, pain, cough). Only process Diagnosis, Labs, and Medications.
     - UTI (Urinary tract infection) is ALWAYS a clinical medical Diagnosis, NEVER an investigation or lab test. Even with question marks before or after (e.g. "uti??", "?uti", "maybe uti"), ALWAYS emit a noteOp for UTI under Diagnosis! If returning doctorNotes string, always include "Diagnosis:\n• Urinary tract infection".
     - When the instruction mentions any disease, migraine, infection, or pathology (e.g. "migraine", "uti", "?uti", "?malaria", "tinea", "stone", "anemia", "menorrhagia")—without forbidding diagnosis—you MUST emit a noteOp under Diagnosis: {"section": "diagnosis", "action": "add", "text": "exact condition name"}.
-    - When the instruction mentions any symptom or indication alongside medicines (e.g. "fever", "pain", "cough", "pcm sos fever"), you MUST emit a noteOp under Complaints: {"section": "complaints", "action": "add", "text": "exact symptom name"} (e.g. "Fever").
   - INVESTIGATIONS: Extract EVERY single diagnostic test, scan, imaging acronym, swab, culture, and abbreviation into labOps without skipping shorthand items (e.g. KFT, LFT, CBP):
     - Tests preceded by "advise [test]" or "advised [test]" (e.g. "advise cbp lft") ARE diagnostic lab test orders: add each to labOps!
     - MP (Malaria parasite / Smear for MP), PV, and PF are laboratory blood investigations, NEVER medicines.
@@ -206,7 +208,9 @@ function compactChartForFollowUpPrompt(chart) {
   return {
     medicines: (Array.isArray(c.medicines) ? c.medicines : []).map(slimMed),
     labTests: (Array.isArray(c.labTests) ? c.labTests : []).map(slimNamed),
-    procedures: (Array.isArray(c.procedures) ? c.procedures : []).map(slimNamed),
+    procedures: (Array.isArray(c.procedures) ? c.procedures : []).map(
+      slimNamed,
+    ),
     doctorNotes: String(c.doctorNotes || "").slice(0, 2000),
     vitals: c.vitals || {},
   };
@@ -222,11 +226,6 @@ ${instruction}
 
 REMINDER: Emit medicineOps/labOps/noteOps ONLY for items named or changed by INSTRUCTION. Output minimal valid JSON. Strip formulation prefixes (Tab/Syp/Inj) from medicine.name. Include accurate numeric quantity in medicine (daily doses × days for tablets/capsules; 1 for syrups/topicals/inhalers/insulin pens; ampoule count for injections). For tapers: output separate steps in chronological start-to-finish order (highest dose Step 1 first with strength in name, e.g. "Wysolone 20mg"), with "Then" in directions for subsequent steps.`;
 }
-
-
-
-
-
 
 /**
  * Merges a model delta patch onto the existing prescription chart.
@@ -269,7 +268,9 @@ function mergeOpdChartDelta(currentChart, delta, instruction = "") {
   let addedMedIndex = 0;
   if (Array.isArray(d.medicineOps) && d.medicineOps.length > 0) {
     for (const op of d.medicineOps) {
-      const matchName = String(op?.match || "").trim().toLowerCase();
+      const matchName = String(op?.match || "")
+        .trim()
+        .toLowerCase();
       const kind = String(op?.op || "").toLowerCase();
 
       const activeIdx = medicines.findIndex(
@@ -551,7 +552,6 @@ function greetingAssistantReply(text) {
   return "Hi! What would you like to change on the prescription?";
 }
 
-
 function summarizeChartForReplyContext(chart) {
   const c = chart && typeof chart === "object" ? chart : {};
   const medNames = (Array.isArray(c.medicines) ? c.medicines : [])
@@ -600,10 +600,7 @@ function buildExtractionReply(result, latestUserText) {
  */
 router.post("/review-followup", async (req, res) => {
   try {
-    const {
-      instruction,
-      currentChart,
-    } = req.body || {};
+    const { instruction, currentChart } = req.body || {};
 
     if (
       !instruction ||
@@ -682,7 +679,10 @@ router.post("/review-followup", async (req, res) => {
     try {
       delta = parseFollowUpDeltaJson(content);
     } catch (parseErr) {
-      console.warn("Failed to parse OPD AI delta JSON, retrying compact patch:", parseErr.message);
+      console.warn(
+        "Failed to parse OPD AI delta JSON, retrying compact patch:",
+        parseErr.message,
+      );
       try {
         const retry = await aiCompletionWithFallback(
           [
@@ -712,8 +712,14 @@ router.post("/review-followup", async (req, res) => {
     const merged = mergeOpdChartDelta(chart, delta, instruction);
 
     console.log("=== [OPD AI FINAL RESULT] ===");
-    console.log("Medicines:", merged.medicines.map((m) => m.name));
-    console.log("Labs:", merged.labTests.map((t) => (typeof t === "string" ? t : t?.name)));
+    console.log(
+      "Medicines:",
+      merged.medicines.map((m) => m.name),
+    );
+    console.log(
+      "Labs:",
+      merged.labTests.map((t) => (typeof t === "string" ? t : t?.name)),
+    );
 
     const result = {
       medicines: merged.medicines,
