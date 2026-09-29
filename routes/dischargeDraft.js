@@ -84,6 +84,25 @@ function clinicalDischargePayload(body = {}, { umrNo, hospitalId }) {
   return payload;
 }
 
+const DISCHARGE_STATUS_RANK = {
+  draft: 0,
+  changes_requested: 1,
+  pending_approval: 2,
+  approved: 3,
+};
+
+function dischargeStatusOf(record) {
+  return (
+    record?.dischargeSummaryMeta?.status ||
+    record?.dischargeSummaryStatus ||
+    ""
+  );
+}
+
+function dischargeStatusRank(status) {
+  return DISCHARGE_STATUS_RANK[status] ?? -1;
+}
+
 function getModels(req) {
   if (req.tenantDb) {
     return {
@@ -121,6 +140,58 @@ router.get("/:umrNo", async (req, res) => {
     }
 
     let draft = await DischargeSummary.findOne(query).sort({ updatedAt: -1 });
+    if (!draft && admissionScope.admissionId) {
+      const umrQuery = { UMRNo: umrNo };
+      if (hospitalId) umrQuery.hospitalId = hospitalId;
+      draft = await DischargeSummary.findOne(umrQuery).sort({ updatedAt: -1 });
+    }
+
+    let signedCandidates = await DischargeSummary.find({
+      UMRNo: umrNo,
+      ...(hospitalId ? { hospitalId } : {}),
+    })
+      .sort({ updatedAt: -1 })
+      .limit(20)
+      .lean();
+    if (
+      hospitalId &&
+      !signedCandidates.some(
+        (candidate) => dischargeStatusRank(dischargeStatusOf(candidate)) > 0,
+      )
+    ) {
+      signedCandidates = await DischargeSummary.find({ UMRNo: umrNo })
+        .sort({ updatedAt: -1 })
+        .limit(20)
+        .lean();
+    }
+
+    const applySignedStatus = (draftData, patientRecord) => {
+      const candidates = [...signedCandidates];
+      if (patientRecord) candidates.push(patientRecord);
+      let best = null;
+      for (const candidate of candidates) {
+        const rank = dischargeStatusRank(dischargeStatusOf(candidate));
+        if (!best || rank > dischargeStatusRank(dischargeStatusOf(best))) {
+          best = candidate;
+        }
+      }
+      if (
+        best &&
+        dischargeStatusRank(dischargeStatusOf(best)) >
+          dischargeStatusRank(dischargeStatusOf(draftData))
+      ) {
+        draftData.dischargeSummaryStatus = dischargeStatusOf(best);
+        draftData.dischargeSummaryMeta =
+          best.dischargeSummaryMeta || draftData.dischargeSummaryMeta || null;
+        const signedSummary = best.summary || best.dischargeSummary || "";
+        if (signedSummary) draftData.summary = signedSummary;
+        if (best.summaryType || best.dischargeSummaryType) {
+          draftData.summaryType =
+            best.summaryType || best.dischargeSummaryType;
+        }
+      }
+      return draftData;
+    };
 
     if (!draft) {
       // Fallback: Check if there is an active or recent IPAdmission with existing discharge data
@@ -133,9 +204,13 @@ router.get("/:umrNo", async (req, res) => {
       }).sort({ createdAt: -1 });
 
       if (admission) {
+        const patientForStatus = await Patient.findOne({
+          UMRNo: umrNo,
+          ...(hospitalId ? { hospitalId } : {}),
+        }).lean();
         return res.json({
           success: true,
-          draft: {
+          draft: applySignedStatus({
             UMRNo: umrNo,
             admissionId: admission._id,
             ipNumber: admission.ipNumber,
@@ -152,8 +227,12 @@ router.get("/:umrNo", async (req, res) => {
             summarySections: admission.summarySections || [],
             dischargeMedications: admission.dischargeMedications || [],
             repeatLabs: admission.repeatLabs || [],
+            summary: admission.dischargeSummary || null,
+            dischargeSummaryStatus:
+              admission.dischargeSummaryStatus || "draft",
+            dischargeSummaryMeta: admission.dischargeSummaryMeta || null,
             isFromAdmission: true,
-          },
+          }, patientForStatus),
         });
       }
 
@@ -166,20 +245,23 @@ router.get("/:umrNo", async (req, res) => {
       if (patient && (patient.dischargeSummary || patient.finalDiagnosis)) {
         return res.json({
           success: true,
-          draft: {
-            UMRNo: umrNo,
-            finalDiagnosis: patient.finalDiagnosis || patient.provisionalDiagnosis || "",
-            dischargeDate: patient.dischargeDate || null,
-            dischargeCondition: patient.dischargeCondition || "Stable",
-            dischargeDestination: patient.dischargeDestination || "Home",
-            summarySections: patient.summarySections || [],
-            dischargeMedications: patient.dischargeMedications || [],
-            repeatLabs: patient.repeatLabs || [],
-            summary: patient.dischargeSummary || null,
-            dischargeSummaryStatus: patient.dischargeSummaryStatus || "draft",
-            dischargeSummaryMeta: patient.dischargeSummaryMeta || null,
-            isFromPatient: true,
-          },
+          draft: applySignedStatus(
+            {
+              UMRNo: umrNo,
+              finalDiagnosis: patient.finalDiagnosis || patient.provisionalDiagnosis || "",
+              dischargeDate: patient.dischargeDate || null,
+              dischargeCondition: patient.dischargeCondition || "Stable",
+              dischargeDestination: patient.dischargeDestination || "Home",
+              summarySections: patient.summarySections || [],
+              dischargeMedications: patient.dischargeMedications || [],
+              repeatLabs: patient.repeatLabs || [],
+              summary: patient.dischargeSummary || null,
+              dischargeSummaryStatus: patient.dischargeSummaryStatus || "draft",
+              dischargeSummaryMeta: patient.dischargeSummaryMeta || null,
+              isFromPatient: true,
+            },
+            patient,
+          ),
         });
       }
 
@@ -235,6 +317,7 @@ router.get("/:umrNo", async (req, res) => {
         draftData[field] = fallbackItems;
       }
     }
+    applySignedStatus(draftData, patient);
 
     return res.json({ success: true, draft: draftData });
   } catch (error) {
@@ -267,6 +350,19 @@ router.post("/:umrNo", async (req, res) => {
     }
 
     const payload = clinicalDischargePayload(req.body, { umrNo, hospitalId });
+    const existing = await DischargeSummary.findOne(filter).lean();
+    const incomingRank = dischargeStatusRank(
+      payload.dischargeSummaryStatus || "draft",
+    );
+    const existingRank = dischargeStatusRank(dischargeStatusOf(existing));
+    const keepSignedRecord =
+      existing && !req.body.statusTransition && incomingRank < existingRank;
+    if (keepSignedRecord) {
+      payload.dischargeSummaryStatus = dischargeStatusOf(existing);
+      payload.dischargeSummaryMeta = existing.dischargeSummaryMeta || null;
+      if (existing.summary) payload.summary = existing.summary;
+      if (existing.summaryType) payload.summaryType = existing.summaryType;
+    }
     const unset = Object.fromEntries(
       LEGACY_DRAFT_FIELDS.map((field) => [field, ""]),
     );
@@ -301,13 +397,17 @@ router.post("/:umrNo", async (req, res) => {
     if (req.body.repeatLabs !== undefined) clinicalSync.repeatLabs = req.body.repeatLabs;
     if (req.body.dangerSigns !== undefined) clinicalSync.dangerSigns = req.body.dangerSigns;
     if (req.body.hospitalCourse !== undefined) clinicalSync.hospitalCourse = req.body.hospitalCourse;
-    if (req.body.dischargeSummary !== undefined) clinicalSync.dischargeSummary = req.body.dischargeSummary;
-    if (req.body.summary !== undefined) clinicalSync.dischargeSummary = req.body.summary;
-    if (req.body.dischargeSummaryType !== undefined) clinicalSync.dischargeSummaryType = req.body.dischargeSummaryType;
-    if (req.body.summaryType !== undefined) clinicalSync.dischargeSummaryType = req.body.summaryType;
+    if (payload.summary !== undefined) clinicalSync.dischargeSummary = payload.summary;
+    else if (req.body.dischargeSummary !== undefined) clinicalSync.dischargeSummary = req.body.dischargeSummary;
+    if (payload.summaryType !== undefined) clinicalSync.dischargeSummaryType = payload.summaryType;
+    else if (req.body.summaryType !== undefined) clinicalSync.dischargeSummaryType = req.body.summaryType;
     if (req.body.dischargeSummaryTimestamp !== undefined) clinicalSync.dischargeSummaryTimestamp = req.body.dischargeSummaryTimestamp;
-    if (req.body.dischargeSummaryStatus !== undefined) clinicalSync.dischargeSummaryStatus = req.body.dischargeSummaryStatus;
-    if (req.body.dischargeSummaryMeta !== undefined) clinicalSync.dischargeSummaryMeta = req.body.dischargeSummaryMeta;
+    if (payload.dischargeSummaryStatus !== undefined) {
+      clinicalSync.dischargeSummaryStatus = payload.dischargeSummaryStatus;
+    }
+    if (payload.dischargeSummaryMeta !== undefined) {
+      clinicalSync.dischargeSummaryMeta = payload.dischargeSummaryMeta;
+    }
 
     if (Object.keys(clinicalSync).length > 0) {
       try {

@@ -90,6 +90,13 @@ const ipAdmissionSchema = new mongoose.Schema(
     dischargeSummary: { type: String },
     dischargeSummaryType: { type: String },
     dischargeSummaryTimestamp: { type: String },
+    dischargeSummaryStatus: { type: String, default: "draft" },
+    dischargeSummaryMeta: mongoose.Schema.Types.Mixed,
+    dischargeTime: { type: String },
+    lengthOfStay: { type: Number },
+    repeatLabs: [mongoose.Schema.Types.Mixed],
+    dangerSigns: { type: String },
+    hospitalCourse: { type: String },
     dischargeOrders: { type: String },
     counselling: { type: String },
 
