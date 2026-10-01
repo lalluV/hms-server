@@ -223,10 +223,6 @@ router.get("/:umrNo", async (req, res) => {
             hospitalCourse: admission.hospitalCourse || "",
             dischargeInstructions: admission.dischargeInstructions || "",
             followUpPlan: admission.followUpPlan || "",
-            counselling: admission.counselling || "",
-            summarySections: admission.summarySections || [],
-            dischargeMedications: admission.dischargeMedications || [],
-            repeatLabs: admission.repeatLabs || [],
             summary: admission.dischargeSummary || null,
             dischargeSummaryStatus:
               admission.dischargeSummaryStatus || "draft",
@@ -252,9 +248,6 @@ router.get("/:umrNo", async (req, res) => {
               dischargeDate: patient.dischargeDate || null,
               dischargeCondition: patient.dischargeCondition || "Stable",
               dischargeDestination: patient.dischargeDestination || "Home",
-              summarySections: patient.summarySections || [],
-              dischargeMedications: patient.dischargeMedications || [],
-              repeatLabs: patient.repeatLabs || [],
               summary: patient.dischargeSummary || null,
               dischargeSummaryStatus: patient.dischargeSummaryStatus || "draft",
               dischargeSummaryMeta: patient.dischargeSummaryMeta || null,
@@ -268,24 +261,12 @@ router.get("/:umrNo", async (req, res) => {
       return res.json({ success: true, draft: null });
     }
 
-    // Older clients saved the patient record without updating the
-    // DischargeSummary document. Backfill missing order arrays from the
-    // admission/patient record so another device does not receive a stale
-    // discharge workstation.
-    const [admission, patient] = await Promise.all([
-      IPAdmission.findOne({
-        UMRNo: umrNo,
-        ...(hospitalId ? { hospitalId } : {}),
-      })
-        .sort({ updatedAt: -1, createdAt: -1 })
-        .lean(),
-      Patient.findOne({
-        UMRNo: umrNo,
-        ...(hospitalId ? { hospitalId } : {}),
-      })
-        .sort({ updatedAt: -1, createdAt: -1 })
-        .lean(),
-    ]);
+    const patient = await Patient.findOne({
+      UMRNo: umrNo,
+      ...(hospitalId ? { hospitalId } : {}),
+    })
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .lean();
     const draftData = draft.toObject ? draft.toObject() : { ...draft };
     // Older saves stored the same orders again on the AI worksheet.
     // Promote those into the clinical lists when the clinical lists are empty.
@@ -304,18 +285,6 @@ router.get("/:umrNo", async (req, res) => {
       draftData.reviewLabTests.length > 0
     ) {
       draftData.repeatLabs = draftData.reviewLabTests;
-    }
-    for (const field of ["dischargeMedications", "repeatLabs"]) {
-      const draftItems = Array.isArray(draftData[field])
-        ? draftData[field]
-        : [];
-      const fallbackItems =
-        (Array.isArray(admission?.[field]) && admission[field]) ||
-        (Array.isArray(patient?.[field]) && patient[field]) ||
-        [];
-      if (draftItems.length === 0 && fallbackItems.length > 0) {
-        draftData[field] = fallbackItems;
-      }
     }
     applySignedStatus(draftData, patient);
 
@@ -379,54 +348,6 @@ router.post("/:umrNo", async (req, res) => {
         strict: false,
       },
     );
-
-    // Simultaneously sync key clinical summary fields to the active IPAdmission or Patient
-    const clinicalSync = {};
-    if (req.body.dischargeDate !== undefined) clinicalSync.dischargeDate = req.body.dischargeDate;
-    if (req.body.dischargeTime !== undefined) clinicalSync.dischargeTime = req.body.dischargeTime;
-    if (req.body.lengthOfStay !== undefined) clinicalSync.lengthOfStay = req.body.lengthOfStay;
-    if (req.body.dischargeCondition !== undefined) clinicalSync.dischargeCondition = req.body.dischargeCondition;
-    if (req.body.dischargeDestination !== undefined) clinicalSync.dischargeDestination = req.body.dischargeDestination;
-    if (req.body.finalDiagnosis !== undefined) clinicalSync.finalDiagnosis = req.body.finalDiagnosis;
-    if (req.body.hospitalCourse !== undefined) clinicalSync.hospitalCourse = req.body.hospitalCourse;
-    if (req.body.dischargeInstructions !== undefined) clinicalSync.dischargeInstructions = req.body.dischargeInstructions;
-    if (req.body.followUpPlan !== undefined) clinicalSync.followUpPlan = req.body.followUpPlan;
-    if (req.body.counselling !== undefined) clinicalSync.counselling = req.body.counselling;
-    if (req.body.summarySections !== undefined) clinicalSync.summarySections = req.body.summarySections;
-    if (req.body.dischargeMedications !== undefined) clinicalSync.dischargeMedications = req.body.dischargeMedications;
-    if (req.body.repeatLabs !== undefined) clinicalSync.repeatLabs = req.body.repeatLabs;
-    if (req.body.dangerSigns !== undefined) clinicalSync.dangerSigns = req.body.dangerSigns;
-    if (req.body.hospitalCourse !== undefined) clinicalSync.hospitalCourse = req.body.hospitalCourse;
-    if (payload.summary !== undefined) clinicalSync.dischargeSummary = payload.summary;
-    else if (req.body.dischargeSummary !== undefined) clinicalSync.dischargeSummary = req.body.dischargeSummary;
-    if (payload.summaryType !== undefined) clinicalSync.dischargeSummaryType = payload.summaryType;
-    else if (req.body.summaryType !== undefined) clinicalSync.dischargeSummaryType = req.body.summaryType;
-    if (req.body.dischargeSummaryTimestamp !== undefined) clinicalSync.dischargeSummaryTimestamp = req.body.dischargeSummaryTimestamp;
-    if (payload.dischargeSummaryStatus !== undefined) {
-      clinicalSync.dischargeSummaryStatus = payload.dischargeSummaryStatus;
-    }
-    if (payload.dischargeSummaryMeta !== undefined) {
-      clinicalSync.dischargeSummaryMeta = payload.dischargeSummaryMeta;
-    }
-
-    if (Object.keys(clinicalSync).length > 0) {
-      try {
-        await IPAdmission.findOneAndUpdate(
-          {
-            UMRNo: umrNo,
-            ...admissionScope,
-            ...(hospitalId ? { hospitalId } : {}),
-          },
-          { $set: clinicalSync }
-        );
-        await Patient.findOneAndUpdate(
-          { UMRNo: umrNo, ...(hospitalId ? { hospitalId } : {}) },
-          { $set: clinicalSync }
-        );
-      } catch (syncErr) {
-        console.warn("Non-fatal sync to IPAdmission/Patient warning:", syncErr.message);
-      }
-    }
 
     return res.json({ success: true, draft });
   } catch (error) {

@@ -640,13 +640,17 @@ ${labHighlights.slice(0, 20).join("\n") || "No abnormal labs"}
 ${radiologyHighlights.join("\n") || "No imaging studies"}
 
 TASK:
-Generate an intelligent, case-tailored discharge summary payload in valid JSON.
-DO NOT use hardcoded rigid templates. Adapt the clinical sections dynamically based on the specific case type:
-- If the patient had an Emergency / Casualty presentation or received casualty treatment: ALWAYS include a dedicated section titled "Emergency / Casualty Presentation & Immediate Stabilization" (or "Emergency Assessment & Casualty Care") detailing their emergency presentation, initial triage/vitals, and casualty treatment/medications given in the ER before transfer to ward/ICU/OT.
-- If Surgical / Trauma: Include sections like "Brief Clinical History & Reason for Admission", "Operative Findings & Procedure", "Hospital Stay & Post-Op Recovery", "Wound & Suture Care".
-- If Medical / Infection / Sepsis: Include sections like "Chief Complaints & History", "Hospital Stay & Antibiotic Response", "Significant Diagnostic Trends", "Condition at Discharge".
-- If Obstetric / Delivery: Include sections like "Obstetric Summary", "Delivery & Neonatal Details", "Post-Partum Recovery & Newborn Care".
-- If Pediatric: Include sections like "Birth & Developmental Summary", "Clinical Course", "Immunization & Dietary Advice".
+Generate an intelligent discharge summary payload in valid JSON.
+Use this section order when the record contains the facts. Omit a section when there is nothing to say. Extra case-specific narrative may be added only between "Course in hospital" and "OT findings".
+Required titles, in order:
+- History of presenting complaints
+- Emergency evaluation
+- Condition on admission
+- General / Physical examination
+- Systemic examination
+- Course in hospital
+- OT findings
+Do not repeat diagnosis, allergies, discharge medicines, diet, follow-up, or urgent-care warning signs inside summarySections; those are stored in the other JSON fields.
 
 Return strictly valid JSON:
 {
@@ -655,17 +659,22 @@ Return strictly valid JSON:
   "dischargeDestination": "Home",
   "summarySections": [
     {
-      "id": "brief_history",
-      "title": "Brief Clinical History & Reason for Admission",
-      "content": "Crisp 2-3 sentence summary of presentation and indication for admission."
+      "id": "history",
+      "title": "History of presenting complaints",
+      "content": "Onset, duration, progression, and reason for admission."
     },
     {
       "id": "course",
-      "title": "Hospital Stay & Clinical Course",
-      "content": "Chronological narrative of treatment response, daily progress, and recovery."
+      "title": "Course in hospital",
+      "content": "Chronological narrative of treatment response and recovery."
+    },
+    {
+      "id": "ot",
+      "title": "OT findings",
+      "content": "Operative findings, only when a procedure was done."
     }
   ],
-  "dischargeInstructions": "Diet advice, wound/activity restrictions, and emergency red-flag warning signs",
+  "dischargeInstructions": "Diet, activity, wound care, and medication advice",
   "followUpPlan": "When and where to review in OPD"
 }`;
 

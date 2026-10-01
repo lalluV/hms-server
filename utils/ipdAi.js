@@ -12,6 +12,14 @@ const NOTE_SECTION_ORDER = [
   ["advice", "Advice"],
 ];
 
+const ERA_NOTE_SECTION_ORDER = [
+  ["complaints", "Chief complaints"],
+  ["history", "Past history"],
+  ["examination", "Systemic examination"],
+  ["diagnosis", "Provisional diagnosis"],
+  ["allergies", "Allergies"],
+];
+
 const NOTE_SECTION_ALIASES = {
   complaints: "complaints",
   complaint: "complaints",
@@ -31,6 +39,9 @@ const NOTE_SECTION_ALIASES = {
   treatmentplan: "advice",
   assessment: "advice",
   assessmentandplan: "advice",
+  allergies: "allergies",
+  allergy: "allergies",
+  chiefcomplaintshistoryofpresentillness: "complaints",
 };
 
 const NOTE_LABEL_TO_KEY = {
@@ -40,6 +51,9 @@ const NOTE_LABEL_TO_KEY = {
   advice: "advice",
   "doctor's advice": "advice",
   "doctors advice": "advice",
+  ...Object.fromEntries(
+    ERA_NOTE_SECTION_ORDER.map(([key, label]) => [label.toLowerCase(), key]),
+  ),
 };
 
 function itemOrigin(item) {
@@ -74,7 +88,7 @@ function parseComposedNoteSections(noteText) {
   for (const rawLine of text.split(/\r?\n/)) {
     const line = String(rawLine || "").trim();
     if (!line) continue;
-    const headerMatch = line.match(/^([A-Za-z' ]+):\s*(.*)$/);
+    const headerMatch = line.match(/^([A-Za-z][A-Za-z'& ]*):\s*(.*)$/);
     if (headerMatch) {
       const label = headerMatch[1].trim().toLowerCase();
       const key =
@@ -97,10 +111,10 @@ function parseComposedNoteSections(noteText) {
   return sections;
 }
 
-function composeNoteFromSections(sections) {
+function composeNoteFromSections(sections, sectionOrder = NOTE_SECTION_ORDER) {
   if (!sections || typeof sections !== "object") return "";
   const blocks = [];
-  for (const [key, label] of NOTE_SECTION_ORDER) {
+  for (const [key, label] of sectionOrder) {
     const raw = sections[key];
     const items = Array.isArray(raw)
       ? raw
@@ -155,19 +169,23 @@ function peelHistoryOfFromComplaints(sections) {
  * Layout-only: turn single-line "Complaints: … Advice: …" into labeled bullets.
  * Does not invent clinical content.
  */
-function formatDoctorNotesLayout(noteText) {
+function formatDoctorNotesLayout(noteText, options = {}) {
+  const sectionOrder = options.sectionOrder || NOTE_SECTION_ORDER;
   let text = String(noteText || "").trim();
   if (!text || /^\s*[SOAP]\s*:/m.test(text)) return text;
 
   text = text.replace(
-    /([^\n])\s*\b(Complaints|History|Allergies|Examination|Diagnosis|Advice|Doctor'?s?\s*Advice|Past Medical History|Provisional Diagnosis)\s*:/gi,
+    /([^\n])\s*\b(Chief complaints & history of present illness|Chief complaints|Past history|Systemic examination|Provisional diagnosis|Complaints|History|Allergies|Examination|Diagnosis|Advice|Doctor'?s?\s*Advice|Past Medical History)\s*:/gi,
     "$1\n$2:",
   );
 
   let sections = parseComposedNoteSections(text);
   if (Object.keys(sections).length) {
-    sections = peelHistoryOfFromComplaints(sections);
-    return composeNoteFromSections(sections) || text;
+    if (sectionOrder !== ERA_NOTE_SECTION_ORDER) {
+      sections = peelHistoryOfFromComplaints(sections);
+    }
+    if (sectionOrder === ERA_NOTE_SECTION_ORDER) delete sections.advice;
+    return composeNoteFromSections(sections, sectionOrder) || text;
   }
   return text;
 }
@@ -492,6 +510,7 @@ function mergeIpdChartDelta(currentChart, delta) {
 
 module.exports = {
   NOTE_SECTION_ORDER,
+  ERA_NOTE_SECTION_ORDER,
   NOTE_SECTION_ALIASES,
   NOTE_LABEL_TO_KEY,
   parseComposedNoteSections,

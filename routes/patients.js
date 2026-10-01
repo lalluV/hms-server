@@ -4,7 +4,6 @@ const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
 const { normalizeRole } = require("../config/rolePermissions");
 const {
   resolveRequestDoctorIds,
-  doctorPatientVisibilityClauseFromIds,
   patientVisibleToDoctorIds,
   isDoctorRole,
 } = require("../utils/doctorPatientAccess");
@@ -30,6 +29,14 @@ const {
   normalizeGender,
 } = require("../utils/publicOpRegistration");
 const { syncClinicalCasesFromPatient } = require("../utils/doctorMemory");
+const { admitPatient } = require("../utils/admitPatient");
+const {
+  pickPerson,
+  presentPatient,
+  objectIds,
+  loadRosterSets,
+  loadOpenAdmissionMap,
+} = require("../utils/patientFields");
 const mongoose = require("mongoose");
 
 async function findPatientByIdOrUMR(Patient, idOrUmr, hospitalId) {
@@ -223,7 +230,6 @@ router.post(
         const phoneMatches = await Patient.find({
           hospitalId,
           phone: data.phone,
-          patient_type: "OP",
         }).limit(25);
 
         existing = phoneMatches.find(
@@ -370,53 +376,66 @@ router.get("/", async (req, res) => {
 
     const andConditions = [{ hospitalId: req.hospitalId }];
 
-    if (isDoctorWithoutIpdDoctorRecord(req)) {
-      if (patientType && patientType !== "OP") {
-        return sendModuleForbidden(
-          res,
-          "ipdDoctorRecord",
-          "Doctor IPD patient record is not included in your subscription plan.",
-        );
-      }
-      andConditions.push({ patient_type: "OP" });
-    } else if (isNurseWithoutIpdPanel(req)) {
-      if (patientType && patientType !== "OP") {
-        return sendModuleForbidden(
-          res,
-          "ipdNursePanel",
-          "Nurse IPD panel is not included in your subscription plan.",
-        );
-      }
-      andConditions.push({ patient_type: "OP" });
-    } else if (
-      req.entitlements?.modules?.ipd !== true &&
-      patientType !== "OP"
-    ) {
-      if (patientType) {
-        return sendModuleForbidden(
-          res,
-          "ipd",
-          "IPD patient access is not included in your subscription plan.",
-        );
-      }
-      andConditions.push({ patient_type: "OP" });
-    } else if (patientType) {
-      if (patientType === "OP") {
-        andConditions.push({ patient_type: "OP", active: true });
-      } else if (patientType === "IP") {
-        andConditions.push({
-          $or: [{ patient_type: "IP" }, { patient_type: "OPtoIP" }],
-          active: true,
-        });
-      } else if (patientType === "discharged") {
-        andConditions.push({ active: false });
-      }
+    const IPAdmission = req.tenantDb.model("IPAdmission");
+    const PrescriptionForRoster = req.tenantDb.model("Prescription");
+    const roster = await loadRosterSets(
+      IPAdmission,
+      PrescriptionForRoster,
+      req.hospitalId,
+      Patient,
+    );
+    const forceOp =
+      isDoctorWithoutIpdDoctorRecord(req) ||
+      isNurseWithoutIpdPanel(req) ||
+      (req.entitlements?.modules?.ipd !== true && patientType !== "OP");
+
+    if (forceOp && patientType && patientType !== "OP") {
+      const moduleKey = isDoctorWithoutIpdDoctorRecord(req)
+        ? "ipdDoctorRecord"
+        : isNurseWithoutIpdPanel(req)
+          ? "ipdNursePanel"
+          : "ipd";
+      return sendModuleForbidden(
+        res,
+        moduleKey,
+        "IPD patient access is not included in your subscription plan.",
+      );
     }
 
-    if (status === "active") {
-      andConditions.push({ active: true });
-    } else if (status === "inactive") {
-      andConditions.push({ active: false });
+    const rosterMode = forceOp
+      ? "OP"
+      : patientType || (status === "inactive" ? "discharged" : "");
+
+    let ipIds = roster.openIds;
+    if (rosterMode === "IP" && (maxDaysAdmitted || minDaysAdmitted)) {
+      const admissionDate = {};
+      if (maxDaysAdmitted) {
+        admissionDate.$gte = dayjs()
+          .subtract(parseInt(maxDaysAdmitted, 10), "day")
+          .format("YYYY-MM-DD");
+      }
+      if (minDaysAdmitted) {
+        admissionDate.$lte = dayjs()
+          .subtract(parseInt(minDaysAdmitted, 10), "day")
+          .format("YYYY-MM-DD");
+      }
+      const dated = await IPAdmission.find({
+        hospitalId: req.hospitalId,
+        patient_status: "Admitted",
+        admissionDate,
+      })
+        .select("patientId")
+        .lean();
+      ipIds = dated.map((row) => String(row.patientId || "")).filter(Boolean);
+    }
+
+    if (rosterMode === "OP") {
+      const excluded = objectIds(roster.excludeFromOp);
+      if (excluded.length) andConditions.push({ _id: { $nin: excluded } });
+    } else if (rosterMode === "IP") {
+      andConditions.push({ _id: { $in: objectIds(ipIds) } });
+    } else if (rosterMode === "discharged") {
+      andConditions.push({ _id: { $in: objectIds(roster.dischargedIds) } });
     }
 
     if (paymentMethod) {
@@ -438,41 +457,14 @@ router.get("/", async (req, res) => {
       andConditions.push({ insurance_providerId: insuranceProviderId });
     }
 
-    if (maxDaysAdmitted) {
-      const cutoff = dayjs()
-        .subtract(parseInt(maxDaysAdmitted, 10), "day")
-        .format("YYYY-MM-DD");
-      andConditions.push({
-        $or: [
-          { admissionDate: { $gte: cutoff } },
-          { registration_date: { $gte: cutoff } },
-        ],
-      });
-    }
-
-    if (minDaysAdmitted) {
-      const cutoff = dayjs()
-        .subtract(parseInt(minDaysAdmitted, 10), "day")
-        .format("YYYY-MM-DD");
-      andConditions.push({
-        $or: [
-          { admissionDate: { $lte: cutoff } },
-          { registration_date: { $lte: cutoff } },
-        ],
-      });
-    }
-
     if (fromDate || toDate) {
       const start = fromDate ? dayjs(fromDate).format("YYYY-MM-DD") : null;
       const end = toDate ? dayjs(toDate).format("YYYY-MM-DD") : null;
       const dateRange = {};
       if (start) dateRange.$gte = start;
-      // Include full ISO day when registration_date is stored as ISO string
       if (end) dateRange.$lte = `${end}T23:59:59.999Z`;
       if (Object.keys(dateRange).length > 0) {
-        andConditions.push({
-          $or: [{ registration_date: dateRange }, { admissionDate: dateRange }],
-        });
+        andConditions.push({ registration_date: dateRange });
       }
     }
 
@@ -489,34 +481,30 @@ router.get("/", async (req, res) => {
     // Doctors: only assigned consultant patients OR patients with their visit.
     if (isDoctorRole(req)) {
       const doctorIds = await resolveRequestDoctorIds(req);
-      const visibility = doctorPatientVisibilityClauseFromIds(doctorIds);
       const Prescription = req.tenantDb.model("Prescription");
-      const rxRows = await Prescription.find({
-        hospitalId: req.hospitalId,
-        doctorId: { $in: doctorIds },
-      })
-        .select("patientId")
-        .lean();
-      const rxPatientIds = [
-        ...new Set(
-          rxRows
-            .map((row) => String(row.patientId || ""))
-            .filter(Boolean),
-        ),
-      ];
-      if (rxPatientIds.length) {
-        const objectIds = rxPatientIds
-          .filter((id) => mongoose.Types.ObjectId.isValid(id))
-          .map((id) => new mongoose.Types.ObjectId(id));
-        andConditions.push({
-          $or: [
-            visibility,
-            { _id: { $in: objectIds } },
-          ],
-        });
-      } else {
-        andConditions.push(visibility);
-      }
+      const [rxRows, stayRows] = await Promise.all([
+        Prescription.find({
+          hospitalId: req.hospitalId,
+          doctorId: { $in: doctorIds },
+        })
+          .select("patientId")
+          .lean(),
+        IPAdmission.find({
+          hospitalId: req.hospitalId,
+          doctorId: { $in: doctorIds },
+          patient_status: "Admitted",
+        })
+          .select("patientId")
+          .lean(),
+      ]);
+      const visibleIds = objectIds(
+        [...rxRows, ...stayRows].map((row) => row.patientId),
+      );
+      andConditions.push(
+        visibleIds.length
+          ? { _id: { $in: visibleIds } }
+          : { _id: { $exists: false } },
+      );
     }
 
     const query =
@@ -543,10 +531,7 @@ router.get("/", async (req, res) => {
 
       const rxList = await Prescription.find({
         hospitalId: req.hospitalId,
-        $or: [
-          { patientId: { $in: patientIds } },
-          { UMRNo: { $in: umrNos } },
-        ],
+        $or: [{ patientId: { $in: patientIds } }, { UMRNo: { $in: umrNos } }],
       })
         .select(
           "patientId UMRNo prescriptionId doctorId doctorName consultantDoctor date createdAt medicineData diagnosticData symptoms provisionalDiagnosis",
@@ -595,8 +580,17 @@ router.get("/", async (req, res) => {
       }
     }
 
+    const admissionMap = await loadOpenAdmissionMap(
+      IPAdmission,
+      req.hospitalId,
+      patientIds,
+    );
+
     const formattedPatients = patients.map((patient) => {
-      const pObj = patient.toObject();
+      const pObj = presentPatient(patient, {
+        admission: admissionMap.get(String(patient._id)) || null,
+        roster: rosterMode === "discharged" ? "discharged" : "",
+      });
       const rxInfo =
         visitMap.get(String(patient._id)) ||
         visitMap.get(String(patient.UMRNo)) ||
@@ -642,11 +636,30 @@ router.get("/phone/:phoneNumber", async (req, res) => {
       phone: req.params.phoneNumber,
       hospitalId: req.hospitalId,
     };
-    if (isDoctorWithoutIpdDoctorRecord(req) || isNurseWithoutIpdPanel(req)) {
-      query.patient_type = "OP";
-    }
     const patients = await Patient.find(query);
-    res.json(patients);
+    let rows = patients;
+    if (isDoctorWithoutIpdDoctorRecord(req) || isNurseWithoutIpdPanel(req)) {
+      const IPAdmission = req.tenantDb.model("IPAdmission");
+      const openMap = await loadOpenAdmissionMap(
+        IPAdmission,
+        req.hospitalId,
+        patients.map((row) => row._id),
+      );
+      rows = patients.filter((row) => !openMap.has(String(row._id)));
+    }
+    const IPAdmission = req.tenantDb.model("IPAdmission");
+    const openMap = await loadOpenAdmissionMap(
+      IPAdmission,
+      req.hospitalId,
+      rows.map((row) => row._id),
+    );
+    res.json(
+      rows.map((row) =>
+        presentPatient(row, {
+          admission: openMap.get(String(row._id)) || null,
+        }),
+      ),
+    );
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -664,7 +677,16 @@ router.get("/:id", async (req, res) => {
     if (!patient) {
       return res.status(404).json({ message: "Patient not found" });
     }
-    if (blockInpatientRecordAccess(req, res, patient)) return;
+    const IPAdmission = req.tenantDb.model("IPAdmission");
+    const open = patient._id
+      ? await IPAdmission.findOne({
+          hospitalId: req.hospitalId,
+          patientId: patient._id,
+          patient_status: "Admitted",
+        })
+      : null;
+    const view = presentPatient(patient, { admission: open });
+    if (blockInpatientRecordAccess(req, res, view)) return;
     if (isDoctorRole(req)) {
       const doctorIds = await resolveRequestDoctorIds(req);
       const prescriptions = await req.tenantDb
@@ -676,11 +698,7 @@ router.get("/:id", async (req, res) => {
         .select("doctorId")
         .lean()
         .catch(() => []);
-      const patientWithRx = {
-        ...patient.toObject(),
-        prescriptions,
-      };
-      if (!patientVisibleToDoctorIds(patientWithRx, doctorIds)) {
+      if (!patientVisibleToDoctorIds({ ...view, prescriptions }, doctorIds)) {
         return res.status(403).json({
           message:
             "Patient is not assigned to you and you have no visit on this record.",
@@ -688,9 +706,7 @@ router.get("/:id", async (req, res) => {
       }
     }
 
-    const responsePayload = patient.toObject ? patient.toObject() : { ...patient };
-
-    res.json(responsePayload);
+    res.json(view);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -730,143 +746,71 @@ router.post("/", async (req, res) => {
         "IPD patient registration is not included in your subscription plan.",
       );
     }
-    const patient = new Patient({ ...req.body, hospitalId: req.hospitalId });
-    const newPatient = await patient.save();
-
-    // New OP registration → create today's Prescription visit so they appear in OPD queue
-    let initialVisit = null;
-    let initialAdmission = null;
-    if (newPatient.patient_type === "OP") {
-      try {
-        const Prescription = req.tenantDb.model("Prescription");
-        const doctorId =
-          req.body.doctorId ||
-          (req.user?.type === "Doctor" ? req.user.id : "") ||
-          "";
-        const consultantDoctor =
-          req.body.consultantDoctor ||
-          req.body.doctorName ||
-          (req.user?.type === "Doctor" ? req.user.name : "") ||
-          "";
-
-        if (doctorId) {
-          const prescriptionId = `RX-${Date.now()}-${Math.floor(
-            Math.random() * 9000 + 1000,
-          )}`;
-          const doc = await Prescription.create({
-            prescriptionId,
-            hospitalId: req.hospitalId,
-            patientId: newPatient._id,
-            UMRNo: newPatient.UMRNo,
-            doctorId: String(doctorId),
-            doctorName: consultantDoctor,
-            consultantDoctor,
-            date: new Date().toISOString().split("T")[0],
-            symptoms: "",
-            vitals: [],
-            doctorNotes: [],
-            nurseNotes: [],
-            diagnosticData: [],
-            medicineData: [],
-            paymentMethod: newPatient.paymentMethod || "Personal",
-            insurance_provider: newPatient.insurance_provider,
-            insurance_providerId: newPatient.insurance_providerId,
-            policy_number: newPatient.policy_number,
-            pharmacyStatus: "pending",
-          });
-          initialVisit = doc.toObject ? doc.toObject() : doc;
-        }
-      } catch (visitErr) {
-        console.warn(
-          "OP patient created but initial visit failed:",
-          visitErr?.message || visitErr,
-        );
-      }
+    if (INPATIENT_TYPES.has(req.body?.patient_type)) {
+      const result = await admitPatient({
+        tenantDb: req.tenantDb,
+        hospitalId: req.hospitalId,
+        body: req.body,
+      });
+      return res.status(result.httpStatus).json(result.payload);
     }
 
-    // New IP / ERA registration → create IPAdmission so they appear in IPD roster
-    if (
-      newPatient.patient_type === "IP" ||
-      newPatient.patient_type === "OPtoIP"
-    ) {
-      try {
-        const IPAdmission = req.tenantDb.model("IPAdmission");
-        const year = new Date().getFullYear();
-        const rand = Math.floor(1000 + Math.random() * 9000);
-        const admissionDate =
-          req.body.admissionDate ||
-          new Date().toISOString().split("T")[0];
-        const admissionTime =
-          req.body.admissionTime ||
-          new Date().toTimeString().slice(0, 5);
+    const patient = new Patient(
+      pickPerson(req.body, { hospitalId: req.hospitalId }),
+    );
+    const newPatient = await patient.save();
 
-        const admission = await IPAdmission.create({
-          ipNumber: `IP-${year}-${rand}`,
+    let initialVisit = null;
+    try {
+      const Prescription = req.tenantDb.model("Prescription");
+      const doctorId =
+        req.body.doctorId ||
+        (req.user?.type === "Doctor" ? req.user.id : "") ||
+        "";
+      const consultantDoctor =
+        req.body.consultantDoctor ||
+        req.body.doctorName ||
+        (req.user?.type === "Doctor" ? req.user.name : "") ||
+        "";
+
+      if (doctorId) {
+        const prescriptionId = `RX-${Date.now()}-${Math.floor(
+          Math.random() * 9000 + 1000,
+        )}`;
+        const doc = await Prescription.create({
+          prescriptionId,
           hospitalId: req.hospitalId,
           patientId: newPatient._id,
           UMRNo: newPatient.UMRNo,
-          patientName: newPatient.name,
-          admissionDate,
-          admissionTime,
-          mlcNo: req.body.mlcNo,
-          patient_status: "Admitted",
-          consultantDoctor:
-            req.body.consultantDoctor || newPatient.consultantDoctor,
-          doctorId: req.body.doctorId || newPatient.doctorId,
-          medicalOfficerName: req.body.medicalOfficerName,
-          medicalOfficerId: req.body.medicalOfficerId,
-          patientRepresentiveOfficer: req.body.patientRepresentiveOfficer,
-          wardName: req.body.wardName,
-          wardId: req.body.wardId,
-          selectedBed: req.body.selectedBed,
-          transfers: Array.isArray(req.body.transfers) ? req.body.transfers : [],
-          chiefComplaintsPresentIllnessHistory:
-            req.body.chiefComplaintsPresentIllnessHistory,
-          consciousness: req.body.consciousness,
-          gcs: req.body.gcs,
-          pupils: req.body.pupils,
-          systemicExamination: req.body.systemicExamination,
-          provisionalDiagnosis: req.body.provisionalDiagnosis,
-          vitals: req.body.vitals || [],
-          doctorNotes: req.body.doctorNotes || [],
-          nurseNotes: req.body.nurseNotes || [],
-          insulinChart: req.body.insulinChart || [],
-          investigations: req.body.investigations || [],
-          procedures: req.body.procedures || [],
-          treatment: req.body.treatment || [],
-          casualtyTreatment: req.body.casualtyTreatment || [],
+          doctorId: String(doctorId),
+          doctorName: consultantDoctor,
+          consultantDoctor,
+          date: new Date().toISOString().split("T")[0],
+          symptoms: "",
+          vitals: [],
+          doctorNotes: [],
+          nurseNotes: [],
+          diagnosticData: [],
+          medicineData: [],
           paymentMethod: newPatient.paymentMethod || "Personal",
           insurance_provider: newPatient.insurance_provider,
           insurance_providerId: newPatient.insurance_providerId,
           policy_number: newPatient.policy_number,
+          pharmacyStatus: "pending",
         });
-
-        newPatient.patient_type = "IP";
-        newPatient.activeAdmissionId = admission._id;
-        newPatient.admissionDate = admission.admissionDate;
-        newPatient.admissionTime = admission.admissionTime;
-        newPatient.wardName = admission.wardName;
-        newPatient.wardId = admission.wardId;
-        newPatient.selectedBed = admission.selectedBed;
-        newPatient.consultantDoctor = admission.consultantDoctor;
-        newPatient.doctorId = admission.doctorId;
-        newPatient.patient_status = "Admitted";
-        await newPatient.save();
-        initialAdmission = admission.toObject
-          ? admission.toObject()
-          : admission;
-      } catch (admitErr) {
-        console.warn(
-          "IP patient created but initial admission failed:",
-          admitErr?.message || admitErr,
-        );
+        initialVisit = doc.toObject ? doc.toObject() : doc;
       }
+    } catch (visitErr) {
+      console.warn(
+        "OP patient created but initial visit failed:",
+        visitErr?.message || visitErr,
+      );
     }
 
     res.status(201).json({
-      ...newPatient.toObject(),
+      ...presentPatient(newPatient),
       initialVisit,
-      initialAdmission,
+      initialAdmission: null,
     });
   } catch (error) {
     console.error("POST /api/patients failed:", error?.message || error);
@@ -931,24 +875,7 @@ router.put("/:id", async (req, res) => {
       );
     }
 
-    const body = { ...(req.body || {}) };
-    delete body.prescriptions;
-    delete body.vitals;
-    delete body.doctorNotes;
-    delete body.nurseNotes;
-    delete body.treatment;
-    delete body.investigations;
-    delete body.procedures;
-    delete body.insulinChart;
-    delete body.transfers;
-    delete body._id;
-    delete body.UMRNo;
-    delete body.hospitalId;
-    delete body.__v;
-    delete body.activeAdmission;
-    delete body.createdAt;
-    delete body.updatedAt;
-
+    const body = pickPerson(req.body || {});
     const patientFields = body;
 
     let patient = existingPatient;
@@ -969,15 +896,19 @@ router.put("/:id", async (req, res) => {
       );
     }
 
-    const hydrated = patient.toObject ? patient.toObject() : { ...patient };
-
-    syncClinicalCasesFromPatient(
-      req.tenantDb,
-      req.hospitalId,
-      hydrated,
-    ).catch((err) => {
-      console.warn("Clinical case sync failed:", err?.message || err);
+    const IPAdmission = req.tenantDb.model("IPAdmission");
+    const open = await IPAdmission.findOne({
+      hospitalId: req.hospitalId,
+      patientId: patient._id,
+      patient_status: "Admitted",
     });
+    const hydrated = presentPatient(patient, { admission: open });
+
+    syncClinicalCasesFromPatient(req.tenantDb, req.hospitalId, hydrated).catch(
+      (err) => {
+        console.warn("Clinical case sync failed:", err?.message || err);
+      },
+    );
 
     res.json(hydrated);
   } catch (error) {
@@ -1087,11 +1018,7 @@ router.get("/:id/interim-bill", async (req, res) => {
     const { endDate } = req.query;
     const calculateEndDate = endDate ? new Date(endDate) : new Date();
 
-    const patient = await findPatientByIdOrUMR(
-      Patient,
-      id,
-      req.hospitalId,
-    );
+    const patient = await findPatientByIdOrUMR(Patient, id, req.hospitalId);
     if (!patient) {
       return res.status(404).json({ message: "Patient not found" });
     }
@@ -1178,6 +1105,13 @@ router.get("/:id/interim-bill", async (req, res) => {
     );
 
     const hospitalRow = req.hospitalRow || req.hospital;
+    const IPAdmission = req.tenantDb.model("IPAdmission");
+    const stay = await IPAdmission.findOne({
+      hospitalId: req.hospitalId,
+      patientId: patient._id,
+    })
+      .sort({ createdAt: -1 })
+      .lean();
 
     res.json({
       ...insuranceResult,
@@ -1203,8 +1137,8 @@ router.get("/:id/interim-bill", async (req, res) => {
         age: patient.age,
         gender: patient.gender,
         phone: patient.phone,
-        patient_type: patient.patient_type,
-        paymentMethod: patient.paymentMethod,
+        patient_type: stay ? "IP" : "OP",
+        paymentMethod: stay?.paymentMethod || patient.paymentMethod,
         insurance_providerId: patient.insurance_providerId,
         insurance_provider:
           patient.insurance_provider || insuranceCompany?.name || "",
@@ -1216,7 +1150,7 @@ router.get("/:id/interim-bill", async (req, res) => {
         city: patient.city,
         state: patient.state,
         postal_code: patient.postal_code,
-        admissionDate: patient.admissionDate,
+        admissionDate: stay?.admissionDate || "",
         registration_date: patient.registration_date,
         consultantDoctor: patient.consultantDoctor,
         transfers: patient.transfers,

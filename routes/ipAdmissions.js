@@ -2,17 +2,9 @@ const express = require("express");
 const mongoose = require("mongoose");
 const router = express.Router();
 const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
+const { admitPatient, updateEraChart } = require("../utils/admitPatient");
 
 applyTenantEntitlements(router, { moduleKey: "core" });
-
-/**
- * Helper to generate human-readable IP number
- */
-function generateIpNumber() {
-  const year = new Date().getFullYear();
-  const rand = Math.floor(1000 + Math.random() * 9000);
-  return `IP-${year}-${rand}`;
-}
 
 function escapeRegex(str) {
   return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -143,136 +135,12 @@ async function appendDoctorAdmissionScope(req, Patient, andConditions) {
  */
 router.post("/", async (req, res) => {
   try {
-    const IPAdmission = req.tenantDb.model("IPAdmission");
-    const Patient = req.tenantDb.model("Patient");
-
-    const {
-      patientId,
-      UMRNo,
-      admissionDate = new Date().toISOString().split("T")[0],
-      admissionTime = new Date().toTimeString().slice(0, 5),
-      mlcNo,
-      consultantDoctor,
-      doctorId,
-      medicalOfficerName,
-      medicalOfficerId,
-      patientRepresentiveOfficer,
-      wardName,
-      wardId,
-      selectedBed,
-      bedPrice = 0,
-      chiefComplaintsPresentIllnessHistory,
-      provisionalDiagnosis,
-      // Inherited insurance
-      paymentMethod,
-      insurance_provider,
-      insurance_providerId,
-      policy_number,
-      coPayPercentage,
-      coPayLimit,
-      coPayType,
-      coverage,
-      expiry_date,
-      claimNumber,
-      preAuthAmount,
-      // Referral commission
-      commissionEarnerType,
-      commissionEarnerId,
-      commissionEarnerName,
-      commissionRates,
-    } = req.body;
-
-    // Resolve patient
-    let patient = null;
-    if (patientId && mongoose.Types.ObjectId.isValid(patientId)) {
-      patient = await Patient.findOne({
-        _id: patientId,
-        hospitalId: req.hospitalId,
-      });
-    }
-    if (!patient && UMRNo) {
-      patient = await Patient.findOne({ UMRNo, hospitalId: req.hospitalId });
-    }
-
-    if (!patient) {
-      return res
-        .status(404)
-        .json({ message: "Patient not found for IP admission" });
-    }
-
-    const ipNumber = generateIpNumber();
-
-    const initialTransfer =
-      wardId || wardName
-        ? [
-            {
-              wardId,
-              wardName,
-              price: Number(bedPrice || 0),
-              transferDate: admissionDate,
-            },
-          ]
-        : [];
-
-    const admission = new IPAdmission({
-      ipNumber,
+    const result = await admitPatient({
+      tenantDb: req.tenantDb,
       hospitalId: req.hospitalId,
-      patientId: patient._id,
-      UMRNo: patient.UMRNo,
-      patientName: patient.name,
-      admissionDate,
-      admissionTime,
-      mlcNo,
-      patient_status: "Admitted",
-      consultantDoctor: consultantDoctor || patient.consultantDoctor,
-      doctorId,
-      medicalOfficerName,
-      medicalOfficerId,
-      patientRepresentiveOfficer,
-      wardName,
-      wardId,
-      selectedBed,
-      transfers: initialTransfer,
-      chiefComplaintsPresentIllnessHistory,
-      provisionalDiagnosis,
-      paymentMethod: paymentMethod || patient.paymentMethod || "Personal",
-      insurance_provider: insurance_provider || patient.insurance_provider,
-      insurance_providerId:
-        insurance_providerId || patient.insurance_providerId,
-      policy_number: policy_number || patient.policy_number,
-      coPayPercentage: coPayPercentage ?? patient.coPayPercentage ?? 0,
-      coPayLimit: coPayLimit ?? patient.coPayLimit ?? 0,
-      coPayType: coPayType || patient.coPayType || "percentage",
-      coverage: coverage || patient.coverage,
-      expiry_date: expiry_date || patient.expiry_date,
-      claimNumber,
-      preAuthAmount: preAuthAmount || 0,
-      commissionEarnerType,
-      commissionEarnerId,
-      commissionEarnerName,
-      commissionRates,
+      body: req.body,
     });
-
-    await admission.save();
-
-    // Link admission to patient and denormalize list fields
-    patient.patient_type = "IP";
-    patient.activeAdmissionId = admission._id;
-    patient.admissionDate = admission.admissionDate;
-    patient.admissionTime = admission.admissionTime;
-    patient.wardName = admission.wardName;
-    patient.wardId = admission.wardId;
-    patient.selectedBed = admission.selectedBed;
-    patient.consultantDoctor = admission.consultantDoctor;
-    patient.doctorId = admission.doctorId;
-    patient.patient_status = "Admitted";
-    await patient.save();
-
-    res.status(201).json({
-      message: "Patient admitted successfully",
-      admission,
-      patient,
-    });
+    return res.status(result.httpStatus).json(result.payload);
   } catch (error) {
     console.error("Error creating IP admission:", error);
     res.status(500).json({ message: error.message });
@@ -392,10 +260,21 @@ router.get("/", async (req, res) => {
           _id: { $in: patientIds },
         })
           .select(
-            "name age gender phone UMRNo allergiesHistory paymentMethod insurance_provider active patient_status dischargeDate dischargedAt",
+            "name age gender phone UMRNo allergiesHistory paymentMethod insurance_provider",
           )
           .lean()
       : [];
+    const legacyFlags = patientIds.length
+      ? await Patient.collection
+          .find(
+            { _id: { $in: patientIds } },
+            { projection: { active: 1, patient_status: 1 } },
+          )
+          .toArray()
+      : [];
+    const legacyMap = new Map(
+      legacyFlags.map((row) => [String(row._id), row]),
+    );
 
     const patientMap = new Map(patients.map((p) => [String(p._id), p]));
 
@@ -403,10 +282,12 @@ router.get("/", async (req, res) => {
       .map((admission) => {
         const patient =
           patientMap.get(String(admission.patientId || "")) || null;
+        const legacy = legacyMap.get(String(admission.patientId || "")) || null;
+        const legacyDischarged =
+          legacy?.patient_status === "Discharged" || legacy?.active === false;
         const resolvedStatus =
           admission.patient_status === "Discharged" ||
-          patient?.patient_status === "Discharged" ||
-          patient?.active === false
+          (admission.patient_status === "Admitted" && legacyDischarged)
             ? "Discharged"
             : admission.patient_status;
 
@@ -421,35 +302,24 @@ router.get("/", async (req, res) => {
           insurance_provider:
             admission.insurance_provider || patient?.insurance_provider,
           patient_status: resolvedStatus,
-          dischargeDate:
-            admission.dischargeDate ||
-            patient?.dischargeDate ||
-            admission.dischargeDate,
-          dischargedAt:
-            admission.dischargedAt ||
-            patient?.dischargedAt ||
-            admission.dischargedAt,
+          dischargedAt: admission.dischargedAt || "",
           active: resolvedStatus === "Admitted",
           patient_type: "IP",
           admissionId: admission._id,
-          _linkedPatientActive: patient?.active,
-          _linkedPatientStatus: patient?.patient_status,
+          _legacyDischarged: legacyDischarged,
         };
       })
       .filter((row) => {
         if (status === "Discharged") {
           if (row.patient_status === "Discharged") return true;
-          if (row._linkedPatientActive === false) return true;
-          if (row._linkedPatientStatus === "Discharged") return true;
           return false;
         }
         if (status !== "Admitted") return true;
         if (row.patient_status !== "Admitted") return false;
-        if (row._linkedPatientActive === false) return false;
-        if (row._linkedPatientStatus === "Discharged") return false;
+        if (row._legacyDischarged) return false;
         return true;
       })
-      .map(({ _linkedPatientActive, _linkedPatientStatus, ...row }) => row);
+      .map(({ _legacyDischarged, ...row }) => row);
 
     res.json({
       admissions: rows,
@@ -664,12 +534,87 @@ router.get("/:id", async (req, res) => {
 
 /**
  * PUT /api/ip-admissions/:id
- * Update clinical stay charts (vitals, notes, insulin, procedures)
+ * Update clinical stay charts. Discharge fields and the ERA casualty
+ * snapshots are not accepted here.
  */
+const STAY_PATCH_KEYS = [
+  "mlcNo",
+  "consultantDoctor",
+  "doctorId",
+  "medicalOfficerName",
+  "medicalOfficerId",
+  "patientRepresentiveOfficer",
+  "consultantHistory",
+  "wardName",
+  "wardId",
+  "selectedBed",
+  "transfers",
+  "chiefComplaintsPresentIllnessHistory",
+  "consciousness",
+  "gcs",
+  "pupils",
+  "height",
+  "weight",
+  "systemicExamination",
+  "provisionalDiagnosis",
+  "vitals",
+  "doctorNotes",
+  "nurseNotes",
+  "insulinChart",
+  "investigations",
+  "procedures",
+  "treatment",
+  "otNotes",
+  "surgeryNotes",
+  "paymentMethod",
+  "insurance_provider",
+  "insurance_providerId",
+  "policy_number",
+  "coPayPercentage",
+  "coPayLimit",
+  "coPayType",
+  "coverage",
+  "expiry_date",
+  "claimNumber",
+  "preAuthAmount",
+  "approvedAmount",
+  "commissionEarnerType",
+  "commissionEarnerId",
+  "commissionEarnerName",
+  "commissionRates",
+  "finalBillAmount",
+  "discount",
+  "insurance",
+  "paymentStatus",
+];
+
+/**
+ * PUT /api/ip-admissions/:id/era
+ * Save an edited ER form onto this stay. Does not open a second admission.
+ */
+router.put("/:id/era", async (req, res) => {
+  try {
+    const result = await updateEraChart({
+      tenantDb: req.tenantDb,
+      hospitalId: req.hospitalId,
+      admissionId: req.params.id,
+      body: req.body,
+    });
+    res.status(result.httpStatus).json(result.payload);
+  } catch (error) {
+    console.error("Error updating ER assessment:", error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 router.put("/:id", async (req, res) => {
   try {
     const IPAdmission = req.tenantDb.model("IPAdmission");
     const { id } = req.params;
+    const patch = {};
+    for (const key of STAY_PATCH_KEYS) {
+      if (req.body?.[key] !== undefined) patch[key] = req.body[key];
+    }
 
     const query = mongoose.Types.ObjectId.isValid(id)
       ? { $or: [{ _id: id }, { ipNumber: id }], hospitalId: req.hospitalId }
@@ -677,7 +622,15 @@ router.put("/:id", async (req, res) => {
 
     const updated = await IPAdmission.findOneAndUpdate(
       query,
-      { $set: req.body },
+      {
+        $set: patch,
+        $unset: {
+          repeatLabs: "",
+          summarySections: "",
+          dischargeMedications: "",
+          counselling: "",
+        },
+      },
       { new: true },
     );
 
@@ -725,19 +678,6 @@ router.post("/:id/transfer-bed", async (req, res) => {
 
     await admission.save();
 
-    // Keep patient denormalized ward fields in sync
-    const Patient = req.tenantDb.model("Patient");
-    await Patient.updateOne(
-      { _id: admission.patientId, hospitalId: req.hospitalId },
-      {
-        $set: {
-          wardId: toWardId,
-          wardName: toWardName,
-          selectedBed: toBed,
-        },
-      },
-    );
-
     res.json(admission);
   } catch (error) {
     console.error("Error logging bed transfer:", error);
@@ -767,7 +707,6 @@ router.post("/:id/discharge", async (req, res) => {
       dischargeMedications,
       dischargeSummary,
       dischargeSummaryType = "standard",
-      dischargeOrders,
       counselling,
       finalBillAmount,
       discount = 0,
@@ -784,49 +723,61 @@ router.post("/:id/discharge", async (req, res) => {
       return res.status(404).json({ message: "Admission record not found" });
     }
 
-    // Update admission record
+    const DischargeSummary = req.tenantDb.model("DischargeSummary");
+
     admission.patient_status = "Discharged";
-    admission.dischargeDate = dischargeDate;
     admission.dischargedAt = dischargedAt;
-    admission.dischargeCondition = dischargeCondition;
-    admission.dischargeTo = dischargeTo;
-    admission.dischargeDestination = dischargeDestination;
-    admission.finalDiagnosis = finalDiagnosis || admission.finalDiagnosis;
-    admission.dischargeInstructions = dischargeInstructions;
-    admission.followUpPlan = followUpPlan;
-    admission.dischargeMedications =
-      dischargeMedications || admission.dischargeMedications;
-    admission.dischargeSummary = dischargeSummary || admission.dischargeSummary;
-    admission.dischargeSummaryType = dischargeSummaryType;
-    admission.dischargeSummaryTimestamp = new Date().toISOString();
-    admission.dischargeOrders = dischargeOrders;
-    admission.counselling = counselling;
     admission.finalBillAmount = finalBillAmount ?? admission.finalBillAmount;
     admission.discount = discount;
     admission.insurance = insurance;
     admission.paymentStatus = paymentStatus;
-
     await admission.save();
 
-    // Reset patient to OP and clear denormalized IP list fields
+    const summary = await DischargeSummary.findOneAndUpdate(
+      { hospitalId: req.hospitalId, admissionId: admission._id },
+      {
+        $set: {
+          hospitalId: req.hospitalId,
+          patientId: admission.patientId,
+          admissionId: admission._id,
+          ipNumber: admission.ipNumber,
+          UMRNo: admission.UMRNo,
+          admissionDate: admission.admissionDate,
+          dischargeDate,
+          dischargeTime: req.body.dischargeTime || "",
+          lengthOfStay: req.body.lengthOfStay,
+          dischargeCondition,
+          dischargeDestination: dischargeDestination || dischargeTo,
+          dischargeTo,
+          finalDiagnosis: finalDiagnosis || "",
+          hospitalCourse: req.body.hospitalCourse || "",
+          dischargeInstructions: dischargeInstructions || "",
+          dangerSigns: req.body.dangerSigns || "",
+          followUpPlan: followUpPlan || "",
+          counselling: counselling || "",
+          summarySections: req.body.summarySections || [],
+          dischargeMedications: dischargeMedications || [],
+          repeatLabs: req.body.repeatLabs || [],
+          procedures: req.body.procedures || [],
+          summary: dischargeSummary || "",
+          summaryType: dischargeSummaryType,
+          dischargeSummaryStatus: req.body.dischargeSummaryStatus || "draft",
+          dischargeSummaryMeta: req.body.dischargeSummaryMeta || null,
+        },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+
     const patient = await Patient.findById(admission.patientId);
-    if (patient) {
-      patient.patient_type = "OP";
-      patient.active = false;
-      patient.activeAdmissionId = null;
-      patient.patient_status = "Discharged";
-      patient.dischargeDate = dischargeDate;
-      patient.dischargedAt = dischargedAt;
-      patient.wardName = undefined;
-      patient.wardId = undefined;
-      patient.selectedBed = undefined;
-      await patient.save();
-    }
+    const { presentPatient } = require("../utils/patientFields");
 
     res.json({
       message: "Patient discharged successfully",
       admission,
-      patient,
+      dischargeSummary: summary,
+      patient: patient
+        ? presentPatient(patient, { roster: "discharged" })
+        : null,
     });
   } catch (error) {
     console.error("Error discharging patient:", error);

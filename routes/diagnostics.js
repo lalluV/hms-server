@@ -1,4 +1,5 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const router = express.Router();
 const MasterDiagnostic = require("../models/MasterDiagnostic");
 const MasterParameter = require("../models/MasterParameter");
@@ -10,6 +11,37 @@ const {
 
 applyTenantEntitlements(router, { moduleKey: "lab" });
 
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function regexMatchField(field, pattern) {
+  return {
+    $regexMatch: {
+      input: { $ifNull: [field, ""] },
+      regex: pattern,
+      options: "i",
+    },
+  };
+}
+
+/** Lower score is a closer match. Name and code outrank description and department. */
+function diagnosticSearchRank(pattern) {
+  const exact = `^${pattern}$`;
+  const prefix = `^${pattern}`;
+  return {
+    $switch: {
+      branches: [
+        { case: regexMatchField("$name", exact), then: 0 },
+        { case: regexMatchField("$name", prefix), then: 1 },
+        { case: regexMatchField("$name", pattern), then: 2 },
+        { case: regexMatchField("$code", pattern), then: 3 },
+      ],
+      default: 4,
+    },
+  };
+}
+
 // Get all diagnostics with pagination and search
 router.get("/", async (req, res) => {
   try {
@@ -17,27 +49,28 @@ router.get("/", async (req, res) => {
     const Parameter = req.tenantDb.model("Parameter");
 
     const { search, page = 1, limit } = req.query;
+    const searchText = typeof search === "string" ? search.trim() : "";
 
     // Use different limits based on whether search is active
-    const defaultLimit = search ? 10 : 50;
+    const defaultLimit = searchText ? 10 : 50;
     const actualLimit = limit ? parseInt(limit) : defaultLimit;
 
-    // Build search query
+    // Build search query. Type and visit type are excluded: "lab" / "opd"
+    // would otherwise match every test that merely has that field set.
     let searchQuery = { hospitalId: req.hospitalId };
-    if (search) {
+    let escapedSearch = "";
+    if (searchText) {
+      escapedSearch = escapeRegex(searchText);
+      const contains = { $regex: escapedSearch, $options: "i" };
       searchQuery.$or = [
-        { code: { $regex: search, $options: "i" } },
-        { name: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-        { deptname: { $regex: search, $options: "i" } },
-        { subdeptname: { $regex: search, $options: "i" } },
-        { type: { $regex: search, $options: "i" } },
-        { visitType: { $regex: search, $options: "i" } },
-        // legacy embedded snapshots
-        { "parameters.name": { $regex: search, $options: "i" } },
-        { "parameters.category": { $regex: search, $options: "i" } },
-        { "includedTests.name": { $regex: search, $options: "i" } },
-        { "includedTests.code": { $regex: search, $options: "i" } },
+        { name: contains },
+        { code: contains },
+        { description: contains },
+        { deptname: contains },
+        { subdeptname: contains },
+        { "includedTests.name": contains },
+        { "includedTests.code": contains },
+        { "parameters.name": contains },
       ];
     }
 
@@ -48,10 +81,29 @@ router.get("/", async (req, res) => {
     const totalDiagnostics = await Diagnostic.countDocuments(searchQuery);
 
     // Do not populate diagnosticId → MasterDiagnostic (lives on master DB, not tenant)
-    const diagnostics = await Diagnostic.find(searchQuery)
-      .sort({ createdAt: -1 }) // Sort by newest first
-      .skip(skip)
-      .limit(actualLimit);
+    let diagnostics;
+    if (searchText) {
+      // Aggregate $match does not cast hospitalId. A string id matches
+      // nothing, so the search list comes back empty.
+      const hospitalObjectId = mongoose.Types.ObjectId.isValid(
+        String(req.hospitalId),
+      )
+        ? new mongoose.Types.ObjectId(String(req.hospitalId))
+        : req.hospitalId;
+      diagnostics = await Diagnostic.aggregate([
+        { $match: { ...searchQuery, hospitalId: hospitalObjectId } },
+        { $addFields: { _searchRank: diagnosticSearchRank(escapedSearch) } },
+        { $sort: { _searchRank: 1, name: 1 } },
+        { $skip: skip },
+        { $limit: actualLimit },
+        { $project: { _searchRank: 0 } },
+      ]);
+    } else {
+      diagnostics = await Diagnostic.find(searchQuery)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(actualLimit);
+    }
 
     // Calculate pagination info
     const pageNum = parseInt(page, 10) || 1;
@@ -70,8 +122,8 @@ router.get("/", async (req, res) => {
         hasNextPage,
         hasPrevPage,
         limit: actualLimit,
-        isSearchActive: !!search,
-        searchTerm: search || null,
+        isSearchActive: !!searchText,
+        searchTerm: searchText || null,
       },
     });
   } catch (error) {

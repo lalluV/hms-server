@@ -555,12 +555,23 @@ async function search_patients(ctx, args) {
     matchReason = patients.length ? "fuzzy" : "none";
   }
 
+  const { loadOpenAdmissionMap, presentPatient } = require("./patientFields");
+  const IPAdmission = ctx.tenantDb.model("IPAdmission");
+  const openMap = await loadOpenAdmissionMap(
+    IPAdmission,
+    ctx.hospitalId,
+    patients.map((row) => row._id),
+  );
+
   if (ctx.role === "Doctor" && patients.length > 3 && ctx.userId) {
-    const preferred = patients.filter(
-      (p) =>
-        String(p.doctorId) === String(ctx.userId) ||
-        String(p.doctorId) === String(ctx.staffMongoId),
-    );
+    const preferred = patients.filter((p) => {
+      const stay = openMap.get(String(p._id));
+      return (
+        stay &&
+        (String(stay.doctorId) === String(ctx.userId) ||
+          String(stay.doctorId) === String(ctx.staffMongoId))
+      );
+    });
     if (preferred.length) patients = preferred.slice(0, limit);
   }
 
@@ -568,21 +579,26 @@ async function search_patients(ctx, args) {
     matchReason,
     searched,
     count: patients.length,
-    patients: patients.map((p) => ({
-      id: p._id,
-      UMRNo: p.UMRNo,
-      name: p.name,
-      gender: p.gender,
-      age: p.age,
-      phone: p.phone,
-      patient_type: p.patient_type,
-      patient_status: p.patient_status,
-      wardName: p.wardName,
-      selectedBed: p.selectedBed,
-      consultantDoctor: p.consultantDoctor,
-      admissionDate: p.admissionDate,
-      active: p.active,
-    })),
+    patients: patients.map((p) => {
+      const view = presentPatient(p, {
+        admission: openMap.get(String(p._id)) || null,
+      });
+      return {
+        id: view._id,
+        UMRNo: view.UMRNo,
+        name: view.name,
+        gender: view.gender,
+        age: view.age,
+        phone: view.phone,
+        patient_type: view.patient_type,
+        patient_status: view.patient_status,
+        wardName: view.wardName || "",
+        selectedBed: view.selectedBed || "",
+        consultantDoctor: view.consultantDoctor || "",
+        admissionDate: view.admissionDate || "",
+        active: view.active,
+      };
+    }),
     message:
       patients.length === 0
         ? `No patients found for "${q}" (tried: ${searched.join(", ")}). Try full UMR or phone.`
@@ -615,28 +631,35 @@ async function get_patient_summary(ctx, args) {
 
   if (!patient) return { error: "Patient not found" };
 
+  const { presentPatient } = require("./patientFields");
+  const IPAdmission = ctx.tenantDb.model("IPAdmission");
+  const open = await IPAdmission.findOne({
+    hospitalId: ctx.hospitalId,
+    patientId: patient._id,
+    patient_status: "Admitted",
+  }).lean();
+  const view = presentPatient(patient, { admission: open });
+
   const base = {
-    id: patient._id,
-    UMRNo: patient.UMRNo,
-    name: patient.name,
-    gender: patient.gender,
-    age: patient.age,
-    phone: patient.phone,
-    email: patient.email,
-    patient_type: patient.patient_type,
-    patient_status: patient.patient_status,
-    wardName: patient.wardName,
-    selectedBed: patient.selectedBed,
-    consultantDoctor: patient.consultantDoctor,
-    doctorId: patient.doctorId,
-    admissionDate: patient.admissionDate,
-    admissionTime: patient.admissionTime,
-    dischargeTo: patient.dischargeTo,
-    insurance_provider: patient.insurance_provider,
-    paymentMethod: patient.paymentMethod,
-    provisionalDiagnosis: patient.provisionalDiagnosis,
-    allergiesHistory: patient.allergiesHistory,
-    active: patient.active,
+    id: view._id,
+    UMRNo: view.UMRNo,
+    name: view.name,
+    gender: view.gender,
+    age: view.age,
+    phone: view.phone,
+    email: view.email,
+    patient_type: view.patient_type,
+    patient_status: view.patient_status,
+    wardName: view.wardName || "",
+    selectedBed: view.selectedBed || "",
+    consultantDoctor: view.consultantDoctor || "",
+    doctorId: view.doctorId || "",
+    admissionDate: view.admissionDate || "",
+    admissionTime: view.admissionTime || "",
+    insurance_provider: view.insurance_provider,
+    paymentMethod: view.paymentMethod,
+    allergiesHistory: view.allergiesHistory,
+    active: view.active,
   };
 
   const patientIdStr = String(patient._id);
@@ -692,28 +715,21 @@ async function get_patient_summary(ctx, args) {
   }
 
   const Prescription = ctx.tenantDb.model("Prescription");
-  const IPAdmission = ctx.tenantDb.model("IPAdmission");
-  const [prescriptionRows, admission] = await Promise.all([
-    Prescription.find({
+  const prescriptionRows = await Prescription.find({
+    hospitalId: ctx.hospitalId,
+    $or: [{ patientId: patient._id }, { UMRNo: patient.UMRNo }],
+  })
+    .sort({ createdAt: -1 })
+    .limit(8)
+    .lean();
+  const admission =
+    open ||
+    (await IPAdmission.findOne({
       hospitalId: ctx.hospitalId,
-      $or: [{ patientId: patient._id }, { UMRNo: patient.UMRNo }],
+      patientId: patient._id,
     })
       .sort({ createdAt: -1 })
-      .limit(8)
-      .lean(),
-    patient.activeAdmissionId
-      ? IPAdmission.findOne({
-          _id: patient.activeAdmissionId,
-          hospitalId: ctx.hospitalId,
-        }).lean()
-      : IPAdmission.findOne({
-          hospitalId: ctx.hospitalId,
-          patientId: patient._id,
-          patient_status: "Admitted",
-        })
-          .sort({ createdAt: -1 })
-          .lean(),
-  ]);
+      .lean());
   const chart = admission || {};
 
   const recentNotes = (chart.doctorNotes || []).slice(-10).map((n) => ({
@@ -846,22 +862,26 @@ async function get_appointments(ctx, args) {
 
 async function get_opd_ipd_census(ctx) {
   const Patient = ctx.tenantDb.model("Patient");
+  const IPAdmission = ctx.tenantDb.model("IPAdmission");
   const Ward = ctx.tenantDb.model("Ward");
+  const { loadRosterSets, objectIds } = require("./patientFields");
+  const Prescription = ctx.tenantDb.model("Prescription");
+  const roster = await loadRosterSets(
+    IPAdmission,
+    Prescription,
+    ctx.hospitalId,
+    Patient,
+  );
+  const excluded = objectIds(roster.excludeFromOp);
 
-  const [opCount, ipCount, wards] = await Promise.all([
+  const [opCount, wards] = await Promise.all([
     Patient.countDocuments({
       hospitalId: ctx.hospitalId,
-      patient_type: { $in: ["OP", "op", "Outpatient"] },
-      active: { $ne: false },
-    }),
-    Patient.countDocuments({
-      hospitalId: ctx.hospitalId,
-      patient_type: { $in: ["IP", "ip", "Inpatient"] },
-      active: { $ne: false },
-      patient_status: { $nin: ["Discharged", "discharged"] },
+      ...(excluded.length ? { _id: { $nin: excluded } } : {}),
     }),
     Ward.find({ hospitalId: ctx.hospitalId }).lean(),
   ]);
+  const ipCount = roster.openIds.length;
 
   const wardOccupancy = wards.map((w) => {
     const beds = w.beds || [];
@@ -1345,16 +1365,25 @@ async function search_receipts(ctx, args) {
 
 async function count_patients(ctx, args) {
   const Patient = ctx.tenantDb.model("Patient");
+  const IPAdmission = ctx.tenantDb.model("IPAdmission");
+  const Prescription = ctx.tenantDb.model("Prescription");
+  const { loadRosterSets, objectIds } = require("./patientFields");
   const type = args.patient_type || "all";
+  const roster = await loadRosterSets(
+    IPAdmission,
+    Prescription,
+    ctx.hospitalId,
+    Patient,
+  );
   const filter = { hospitalId: ctx.hospitalId };
-  if (args.activeOnly !== false) filter.active = { $ne: false };
   if (type === "OP") {
-    filter.patient_type = { $in: ["OP", "op", "Outpatient"] };
+    const excluded = objectIds(roster.excludeFromOp);
+    if (excluded.length) filter._id = { $nin: excluded };
   } else if (type === "IP") {
-    filter.patient_type = { $in: ["IP", "ip", "Inpatient"] };
+    filter._id = { $in: objectIds(roster.openIds) };
   }
   const count = await Patient.countDocuments(filter);
-  return { patient_type: type, count, filterApplied: filter };
+  return { patient_type: type, count };
 }
 
 async function list_todays_op(ctx, args) {
@@ -1367,17 +1396,9 @@ async function list_todays_op(ctx, args) {
 
   const filter = {
     hospitalId: ctx.hospitalId,
-    patient_type: { $in: ["OP", "op", "Outpatient"] },
-    $or: [
-      { registration_date: today },
-      { appointment_date: today },
-      { registration_date: { $regex: today } },
-    ],
+    date: today,
   };
-
-  let doctorFilter = null;
   if (mineOnly && ctx.role === "Doctor") {
-    // Assigned consultant OR a prescription visit under this doctor.
     const Staff = ctx.tenantDb.model("Staff");
     const me = await Staff.findById(ctx.staffMongoId).select("id userId").lean();
     const ids = [
@@ -1387,40 +1408,40 @@ async function list_todays_op(ctx, args) {
           .filter(Boolean),
       ),
     ];
-    const doctorClauses = [];
-    for (const id of ids) {
-      doctorClauses.push({ doctorId: id });
-      doctorClauses.push({ "prescriptions.doctorId": id });
-    }
-    if (doctorClauses.length) {
-      doctorFilter = { $or: doctorClauses };
-    }
+    if (ids.length) filter.doctorId = { $in: ids };
   }
 
-  const query = doctorFilter ? { $and: [filter, doctorFilter] } : filter;
-  const rows = await Patient.find(query)
-    .select(
-      "UMRNo name gender age phone consultantDoctor doctorId registration_date appointment_date",
-    )
-    .sort({ registration_date: -1, name: 1 })
+  const Prescription = ctx.tenantDb.model("Prescription");
+  const visits = await Prescription.find(filter)
+    .sort({ createdAt: -1 })
     .limit(limit)
     .lean();
+  const patientIds = visits.map((row) => row.patientId).filter(Boolean);
+  const people = patientIds.length
+    ? await Patient.find({ _id: { $in: patientIds } })
+        .select("UMRNo name gender age phone")
+        .lean()
+    : [];
+  const peopleById = new Map(people.map((row) => [String(row._id), row]));
 
   return {
     date: today,
-    count: rows.length,
-    mineOnly: Boolean(doctorFilter),
-    patients: rows.map((p) => ({
-      UMRNo: p.UMRNo,
-      name: p.name,
-      gender: p.gender,
-      age: p.age,
-      phone: p.phone,
-      consultantDoctor: p.consultantDoctor,
-      doctorId: p.doctorId,
-      registration_date: p.registration_date,
-      appointment_date: p.appointment_date,
-    })),
+    count: visits.length,
+    mineOnly: Boolean(filter.doctorId),
+    patients: visits.map((visit) => {
+      const person = peopleById.get(String(visit.patientId)) || {};
+      return {
+        UMRNo: person.UMRNo || visit.UMRNo,
+        name: person.name || "",
+        gender: person.gender || "",
+        age: person.age || "",
+        phone: person.phone || "",
+        consultantDoctor: visit.consultantDoctor || visit.doctorName || "",
+        doctorId: visit.doctorId || "",
+        registration_date: visit.date,
+        appointment_date: visit.date,
+      };
+    }),
   };
 }
 

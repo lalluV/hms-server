@@ -53,6 +53,7 @@ const patientSchema = new mongoose.Schema(
       alcohol: { type: Boolean, default: false },
       smoking: { type: Boolean, default: false },
       illicitDrugs: { type: Boolean, default: false },
+      habitsNil: { type: Boolean, default: false },
       other: { type: String },
       maritalStatus: { type: String },
       familyHistory: { type: String },
@@ -68,46 +69,6 @@ const patientSchema = new mongoose.Schema(
     coPayType: { type: String, default: "percentage" },
     coverage: { type: String },
     expiry_date: { type: String },
-
-    // Current State & Pointers
-    patient_type: {
-      type: String,
-      enum: ["OP", "IP", "OPtoIP"],
-      default: "OP",
-    },
-    active: { type: Boolean, default: true },
-    activeAdmissionId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "IPAdmission",
-      default: null,
-    },
-
-    // Optional vitals snapshot (also on visit/admission)
-    weight: { type: String },
-    height: { type: String },
-
-    // Discharge summary snapshot
-    dischargeDate: { type: String },
-    dischargeTime: { type: String },
-    lengthOfStay: { type: Number, default: 1 },
-    dischargeCondition: { type: String, default: "Stable" },
-    dischargeDestination: { type: String, default: "Home" },
-    dischargeTo: { type: String },
-    finalDiagnosis: { type: String },
-    hospitalCourse: { type: String },
-    dischargeInstructions: { type: String },
-    dangerSigns: { type: String },
-    followUpPlan: { type: String },
-    counselling: { type: String },
-    summarySections: [mongoose.Schema.Types.Mixed],
-    dischargeMedications: [mongoose.Schema.Types.Mixed],
-    repeatLabs: [mongoose.Schema.Types.Mixed],
-    procedures: [mongoose.Schema.Types.Mixed],
-    dischargeSummary: { type: String },
-    dischargeSummaryType: { type: String, default: "standard" },
-    dischargeSummaryTimestamp: { type: Date },
-    dischargeSummaryStatus: { type: String, default: "draft" },
-    dischargeSummaryMeta: mongoose.Schema.Types.Mixed,
 
     // Registration & Audit
     registered_by: { type: String },
@@ -126,7 +87,7 @@ const patientSchema = new mongoose.Schema(
 
 patientSchema.index({ hospitalId: 1, phone: 1 });
 patientSchema.index({ hospitalId: 1, UMRNo: 1 }, { unique: true });
-patientSchema.index({ hospitalId: 1, active: 1, patient_type: 1 });
+patientSchema.index({ hospitalId: 1, name: 1 });
 patientSchema.index(
   { hospitalId: 1, publicRegistrationKey: 1 },
   {

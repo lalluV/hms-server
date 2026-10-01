@@ -857,3 +857,9 @@ router.post("/review-followup/reply-stream", async (req, res) => {
 });
 
 module.exports = router;
+module.exports.OPD_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM =
+  OPD_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM;
+module.exports.PARSE_CLINICAL_NOTE_SYSTEM_PROMPT =
+  PARSE_CLINICAL_NOTE_SYSTEM_PROMPT;
+module.exports.buildOpdReviewFollowUpUserPrompt =
+  buildOpdReviewFollowUpUserPrompt;

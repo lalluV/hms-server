@@ -17,6 +17,7 @@ const {
   buildIpdReviewFollowUpUserPrompt,
   mergeIpdChartDelta,
   formatDoctorNotesLayout,
+  ERA_NOTE_SECTION_ORDER,
 } = require("../utils/ipdAi");
 
 const OPENAI_API_BASE_URL = "https://api.openai.com/v1";
@@ -272,28 +273,33 @@ STRICT RULES:
 8. Keep discharge instructions and follow-up plan in clear, actionable language for the patient and caregiver.
 
 HTML REQUIREMENTS:
-- Wrap everything in a single root <div> with inline styles: font-family Arial, sans-serif; font-size 14px; line-height 1.6; color #222;
-- Section headings: <h2 style="color:#002E81;border-bottom:2px solid #002E81;padding-bottom:4px;margin-top:20px;">
-- Sub-headings: <h3 style="color:#333;margin-top:12px;">
-- Use <p>, <ul>/<li> for lists, <strong> for labels
-- Print-friendly: avoid dark backgrounds; use page-break-inside:avoid on major sections
+- Return inner HTML only. Do not include a document title or a patient-demographics header; the print layout already shows UMR, IP number, name, age/gender, doctor, ward/bed, admission, and discharge.
+- Each section must be: <section class="prescription-section"><p class="prescription-section-kicker">Title</p><div class="discharge-summary-copy">...</div></section>
+- Do not set inline colors, fonts, or borders.
+- Use <p> and <ul>/<li> for prose. Use <table class="printable-table"> only for medicines or comparative results that are already tabular in the data.
 
-SECTION ORDER (include only when data exists):
-1. DISCHARGE SUMMARY (h1 title)
-2. Patient Information — age range, gender, UMR, admission/discharge dates, length of stay, ward, consultant
-3. Emergency Assessment — MLC, chief complaints, casualty treatment, initial findings
-4. Admission Details — reason for admission, bed/ward, consultant history
-5. Clinical Summary — presenting illness, relevant history, examination highlights
-6. Hospital Course — day-by-day or chronological narrative from doctor/nurse notes
-7. Investigations — abnormal findings and completed test summaries only; note clinical significance
-8. Treatment Given — key inpatient medications/procedures with purpose
-9. Insulin Management — only if insulinChart data exists; summarize GRBS control and regimen
-10. Discharge Medications — name, dose, frequency, duration as list
-11. Discharge Condition — stable/improved/etc. and destination
-12. Discharge Instructions — numbered patient-facing instructions
-13. Follow-up Plan — appointments, repeat tests, warning signs
-14. Emergency Contact
-15. Medical Team`;
+SECTION ORDER (include a section only when the record has facts for it):
+1. Primary consultant
+2. Provisional diagnosis
+3. Final diagnosis
+4. Past medical history
+5. Allergies
+6. Procedure / Surgery — name and date only
+7. History of presenting complaints
+8. Emergency evaluation — casualty care, when present
+9. Condition on admission — vitals on arrival
+10. General / Physical examination
+11. Systemic examination
+12. Course in hospital
+13. OT findings
+14. Condition on discharge — status, destination, discharge vitals
+15. Discharge medications — name, route, frequency, when, duration, instructions
+16. Diet care
+17. Discharge advice
+18. Review / Follow-up
+19. Urgent care — when to return to emergency
+20. Emergency contact
+Do not include sections titled Treatment during stay, Inpatient Treatment Given, or Investigations during hospitalization.`;
 
 const DISCHARGE_SUMMARY_USER_PROMPT = (
   patientData,
@@ -305,7 +311,7 @@ Before writing:
 - For vitals: describe trends (e.g. "BP remained 120–140/70–85 mmHg; SpO2 stable at 96–98%")
 - For investigations.abnormalFindings: list only clinically significant results with interpretation
 - For insulinChart: summarize control status, dose range, and insulin types used
-- For Emergency / Casualty: ALWAYS include an "Emergency Assessment & Casualty Care" section whenever emergencyAssessment, MLC No, presenting complaints in ER, casualty treatment, or emergency medications are present
+- For Emergency / Casualty: include an "Emergency evaluation" section whenever emergencyAssessment, MLC number, presenting complaints in ER, or casualty treatment are present
 - If summarySections exist in patientData, incorporate these case-tailored sections into the clinical summary and hospital course
 
 Patient Data:
@@ -580,9 +586,13 @@ const NOTE_SECTION_ALIASES = {
   examination: "examination",
   exam: "examination",
   findings: "examination",
+  systemicexamination: "examination",
   diagnosis: "diagnosis",
   impression: "diagnosis",
   provisionaldiagnosis: "diagnosis",
+  allergies: "allergies",
+  allergy: "allergies",
+  chiefcomplaintshistoryofpresentillness: "complaints",
   advice: "advice",
   advise: "advice",
   plan: "advice",
@@ -627,10 +637,10 @@ function normalizeNoteSections(rawSections) {
   return Object.keys(buckets).length ? buckets : null;
 }
 
-function composeNoteFromSections(sections) {
+function composeNoteFromSections(sections, sectionOrder = NOTE_SECTION_ORDER) {
   if (!sections) return "";
   const blocks = [];
-  for (const [key, label] of NOTE_SECTION_ORDER) {
+  for (const [key, label] of sectionOrder) {
     const items = sections[key];
     if (!items?.length) continue;
     blocks.push(`${label}:\n${items.map((item) => `• ${item}`).join("\n")}`);
@@ -940,7 +950,7 @@ const PARSE_CLINICAL_NOTE_USER_PROMPT = (
     clinicalSetting === "discharge"
       ? `SETTING: DISCHARGE SUMMARY. Extract ONLY discharge-relevant content from the doctor's dictation. Fill dischargeFields.finalDiagnosis (confirmed diagnosis at discharge), dischargeFields.dischargeInstructions (counselling, precautions, diet, activity, warning signs, medication adherence), dischargeFields.followUpPlan (appointments, repeat tests, when to return). Discharge medicines the patient takes home → medicines[] with action "add" only (never stop/restart). Do NOT create labTests or procedures unless explicitly ordered at discharge. Leave doctorNotes and noteSections empty unless the doctor dictated extra narrative not captured in dischargeFields.`
       : clinicalSetting === "era"
-        ? `SETTING: ERA (emergency admission). Split medicines by route: already given/administered in casualty/ER (stat, IV bolus, "given now") → set "eraRoute": "given_in_er". Medicines to continue on the ward → "eraRoute": "continue_on_ward". Default continue_on_ward if unclear. Labs → labTests only (chart pending). Include allergies in note or allergiesHistory field; use NKDA when stated. Vitals may include grbs (blood sugar) and urineOutput (ml) when mentioned. Fill eraManualExam when mentioned (do not invent): gcs as E#V#M#, consciousness one of Alert|Oriented|Drowsy|Confused|Stuporous|Unconscious, pupils text, height cm, weight kg, maritalStatus, alcohol/smoking/illicitDrugs booleans, familyHistory. Also put the same facts in examination/history note text and vitals.height/weight when stated.`
+        ? `SETTING: OPD. "stop" removes a medicine from this visit prescription. "restart" is rarely used in OPD — only if the doctor explicitly restarts a stopped chart medicine. ERA ONLY: use the same OPD clinical note. The note has these five headings by default: Chief complaints, Past history, Systemic examination, Provisional diagnosis, Allergies. noteSections keys are complaints, history, examination, diagnosis, allergies. Do not use advice. Medicines: duration "" and omit quantity. Do not default a course length and do not calculate a dispense quantity. Procedures stay in procedures[], the same as OPD.`
         : clinicalSetting === "ipd"
           ? `SETTING: IPD (ward progress note). "stop" discontinues a medicine. "restart" reactivates a previously stopped ward medicine (prefer existingContext.stoppedMedicineNames). DURATION OVERRIDE: do NOT default medicine duration to "5 days". Leave duration "" unless the doctor explicitly stated a course length (e.g. "3 days", "5d"). Ward medicines continue until stopped — never invent a course length. IV fluids still use hours when stated, else "Once". DIRECTIONS (IPD): morning/afternoon/evening/night schedule English WITHOUT a course length (no "for 5 days"). Prefer "Take in the morning and evening" style — do NOT invent per-slot tablet/ml amounts in directions unless the doctor stated an amount. dosages[] times + beforeFood only; leave amount empty or omit when not stated.`
           : `SETTING: OPD. "stop" removes a medicine from this visit prescription. "restart" is rarely used in OPD — only if the doctor explicitly restarts a stopped chart medicine.`;
@@ -960,6 +970,11 @@ ${existingLine}
 COMPLETENESS: Keep every clinical fact from CURRENT INPUT. Think like a senior clinician in any specialty — expand shorthand into clear English and place each fact by meaning (past→history, symptoms→complaints only never diagnosis, exam→examination, named impression→diagnosis else leave diagnosis empty, plan/follow-up/if-needed→advice, today's named drug orders→medicines[], ordered investigations→labTests[] never in notes, this-visit acts/services→procedures[] never medicines[], measured vitals→vitals). noteSections are bullet lists. Medicine name: keep the spoken product (brand+suffix stays as spoken; generic stays generic; expand only a standalone generic abbreviation; never rewrite a brand to its salt); leave generic_name "". Tapers = multiple medicines[] rows. Explicit stop/delete of a named drug = action stop. Explicit restart/resume of a previously stopped named drug = action restart. Tablet/Capsule/Injection unit "" (IU/ml only when stated); IV fluids duration hours or Once not 5 days; beforeFood when known. Do not drop clauses.
 
 ${clinicalSetting === "discharge" ? DISCHARGE_JSON_SHAPE_BLOCK : CLINICAL_JSON_SHAPE_BLOCK}
+${
+  clinicalSetting === "era"
+    ? `ERA OVERRIDE: Same prompt as OPD, with only these differences. noteSections keys are complaints, history, examination, diagnosis, allergies — not advice. Those five headings are already on the note. Medicine duration is "" and quantity is omitted. Do not write a course length into directions. Keep procedures in procedures[] the same as OPD.`
+    : ""
+}
 
 CURRENT INPUT:
 ${clinicalNote}`;
@@ -1249,7 +1264,7 @@ const REVIEW_FOLLOWUP_USER_PROMPT = (
     clinicalSetting === "discharge"
       ? `SETTING: DISCHARGE SUMMARY follow-up. Patch only dischargeFields (finalDiagnosis, dischargeInstructions, followUpPlan) and discharge medicines[] — no labs/procedures/vitals.`
       : clinicalSetting === "era"
-        ? `SETTING: ERA (emergency admission). Split medicines by route: already given/administered in casualty/ER (stat, IV bolus, "given now") → set "eraRoute": "given_in_er". Medicines to continue on the ward → "eraRoute": "continue_on_ward". Default continue_on_ward if unclear. Labs → labTests only (chart pending). Include allergies in note or allergiesHistory field; use NKDA when stated. Vitals may include grbs (blood sugar) and urineOutput (ml) when mentioned. Fill eraManualExam when mentioned (do not invent): gcs as E#V#M#, consciousness one of Alert|Oriented|Drowsy|Confused|Stuporous|Unconscious, pupils text, height cm, weight kg, maritalStatus, alcohol/smoking/illicitDrugs booleans, familyHistory. Also put the same facts in examination/history note text and vitals.height/weight when stated.`
+        ? `SETTING: OPD. "stop" removes a medicine from this visit prescription. "restart" is rarely used in OPD — only if the doctor explicitly restarts a stopped chart medicine. ERA ONLY: use the same OPD clinical note. The note has these five headings by default: Chief complaints, Past history, Systemic examination, Provisional diagnosis, Allergies. noteSections keys are complaints, history, examination, diagnosis, allergies. Do not use advice. Medicines: duration "" and omit quantity. Do not default a course length and do not calculate a dispense quantity. Procedures stay in procedures[], the same as OPD.`
         : clinicalSetting === "ipd"
           ? `SETTING: IPD (ward progress note). "stop" discontinues a medicine. "restart" reactivates a previously stopped ward medicine. DURATION OVERRIDE: do NOT default medicine duration to "5 days". Leave duration "" unless the doctor explicitly stated a course length. Ward medicines continue until stopped — never invent a course length. IV fluids: hours when stated, else "Once". DIRECTIONS (IPD): schedule English without course length; do not invent per-slot dose amounts unless stated.`
           : `SETTING: OPD. "stop" removes a medicine from this visit prescription.`;
@@ -2100,15 +2115,22 @@ ${
   }
 });
 
-function finalizeParsedClinicalNote(parsed, existingContext) {
+function finalizeParsedClinicalNote(
+  parsed,
+  existingContext,
+  clinicalSetting = "opd",
+) {
   // Pass through model medicines/labs/procedures — no clinical rewrite.
   // Drop generic_name: name alone is brand or generic as spoken; salt field causes swaps.
   const medicines = (
     Array.isArray(parsed.medicines) ? parsed.medicines : []
   ).map((med) => {
     if (!med || typeof med !== "object") return med;
-    const { generic_name: _g, genericName: _g2, ...rest } = med;
-    return { ...rest, generic_name: "" };
+    const { generic_name: _g, genericName: _g2, quantity: _q, ...rest } = med;
+    if (clinicalSetting === "era") {
+      return { ...rest, generic_name: "", duration: "" };
+    }
+    return { ...rest, generic_name: "", ...(_q != null ? { quantity: _q } : {}) };
   });
   const labTests = Array.isArray(parsed.labTests)
     ? parsed.labTests
@@ -2137,7 +2159,10 @@ function finalizeParsedClinicalNote(parsed, existingContext) {
     });
   }
 
-  const sectionNote = composeNoteFromSections(noteSections);
+  const isEra = clinicalSetting === "era";
+  if (isEra && noteSections?.advice) delete noteSections.advice;
+  const sectionOrder = isEra ? ERA_NOTE_SECTION_ORDER : NOTE_SECTION_ORDER;
+  const sectionNote = composeNoteFromSections(noteSections, sectionOrder);
 
   return {
     noteFormat: String(parsed.noteFormat || "narrative").trim(),
@@ -2179,9 +2204,12 @@ function finalizeParsedClinicalNote(parsed, existingContext) {
       existingContext,
     ),
     doctorNotes: formatDoctorNotesLayout(
-      isSoapNote && freeTextNote
-        ? freeTextNote
-        : freeTextNote || sectionNote || "",
+      isEra && sectionNote
+        ? sectionNote
+        : isSoapNote && freeTextNote
+          ? freeTextNote
+          : freeTextNote || sectionNote || "",
+      { sectionOrder },
     ),
     noteSections,
     dischargeFields: normalizeDischargeFields(parsed, noteSections),
@@ -2524,7 +2552,13 @@ router.post("/parse-clinical-note", async (req, res) => {
         parsed,
         clinicalNote,
       );
-      res.json(finalizeParsedClinicalNote(withMedicinePasses, existingContext));
+      res.json(
+        finalizeParsedClinicalNote(
+          withMedicinePasses,
+          existingContext,
+          clinicalSetting,
+        ),
+      );
     } catch (postError) {
       console.error("Error finalizing clinical note:", postError);
       res.status(500).json({

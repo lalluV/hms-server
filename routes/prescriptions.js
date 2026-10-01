@@ -403,8 +403,8 @@ function enrichQueueRow(rx, patientMap) {
     pastMedicalHistory: patient?.pastMedicalHistory || "",
     paymentMethod: rx.paymentMethod || patient?.paymentMethod || "Personal",
     insurance_provider: rx.insurance_provider || patient?.insurance_provider,
-    patient_type: patient?.patient_type || "OP",
-    active: patient?.active !== false,
+    patient_type: "OP",
+    active: true,
     registration_date: patient?.registration_date,
     consultantDoctor: rx.consultantDoctor || rx.doctorName || "",
     visitDate: rx.date,
@@ -689,7 +689,6 @@ router.post("/check-in", async (req, res) => {
                 doctorId: String(resolvedDoctorId || ""),
                 doctorName: resolvedDoctorName || "",
                 time: new Date().toISOString(),
-                patient_type: patient.patient_type || "OP",
               },
             ];
           }
@@ -709,7 +708,6 @@ router.post("/check-in", async (req, res) => {
                 time: new Date().toISOString(),
                 doctorId: String(resolvedDoctorId || ""),
                 doctorName: resolvedDoctorName || "",
-                patient_type: patient.patient_type || "OP",
               },
             ];
           }
@@ -749,20 +747,19 @@ router.post("/check-in", async (req, res) => {
     });
     await prescriptionDoc.save();
 
-    // Keep patient marked OP/active for queue visibility on master registry
-    if (patient.patient_type !== "IP" && patient.patient_type !== "OPtoIP") {
-      patient.patient_type = "OP";
-      patient.active = true;
-      if (resolvedDoctorId) patient.doctorId = String(resolvedDoctorId);
-      if (resolvedDoctorName) patient.consultantDoctor = resolvedDoctorName;
-      await patient.save();
-    }
+    const IPAdmission = req.tenantDb.model("IPAdmission");
+    const { presentPatient } = require("../utils/patientFields");
+    const open = await IPAdmission.findOne({
+      hospitalId: req.hospitalId,
+      patientId: patient._id,
+      patient_status: "Admitted",
+    }).lean();
 
     res.status(201).json({
       message: "Patient checked in for today's OP visit",
       created: true,
       prescription: prescriptionDoc.toObject(),
-      patient,
+      patient: presentPatient(patient, { admission: open }),
     });
   } catch (error) {
     console.error("Error checking in OP visit:", error);

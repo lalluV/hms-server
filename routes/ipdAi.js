@@ -17,6 +17,11 @@ const axios = require("axios");
 const {
   aiCompletionWithFallback,
 } = require("../utils/aiCompletionWithFallback");
+const {
+  OPD_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM,
+  PARSE_CLINICAL_NOTE_SYSTEM_PROMPT: OPD_PARSE_CLINICAL_NOTE_SYSTEM_PROMPT,
+  buildOpdReviewFollowUpUserPrompt,
+} = require("./opdAi");
 
 const OPENAI_API_BASE_URL = "https://api.openai.com/v1";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -58,6 +63,14 @@ const NOTE_SECTION_ORDER = [
   ["advice", "Advice"],
 ];
 
+const ERA_NOTE_SECTION_ORDER = [
+  ["complaints", "Chief complaints"],
+  ["history", "Past history"],
+  ["examination", "Systemic examination"],
+  ["diagnosis", "Provisional diagnosis"],
+  ["allergies", "Allergies"],
+];
+
 const NOTE_SECTION_ALIASES = {
   complaints: "complaints",
   complaint: "complaints",
@@ -77,6 +90,9 @@ const NOTE_SECTION_ALIASES = {
   treatmentplan: "advice",
   assessment: "advice",
   assessmentandplan: "advice",
+  allergies: "allergies",
+  allergy: "allergies",
+  chiefcomplaintshistoryofpresentillness: "complaints",
 };
 
 const NOTE_LABEL_TO_KEY = {
@@ -86,6 +102,9 @@ const NOTE_LABEL_TO_KEY = {
   advice: "advice",
   "doctor's advice": "advice",
   "doctors advice": "advice",
+  ...Object.fromEntries(
+    ERA_NOTE_SECTION_ORDER.map(([key, label]) => [label.toLowerCase(), key]),
+  ),
 };
 
 function itemOrigin(item) {
@@ -190,7 +209,7 @@ function parseComposedNoteSections(noteText) {
   for (const rawLine of text.split(/\r?\n/)) {
     const line = String(rawLine || "").trim();
     if (!line) continue;
-    const headerMatch = line.match(/^([A-Za-z' ]+):\s*(.*)$/);
+    const headerMatch = line.match(/^([A-Za-z][A-Za-z'& ]*):\s*(.*)$/);
     if (headerMatch) {
       const label = headerMatch[1].trim().toLowerCase();
       const key =
@@ -213,10 +232,10 @@ function parseComposedNoteSections(noteText) {
   return sections;
 }
 
-function composeNoteFromSections(sections) {
+function composeNoteFromSections(sections, sectionOrder = NOTE_SECTION_ORDER) {
   if (!sections || typeof sections !== "object") return "";
   const blocks = [];
-  for (const [key, label] of NOTE_SECTION_ORDER) {
+  for (const [key, label] of sectionOrder) {
     const raw = sections[key];
     const items = Array.isArray(raw)
       ? raw
@@ -231,7 +250,11 @@ function composeNoteFromSections(sections) {
   return blocks.join("\n\n");
 }
 
-function mergeNoteWithOps(currentNoteText, noteOps) {
+function mergeNoteWithOps(
+  currentNoteText,
+  noteOps,
+  sectionOrder = NOTE_SECTION_ORDER,
+) {
   const ops = Array.isArray(noteOps) ? noteOps : [];
   if (!ops.length) return String(currentNoteText || "");
 
@@ -254,16 +277,26 @@ function mergeNoteWithOps(currentNoteText, noteOps) {
       const idx = list.findIndex((b) => b.toLowerCase() === text.toLowerCase());
       if (idx >= 0) list.splice(idx, 1);
     } else if (!list.some((b) => b.toLowerCase() === text.toLowerCase())) {
-      list.push(text);
+      const withoutNil =
+        text.toLowerCase() === "nil"
+          ? list
+          : list.filter((b) => b.toLowerCase() !== "nil");
+      withoutNil.push(text);
+      sections[key] = withoutNil;
+      continue;
     }
     sections[key] = list;
   }
 
+  if (sectionOrder === ERA_NOTE_SECTION_ORDER) delete sections.advice;
   if (isStructured) {
-    return composeNoteFromSections(sections) || String(currentNoteText || "");
+    return (
+      composeNoteFromSections(sections, sectionOrder) ||
+      String(currentNoteText || "")
+    );
   }
 
-  const appended = NOTE_SECTION_ORDER.filter(
+  const appended = sectionOrder.filter(
     ([key]) => sections[key]?.length,
   ).map(
     ([key, label]) =>
@@ -419,11 +452,11 @@ function mergeInpatientChartDelta(
     if (kind === "add" && op.medicine) {
       medicines.splice(addedMedIndex++, 0, {
         ...op.medicine,
-        duration: op.medicine.duration || "", // Strictly no default 5-day course
+        duration: isEra ? "" : op.medicine.duration || "",
         generic_name: "",
         action: "add",
         origin: "review",
-        ...(isEra ? { eraRoute: eraRoute || "continue_on_ward" } : {}),
+        ...(isEra ? { eraRoute: eraRoute || "continue_on_ward", quantity: undefined } : {}),
       });
     } else if (kind === "edit" && op.medicine) {
       const stepsToInsert =
@@ -432,11 +465,11 @@ function mergeInpatientChartDelta(
           : [op.medicine];
       const formattedSteps = stepsToInsert.map((step) => ({
         ...step,
-        duration: step.duration || "",
+        duration: isEra ? "" : step.duration || "",
         generic_name: "",
         action: "add",
         origin: "review",
-        ...(isEra ? { eraRoute: eraRoute || "continue_on_ward" } : {}),
+        ...(isEra ? { eraRoute: eraRoute || "continue_on_ward", quantity: undefined } : {}),
       }));
 
       if (activeIdx >= 0) {
@@ -591,7 +624,11 @@ function mergeInpatientChartDelta(
   const vitals = { ...(chart.vitals || {}), ...(d.vitalsPatch || {}) };
   let doctorNotes = d.clearNote
     ? ""
-    : mergeNoteWithOps(chart.doctorNotes, d.noteOps);
+    : mergeNoteWithOps(
+        chart.doctorNotes,
+        d.noteOps,
+        isEra ? ERA_NOTE_SECTION_ORDER : NOTE_SECTION_ORDER,
+      );
 
   medicines = medicines.filter((m) => {
     const action = String(m?.action || "add").toLowerCase();
@@ -712,124 +749,34 @@ Return exactly this JSON shape:
   ]
 }`;
 
-const ERA_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM = `
+const ERA_OPD_DELTA = `
 
-ERA FOLLOW-UP MODE — SAME PATCH RULES AS AN IPD WARD PROGRESS NOTE (CRITICAL — KEEP OUTPUT TINY)
-1. GROUND TRUTH & MINIMAL PATCHING:
-- CURRENT CHART is the chart exactly as it stands right now.
-- Items are tagged origin: "review" (added in this draft) or "visit" (already on the chart).
-- INSTRUCTION is the single new update requested right now.
-- Output ONLY operations for items INSTRUCTION explicitly names or changes. Unmentioned items remain untouched.
-- If instruction does not name or refer to a medicine, medicineOps MUST be []. Same for labs, procedures, and vitals.
-- NEVER invent a standard casualty bundle. Do NOT add CBC, CBP, RBS, GRBS, LFT, RFT, ECG, X-ray, Pantop, PCM, IV fluids, or any other medicine or test unless that exact order was spoken.
-- A symptom, diagnosis, or exam finding is NOT an order. "Fever", "chest pain", "viral fever", "GCS 15", or "BP 120/80" must not create medicines or labs.
-- Match existing items using their exact "name" from CURRENT CHART.
+ERA DIFFERENCES FROM OPD (only these):
+- The clinical note already has these five headings: Chief complaints, Past history, Systemic examination, Provisional diagnosis, Allergies.
+- noteOps sections are complaints, history, examination, diagnosis, allergies. Do not use advice. Write every heading the doctor mentioned, including complaints, the same way OPD writes a clinical note.
+- Medicines: duration must be "" and quantity must be omitted. Do not default a course length. Do not calculate a dispense quantity. Do not write "for N days" into directions.
+- Procedures stay. Put this-visit procedures in procedureOps the same way OPD does.
+`;
 
-2. IN-HOSPITAL DURATION RULE (same as ward progress note):
-- DO NOT default medicine duration to "5 days". Leave duration "" unless the doctor stated a course length.
-- IV fluids: rate in ml/hr or hours when stated, else leave duration "".
+const ERA_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM = `${OPD_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM}
+${ERA_OPD_DELTA}`;
 
-3. STOPS & REMOVES (same as ward progress note):
-- When doctor says "stop med", "stop medicine", "discontinue med", "stop this medication", etc.:
-  * If CURRENT CHART has an ongoing medicine or draft medicine, target that medicine with op: "stop", match: exact name from CURRENT CHART, and populate medicine: { "name": "<name>" }.
-  * Never return empty medicineOps when the doctor instructs to stop or discontinue a medication.
-- Standalone remove command on a draft order (origin: "review") -> op: "remove".
-- Ongoing chart medicine (origin: "visit") -> op: "stop".
-
-4. NOTES (same as ward progress note):
-- Symptoms/fever/pain -> DO NOT process into complaints for now; only process diagnosis, labs, and medications that were explicitly named.
-- Past history -> noteOps section: "history"
-- Physical exam / vitals findings -> noteOps section: "examination"
-- Provisional / confirmed diagnosis -> noteOps section: "diagnosis"
-- Advice, diet, nursing care -> noteOps section: "advice"
-- Do not add a note bullet for a fact the instruction did not state.
-
-5. ERA EXTRAS — ONLY WHEN SPOKEN (do not invent):
-- If a NAMED medicine was ordered: STAT / IV push / IV bolus / "given now" / "in casualty" -> eraRoute "given_in_er". A named medicine to continue on the ward -> eraRoute "continue_on_ward". If the route was not stated, use "continue_on_ward". Do not add a medicine just to fill a route.
-- Vitals: bloodSugar / grbs and urineOutput only when a number was spoken. Leave vitalsPatch {} when no vital was spoken.
-- eraManualExamPatch only for facts spoken now: gcs as E#V#M#, consciousness one of Alert|Oriented|Drowsy|Confused|Stuporous|Unconscious, pupils text, personalHistory alcohol/smoking/illicitDrugs. Omit the object entirely when none of these were spoken.
-
-6. ASSISTANT REPLY:
-- assistantReply is required: ONE short, natural spoken sentence confirming ONLY what this instruction changed. If nothing was ordered, do not mention medicines or labs.
-
-Return exactly this JSON shape. The sample values show allowed keys only. Copy nothing from the sample. Use [] and {} for every section the instruction did not change. Omit eraManualExamPatch unless a triage fact was spoken:
-{
-  "assistantReply": "one short natural spoken sentence",
-  "clearReviewMedicines": false,
-  "clearReviewLabs": false,
-  "clearReviewProcedures": false,
-  "clearNote": false,
-  "medicineOps": [
-    {
-      "op": "add" | "edit" | "stop" | "remove",
-      "match": "existing medicine name when editing, stopping, or removing",
-      "eraRoute": "given_in_er" | "continue_on_ward",
-      "medicine": {
-        "name": "Exact Brand or Generic Name (strip Tab/Inj/Cap)",
-        "type": "Injection" | "Tablet" | "IV Fluids" | "Syrup" | "Inhaler",
-        "duration": "",
-        "directions": "Schedule in plain English",
-        "eraRoute": "given_in_er" | "continue_on_ward",
-        "dosages": [ { "time": "Morning" | "Afternoon" | "Evening" | "Night", "amount": 1, "beforeFood": false } ]
-      }
-    }
-  ],
-  "labOps": [
-    {
-      "op": "add" | "remove",
-      "name": "Standard Lab/Imaging Test Name"
-    }
-  ],
-  "procedureOps": [
-    {
-      "op": "add" | "remove",
-      "name": "Procedure Name"
-    }
-  ],
-  "vitalsPatch": {
-    "temperature": "",
-    "pulse": "",
-    "bloodPressure": "",
-    "spo2": "",
-    "respiratoryRate": "",
-    "bloodSugar": "",
-    "grbs": "",
-    "urineOutput": ""
-  },
-  "eraManualExamPatch": {
-    "gcs": "E#V#M#",
-    "consciousness": "Alert" | "Oriented" | "Drowsy" | "Confused" | "Stuporous" | "Unconscious",
-    "pupils": "Equal and reactive",
-    "personalHistory": {
-      "alcohol": false,
-      "smoking": false,
-      "illicitDrugs": false
-    }
-  },
-  "noteOps": [
-    {
-      "section": "complaints" | "history" | "examination" | "diagnosis" | "advice",
-      "action": "add" | "remove",
-      "text": "Specific clinical note bullet"
-    }
-  ]
-}`;
 
 function buildInpatientReviewFollowUpUserPrompt(
   instruction,
   currentChart,
   isEra = false,
 ) {
+  if (isEra) {
+    return `${buildOpdReviewFollowUpUserPrompt(instruction, currentChart)}
+
+ERA ONLY: Same as OPD, except the note uses Chief complaints, Past history, Systemic examination, Provisional diagnosis, and Allergies (not advice). Medicine duration is "" and quantity is omitted. Keep procedures.`;
+  }
   const chart =
     currentChart && typeof currentChart === "object" ? currentChart : {};
-  return `SETTING: ${isEra ? "ERA (Emergency Casualty & Admission) — use the SAME patch rules as an IPD ward progress note" : "IPD (Ward progress note)"}.
+  return `SETTING: IPD (Ward progress note).
 IN-HOSPITAL CARE: DURATION is "" (do NOT default to 5 days; continuous hospital orders).
-${
-  isEra
-    ? `PATCH ONLY what INSTRUCTION explicitly names. If no medicine is named, medicineOps MUST be []. Same for labs, procedures, and vitals. Do NOT invent a casualty order set.
-ERA route tags apply only to a medicine the doctor named: "given_in_er" for stat/now/casualty, otherwise "continue_on_ward". GCS, pupils, sugar, and urine output only when spoken.`
-    : `"stop" discontinues an ongoing ward medicine. "restart" reactivates a previously stopped medicine.`
-}
+"stop" discontinues an ongoing ward medicine. "restart" reactivates a previously stopped medicine.
 
 CURRENT CHART (ground truth — patch only what instruction changes):
 ${JSON.stringify(chart)}
@@ -924,15 +871,14 @@ router.post("/review-followup", async (req, res) => {
       });
     }
 
-    const systemAddendum = isEra
-      ? ERA_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM
-      : IPD_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM;
+    const systemContent = isEra
+      ? `${OPD_PARSE_CLINICAL_NOTE_SYSTEM_PROMPT}\n${ERA_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM}`
+      : `${INPATIENT_CLINICAL_NOTE_SYSTEM_PROMPT}\n${IPD_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM}`;
     const userPrompt = buildInpatientReviewFollowUpUserPrompt(
       instruction,
       chart,
       isEra,
     );
-    const systemContent = `${INPATIENT_CLINICAL_NOTE_SYSTEM_PROMPT}\n${systemAddendum}`;
 
     const followUpMessages = [
       { role: "system", content: systemContent },

@@ -22,7 +22,14 @@ const ipAdmissionSchema = new mongoose.Schema(
     mlcNo: { type: String },
     patient_status: {
       type: String,
-      enum: ["Admitted", "Discharged", "Transferred", "Expired", "LAMA"],
+      enum: [
+        "Admitted",
+        "Refused Admission",
+        "Discharged",
+        "Transferred",
+        "Expired",
+        "LAMA",
+      ],
       default: "Admitted",
     },
     consultantDoctor: { type: String },
@@ -60,22 +67,40 @@ const ipAdmissionSchema = new mongoose.Schema(
 
     // Inpatient Clinical Charts
     chiefComplaintsPresentIllnessHistory: { type: String },
+    pastMedicalHistory: { type: String },
+    pastMedications: { type: String },
+    allergiesHistory: { type: String },
     consciousness: { type: String },
     gcs: { type: String },
     pupils: { type: String },
+    height: { type: String },
+    weight: { type: String },
+    personalHistory: {
+      alcohol: { type: Boolean, default: false },
+      smoking: { type: Boolean, default: false },
+      illicitDrugs: { type: Boolean, default: false },
+      habitsNil: { type: Boolean, default: false },
+      other: { type: String },
+      maritalStatus: { type: String },
+      familyHistory: { type: String },
+    },
     systemicExamination: { type: String },
     provisionalDiagnosis: { type: String },
     vitals: [mongoose.Schema.Types.Mixed],
+    /** Vitals entered on the ER form. Ward readings stay on vitals. */
+    eraVitalEntry: { type: mongoose.Schema.Types.Mixed },
     doctorNotes: [mongoose.Schema.Types.Mixed],
     nurseNotes: [mongoose.Schema.Types.Mixed],
     insulinChart: [mongoose.Schema.Types.Mixed],
     investigations: [mongoose.Schema.Types.Mixed],
     procedures: [mongoose.Schema.Types.Mixed],
     treatment: [mongoose.Schema.Types.Mixed],
+    /** Frozen copy of the treatment list from the first ERA save. */
     casualtyTreatment: [mongoose.Schema.Types.Mixed],
+    /** Frozen copy of the investigation list from the first ERA save. */
+    casualtyInvestigations: [mongoose.Schema.Types.Mixed],
     otNotes: { type: String },
     surgeryNotes: { type: String },
-    summarySections: [mongoose.Schema.Types.Mixed],
 
     // Discharge Summary & Medical Orders
     dischargeDate: { type: String },
@@ -86,19 +111,11 @@ const ipAdmissionSchema = new mongoose.Schema(
     finalDiagnosis: { type: String },
     dischargeInstructions: { type: String },
     followUpPlan: { type: String },
-    dischargeMedications: [mongoose.Schema.Types.Mixed],
-    dischargeSummary: { type: String },
-    dischargeSummaryType: { type: String },
-    dischargeSummaryTimestamp: { type: String },
-    dischargeSummaryStatus: { type: String, default: "draft" },
-    dischargeSummaryMeta: mongoose.Schema.Types.Mixed,
     dischargeTime: { type: String },
     lengthOfStay: { type: Number },
-    repeatLabs: [mongoose.Schema.Types.Mixed],
     dangerSigns: { type: String },
     hospitalCourse: { type: String },
     dischargeOrders: { type: String },
-    counselling: { type: String },
 
     // Insurance for THIS Hospital Stay
     paymentMethod: { type: String, default: "Personal" },

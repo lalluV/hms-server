@@ -62,54 +62,6 @@ const patientSchema = new mongoose.Schema(
     coverage: { type: String },
     expiry_date: { type: String },
 
-    // Current State & Pointers
-    patient_type: {
-      type: String,
-      enum: ["OP", "IP", "OPtoIP"],
-      default: "OP",
-    },
-    active: { type: Boolean, default: true },
-    activeAdmissionId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "IPAdmission",
-      default: null,
-    },
-
-    weight: { type: String },
-    height: { type: String },
-
-    // Denormalized from active IP admission (list filters)
-    admissionDate: { type: String },
-    admissionTime: { type: String },
-    wardName: { type: String },
-    wardId: { type: String },
-    selectedBed: { type: String },
-    consultantDoctor: { type: String },
-    doctorId: { type: String },
-    patient_status: { type: String },
-    dischargeDate: { type: String },
-    dischargeTime: { type: String },
-    lengthOfStay: { type: Number, default: 1 },
-    dischargeCondition: { type: String, default: "Stable" },
-    dischargeDestination: { type: String, default: "Home" },
-    dischargeTo: { type: String },
-    finalDiagnosis: { type: String },
-    hospitalCourse: { type: String },
-    dischargeInstructions: { type: String },
-    dangerSigns: { type: String },
-    followUpPlan: { type: String },
-    counselling: { type: String },
-    summarySections: [mongoose.Schema.Types.Mixed],
-    dischargeMedications: [mongoose.Schema.Types.Mixed],
-    repeatLabs: [mongoose.Schema.Types.Mixed],
-    procedures: [mongoose.Schema.Types.Mixed],
-    dischargeSummary: { type: String },
-    dischargeSummaryType: { type: String, default: "standard" },
-    dischargeSummaryTimestamp: { type: Date },
-    dischargeSummaryStatus: { type: String, default: "draft" },
-    dischargeSummaryMeta: mongoose.Schema.Types.Mixed,
-    dischargedAt: { type: String },
-
     // Registration & Audit
     registered_by: { type: String },
     registration_date: { type: String },
@@ -128,7 +80,7 @@ const patientSchema = new mongoose.Schema(
 
 patientSchema.index({ hospitalId: 1, phone: 1 });
 patientSchema.index({ hospitalId: 1, UMRNo: 1 }, { unique: true });
-patientSchema.index({ hospitalId: 1, active: 1, patient_type: 1 });
+patientSchema.index({ hospitalId: 1, name: 1 });
 patientSchema.index(
   { hospitalId: 1, publicRegistrationKey: 1 },
   {
@@ -140,7 +92,7 @@ patientSchema.index(
 
 // Pre-save middleware for UMR number generation
 patientSchema.pre("save", async function (next) {
-  if (this.isNew) {
+  if (this.isNew && !this.UMRNo) {
     try {
       const Counter = this.db.model("Counter");
       const counter = await Counter.findByIdAndUpdate(
