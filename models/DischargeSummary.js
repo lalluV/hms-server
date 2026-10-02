@@ -63,6 +63,14 @@ const dischargeSummarySchema = new mongoose.Schema(
 );
 
 dischargeSummarySchema.index({ hospitalId: 1, UMRNo: 1 });
-dischargeSummarySchema.index({ hospitalId: 1, admissionId: 1 });
+// One summary per admission; existing duplicates must be merged before this index can build.
+dischargeSummarySchema.index(
+  { hospitalId: 1, admissionId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { admissionId: { $type: "objectId" } },
+    name: "one_summary_per_admission",
+  },
+);
 
 module.exports = mongoose.model("DischargeSummary", dischargeSummarySchema);

@@ -59,7 +59,7 @@ async function main() {
     { model: "Patient", index: { hospitalId: 1, active: 1 } },
     { model: "Patient", index: { hospitalId: 1, patient_type: 1, active: 1 } },
     { model: "Patient", index: { hospitalId: 1, createdAt: -1 } },
-    { model: "Patient", index: { hospitalId: 1, publicRegistrationKey: 1 }, options: { unique: true, sparse: true } },
+    { model: "Patient", index: { hospitalId: 1, publicRegistrationKey: 1 }, options: { unique: true, partialFilterExpression: { publicRegistrationKey: { $type: "string" } }, name: "hospitalId_publicRegistrationKey_partial_unique" } },
 
     // Staff indexes
     { model: "Staff", index: { hospitalId: 1, userId: 1 }, options: { unique: true } },

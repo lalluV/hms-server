@@ -291,6 +291,7 @@ router.get("/", async (req, res) => {
       startDate = "",
       endDate = "",
       visitType = "",
+      deptScope = "",
     } = req.query;
 
     const andConditions = [{ hospitalId: req.hospitalId }];
@@ -358,6 +359,25 @@ router.get("/", async (req, res) => {
       andConditions.push({ createdAt: { $gte: new Date(startDate) } });
     } else if (endDate) {
       andConditions.push({ createdAt: { $lte: new Date(endDate) } });
+    }
+
+    if (deptScope === "radiology") {
+      andConditions.push({
+        items: { $elemMatch: { deptname: { $regex: /^radiology$/i } } },
+      });
+    } else if (deptScope === "lab") {
+      andConditions.push({
+        items: {
+          $elemMatch: {
+            $or: [
+              { deptname: { $exists: false } },
+              { deptname: null },
+              { deptname: "" },
+              { deptname: { $not: /^radiology$/i } },
+            ],
+          },
+        },
+      });
     }
 
     if (search && search.trim()) {

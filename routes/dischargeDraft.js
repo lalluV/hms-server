@@ -103,6 +103,37 @@ function dischargeStatusRank(status) {
   return DISCHARGE_STATUS_RANK[status] ?? -1;
 }
 
+const ALLOWED_TRANSITIONS = {
+  "": ["draft", "pending_approval", "approved"],
+  draft: ["pending_approval", "approved"],
+  changes_requested: ["draft", "pending_approval", "approved"],
+  pending_approval: ["approved", "changes_requested", "draft"],
+  approved: ["draft"],
+};
+
+/**
+ * Pin a discharge summary to one admission. Uses the given id when it belongs
+ * to this patient, otherwise the open stay, otherwise the most recent stay.
+ * Returns null only when the patient has no admission at all.
+ */
+async function resolveAdmissionId(IPAdmission, { umrNo, hospitalId, admissionId }) {
+  const base = { UMRNo: umrNo, ...(hospitalId ? { hospitalId } : {}) };
+  if (mongoose.Types.ObjectId.isValid(admissionId)) {
+    const own = await IPAdmission.exists({ ...base, _id: admissionId });
+    return own ? String(own._id) : undefined;
+  }
+  const open = await IPAdmission.findOne({ ...base, patient_status: "Admitted" })
+    .sort({ createdAt: -1 })
+    .select("_id")
+    .lean();
+  if (open) return String(open._id);
+  const latest = await IPAdmission.findOne(base)
+    .sort({ createdAt: -1 })
+    .select("_id")
+    .lean();
+  return latest ? String(latest._id) : null;
+}
+
 function getModels(req) {
   if (req.tenantDb) {
     return {
@@ -129,45 +160,34 @@ router.get("/:umrNo", async (req, res) => {
     const { DischargeSummary, IPAdmission, Patient } = getModels(req);
     const umrNo = req.params.umrNo;
     const hospitalId = req.hospitalId;
-    const admissionId = String(req.query.admissionId || "").trim();
-    const admissionScope = mongoose.Types.ObjectId.isValid(admissionId)
-      ? { admissionId }
-      : {};
+    const resolved = await resolveAdmissionId(IPAdmission, {
+      umrNo,
+      hospitalId,
+      admissionId: String(req.query.admissionId || "").trim(),
+    });
+    if (resolved === undefined) {
+      return res.status(404).json({ success: false, error: "Admission not found for this patient" });
+    }
+    const admissionId = resolved || "";
+    const admissionScope = resolved ? { admissionId: resolved } : {};
 
     const query = { UMRNo: umrNo, ...admissionScope };
     if (hospitalId) {
       query.hospitalId = hospitalId;
     }
 
-    let draft = await DischargeSummary.findOne(query).sort({ updatedAt: -1 });
-    if (!draft && admissionScope.admissionId) {
-      const umrQuery = { UMRNo: umrNo };
-      if (hospitalId) umrQuery.hospitalId = hospitalId;
-      draft = await DischargeSummary.findOne(umrQuery).sort({ updatedAt: -1 });
-    }
+    const draft = await DischargeSummary.findOne(query).sort({ updatedAt: -1 });
 
-    let signedCandidates = await DischargeSummary.find({
-      UMRNo: umrNo,
-      ...(hospitalId ? { hospitalId } : {}),
-    })
+    // Signed state only ever comes from this admission's own summaries.
+    const signedCandidates = await DischargeSummary.find(query)
       .sort({ updatedAt: -1 })
       .limit(20)
       .lean();
-    if (
-      hospitalId &&
-      !signedCandidates.some(
-        (candidate) => dischargeStatusRank(dischargeStatusOf(candidate)) > 0,
-      )
-    ) {
-      signedCandidates = await DischargeSummary.find({ UMRNo: umrNo })
-        .sort({ updatedAt: -1 })
-        .limit(20)
-        .lean();
-    }
 
     const applySignedStatus = (draftData, patientRecord) => {
       const candidates = [...signedCandidates];
-      if (patientRecord) candidates.push(patientRecord);
+      // Legacy patient-level status is not tied to a stay; only trust it when unscoped.
+      if (patientRecord && !resolved) candidates.push(patientRecord);
       let best = null;
       for (const candidate of candidates) {
         const rank = dischargeStatusRank(dischargeStatusOf(candidate));
@@ -231,6 +251,8 @@ router.get("/:umrNo", async (req, res) => {
           }, patientForStatus),
         });
       }
+
+      if (resolved) return res.json({ success: true, draft: null });
 
       // Check Patient record
       const patient = await Patient.findOne({
@@ -307,11 +329,16 @@ router.post("/:umrNo", async (req, res) => {
   try {
     const { DischargeSummary, IPAdmission, Patient } = getModels(req);
     const umrNo = req.params.umrNo;
-    const hospitalId = req.hospitalId || req.body.hospitalId;
-    const admissionId = String(req.body.admissionId || "").trim();
-    const admissionScope = mongoose.Types.ObjectId.isValid(admissionId)
-      ? { admissionId }
-      : {};
+    const hospitalId = req.hospitalId;
+    const resolved = await resolveAdmissionId(IPAdmission, {
+      umrNo,
+      hospitalId,
+      admissionId: String(req.body.admissionId || "").trim(),
+    });
+    if (resolved === undefined) {
+      return res.status(404).json({ success: false, error: "Admission not found for this patient" });
+    }
+    const admissionScope = resolved ? { admissionId: resolved } : {};
 
     const filter = { UMRNo: umrNo, ...admissionScope };
     if (hospitalId) {
@@ -319,35 +346,69 @@ router.post("/:umrNo", async (req, res) => {
     }
 
     const payload = clinicalDischargePayload(req.body, { umrNo, hospitalId });
-    const existing = await DischargeSummary.findOne(filter).lean();
-    const incomingRank = dischargeStatusRank(
-      payload.dischargeSummaryStatus || "draft",
-    );
-    const existingRank = dischargeStatusRank(dischargeStatusOf(existing));
-    const keepSignedRecord =
-      existing && !req.body.statusTransition && incomingRank < existingRank;
-    if (keepSignedRecord) {
-      payload.dischargeSummaryStatus = dischargeStatusOf(existing);
-      payload.dischargeSummaryMeta = existing.dischargeSummaryMeta || null;
-      if (existing.summary) payload.summary = existing.summary;
-      if (existing.summaryType) payload.summaryType = existing.summaryType;
+    if (resolved) payload.admissionId = resolved;
+    const existing = await DischargeSummary.findOne(filter)
+      .sort({ updatedAt: -1 })
+      .lean();
+    const fromStatus = dischargeStatusOf(existing);
+    const requested = payload.dischargeSummaryStatus || fromStatus || "draft";
+    const isTransition = Boolean(req.body.statusTransition) && requested !== fromStatus;
+
+    if (isTransition) {
+      if (!(ALLOWED_TRANSITIONS[fromStatus] || []).includes(requested)) {
+        return res.status(409).json({
+          success: false,
+          error: `Cannot move discharge summary from ${fromStatus || "new"} to ${requested}`,
+        });
+      }
+      if (requested === "approved") {
+        const meta = { ...(payload.dischargeSummaryMeta || {}) };
+        meta.status = "approved";
+        meta.approvedBy = {
+          ...(meta.approvedBy || {}),
+          userId: String(req.user?.id || req.user?._id || ""),
+          timestamp: new Date().toISOString(),
+        };
+        payload.dischargeSummaryMeta = meta;
+      }
+    } else if (fromStatus === "approved") {
+      return res.status(409).json({
+        success: false,
+        code: "SUMMARY_SIGNED",
+        error: "This discharge summary is signed. Revise (unlock) it before editing.",
+      });
+    } else if (existing) {
+      // Plain saves never change approval state.
+      payload.dischargeSummaryStatus = fromStatus || "draft";
+      payload.dischargeSummaryMeta = existing.dischargeSummaryMeta ?? payload.dischargeSummaryMeta;
+    } else {
+      payload.dischargeSummaryStatus = "draft";
     }
     const unset = Object.fromEntries(
       LEGACY_DRAFT_FIELDS.map((field) => [field, ""]),
     );
 
-    const draft = await DischargeSummary.findOneAndUpdate(
-      filter,
-      { $set: payload, $unset: unset },
-      {
-        new: true,
-        upsert: true,
-        setDefaultsOnInsert: true,
-        // Legacy worksheet fields are no longer on the schema. strict:false
-        // lets this update remove them from documents saved before the change.
-        strict: false,
-      },
-    );
+    const update = { $set: payload, $unset: unset };
+    const options = {
+      new: true,
+      upsert: true,
+      setDefaultsOnInsert: true,
+      sort: { updatedAt: -1 },
+      // Legacy worksheet fields are no longer on the schema. strict:false
+      // lets this update remove them from documents saved before the change.
+      strict: false,
+    };
+    let draft;
+    try {
+      draft = await DischargeSummary.findOneAndUpdate(filter, update, options);
+    } catch (error) {
+      if (error?.code !== 11000) throw error;
+      // A concurrent save created the row first; update it instead.
+      draft = await DischargeSummary.findOneAndUpdate(filter, update, {
+        ...options,
+        upsert: false,
+      });
+    }
 
     return res.json({ success: true, draft });
   } catch (error) {
@@ -366,20 +427,36 @@ router.post("/:umrNo", async (req, res) => {
  */
 router.delete("/:umrNo", async (req, res) => {
   try {
-    const { DischargeSummary } = getModels(req);
+    const { DischargeSummary, IPAdmission } = getModels(req);
     const umrNo = req.params.umrNo;
     const hospitalId = req.hospitalId;
-    const admissionId = String(req.query.admissionId || "").trim();
-
-    const query = { UMRNo: umrNo };
-    if (mongoose.Types.ObjectId.isValid(admissionId)) {
-      query.admissionId = admissionId;
+    const resolved = await resolveAdmissionId(IPAdmission, {
+      umrNo,
+      hospitalId,
+      admissionId: String(req.query.admissionId || "").trim(),
+    });
+    if (!resolved) {
+      return res.status(404).json({ success: false, error: "Admission not found for this patient" });
     }
+
+    const query = { UMRNo: umrNo, admissionId: resolved };
     if (hospitalId) {
       query.hospitalId = hospitalId;
     }
 
-    await DischargeSummary.deleteMany(query);
+    const result = await DischargeSummary.deleteMany({
+      ...query,
+      dischargeSummaryStatus: { $ne: "approved" },
+      "dischargeSummaryMeta.status": { $ne: "approved" },
+    });
+    const signedLeft = await DischargeSummary.exists(query);
+    if (signedLeft && !result.deletedCount) {
+      return res.status(409).json({
+        success: false,
+        code: "SUMMARY_SIGNED",
+        error: "A signed discharge summary cannot be reset. Revise (unlock) it first.",
+      });
+    }
 
     return res.json({ success: true, message: "Draft cleared successfully" });
   } catch (error) {

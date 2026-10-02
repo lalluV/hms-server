@@ -109,6 +109,7 @@ app.use("/api/actions", require("./routes/actions"));
 app.use("/api/advance-receipts", require("./routes/advanceReceipts"));
 app.use("/api/parameters", require("./routes/parameterRoutes"));
 app.use("/api/vendors", require("./routes/vendorRoutes"));
+app.use("/api/insurance-cases", require("./routes/insuranceCases"));
 app.use("/api/insurance-companies", require("./routes/insuranceRoutes"));
 app.use("/api/insurance-tariffs", require("./routes/insuranceTariffs"));
 app.use("/api/insurance-exclusions", require("./routes/insuranceExclusions"));

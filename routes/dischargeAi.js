@@ -10,10 +10,17 @@
 
 const express = require("express");
 const router = express.Router();
+const { applyEntitlementsNoTenantDb } = require("../utils/applyTenantEntitlements");
+
+applyEntitlementsNoTenantDb(router, { moduleKey: "core" });
 const axios = require("axios");
 const {
   aiCompletionWithFallback,
 } = require("../utils/aiCompletionWithFallback");
+const {
+  eventScopeFromRecord,
+  receiptBelongsToEvent,
+} = require("../utils/visitReceiptScope");
 
 const OPENAI_API_BASE_URL = "https://api.openai.com/v1";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -588,8 +595,11 @@ router.post("/synthesize-case", async (req, res) => {
     }
 
     // 2. Gather lab & radiology highlights
+    const stayScope = eventScopeFromRecord(patient);
     const patientReceipts = (diagnosticsReceipts || []).filter(
-      (r) => r.patientId === umr || r.patientUmr === umr || r.umrNo === umr,
+      (r) =>
+        (r.patientId === umr || r.patientUmr === umr || r.umrNo === umr) &&
+        (!stayScope || receiptBelongsToEvent(r, stayScope)),
     );
     const labHighlights = [];
     const radiologyHighlights = [];

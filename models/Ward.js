@@ -16,6 +16,7 @@ const wardSchema = new mongoose.Schema(
         bed: String,
         status: { type: String, default: "Empty" },
         UMRNo: String,
+        name: String,
         age: String,
         gender: String,
       },

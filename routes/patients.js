@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
+const { localYmd } = require("../utils/localDate");
 const { normalizeRole } = require("../config/rolePermissions");
 const {
   resolveRequestDoctorIds,
@@ -30,9 +31,11 @@ const {
 } = require("../utils/publicOpRegistration");
 const { syncClinicalCasesFromPatient } = require("../utils/doctorMemory");
 const { admitPatient } = require("../utils/admitPatient");
+const { filterReceiptsForEvent } = require("../utils/visitReceiptScope");
 const {
   pickPerson,
   presentPatient,
+  attachLatestDischargedStay,
   objectIds,
   loadRosterSets,
   loadOpenAdmissionMap,
@@ -438,23 +441,31 @@ router.get("/", async (req, res) => {
       andConditions.push({ _id: { $in: objectIds(roster.dischargedIds) } });
     }
 
-    if (paymentMethod) {
-      andConditions.push({ paymentMethod });
-    }
-
-    if (insuranceOnly === "true") {
-      andConditions.push({
-        $or: [
+    if (paymentMethod || insuranceProviderId || insuranceOnly === "true") {
+      const eventMatch = { hospitalId: req.hospitalId };
+      if (paymentMethod) eventMatch.paymentMethod = paymentMethod;
+      if (insuranceProviderId) {
+        eventMatch.insurance_providerId = insuranceProviderId;
+      }
+      if (insuranceOnly === "true" && !paymentMethod) {
+        eventMatch.$or = [
           { paymentMethod: "Insurance" },
-          {
-            insurance_providerId: { $exists: true, $nin: [null, ""] },
-          },
-        ],
-      });
-    }
-
-    if (insuranceProviderId) {
-      andConditions.push({ insurance_providerId: insuranceProviderId });
+          { insurance_providerId: { $exists: true, $nin: [null, ""] } },
+        ];
+      }
+      const eventSelect = "patientId";
+      const [insuredVisits, insuredStays] = await Promise.all([
+        PrescriptionForRoster.find(eventMatch).select(eventSelect).lean(),
+        IPAdmission.find(eventMatch).select(eventSelect).lean(),
+      ]);
+      const insuredIds = objectIds(
+        [...insuredVisits, ...insuredStays].map((row) => row.patientId),
+      );
+      andConditions.push(
+        insuredIds.length
+          ? { _id: { $in: insuredIds } }
+          : { _id: { $exists: false } },
+      );
     }
 
     if (fromDate || toDate) {
@@ -534,7 +545,7 @@ router.get("/", async (req, res) => {
         $or: [{ patientId: { $in: patientIds } }, { UMRNo: { $in: umrNos } }],
       })
         .select(
-          "patientId UMRNo prescriptionId doctorId doctorName consultantDoctor date createdAt medicineData diagnosticData symptoms provisionalDiagnosis",
+          "patientId UMRNo prescriptionId doctorId doctorName consultantDoctor date createdAt medicineData diagnosticData symptoms provisionalDiagnosis paymentMethod insurance_provider insurance_providerId policy_number coPayPercentage coPayLimit coPayType coverage expiry_date",
         )
         .sort({ createdAt: -1, date: -1 })
         .lean();
@@ -561,6 +572,15 @@ router.get("/", async (req, res) => {
               lastTestCount: (rx.diagnosticData || []).length,
               lastDiagnosis: rx.provisionalDiagnosis || "",
               lastSymptoms: rx.symptoms || "",
+              paymentMethod: rx.paymentMethod || "Personal",
+              insurance_provider: rx.insurance_provider || "",
+              insurance_providerId: rx.insurance_providerId || "",
+              policy_number: rx.policy_number || "",
+              coPayPercentage: rx.coPayPercentage ?? 0,
+              coPayLimit: rx.coPayLimit ?? 0,
+              coPayType: rx.coPayType || "percentage",
+              coverage: rx.coverage || "",
+              expiry_date: rx.expiry_date || "",
             });
           }
           const curr = visitMap.get(k);
@@ -609,6 +629,18 @@ router.get("/", async (req, res) => {
         lastTestCount: rxInfo.lastTestCount || 0,
         lastDiagnosis: rxInfo.lastDiagnosis || "",
         lastSymptoms: rxInfo.lastSymptoms || "",
+        paymentMethod:
+          pObj.paymentMethod || rxInfo.paymentMethod || "Personal",
+        insurance_provider:
+          pObj.insurance_provider || rxInfo.insurance_provider || "",
+        insurance_providerId:
+          pObj.insurance_providerId || rxInfo.insurance_providerId || "",
+        policy_number: pObj.policy_number || rxInfo.policy_number || "",
+        coPayPercentage: pObj.coPayPercentage ?? rxInfo.coPayPercentage ?? 0,
+        coPayLimit: pObj.coPayLimit ?? rxInfo.coPayLimit ?? 0,
+        coPayType: pObj.coPayType || rxInfo.coPayType || "percentage",
+        coverage: pObj.coverage || rxInfo.coverage || "",
+        expiry_date: pObj.expiry_date || rxInfo.expiry_date || "",
       };
     });
 
@@ -685,7 +717,20 @@ router.get("/:id", async (req, res) => {
           patient_status: "Admitted",
         })
       : null;
+    const latestDischarged =
+      !open && patient._id
+        ? await IPAdmission.findOne({
+            hospitalId: req.hospitalId,
+            patientId: patient._id,
+            patient_status: "Discharged",
+          })
+            .sort({ dischargedAt: -1, dischargeDate: -1, updatedAt: -1 })
+            .lean()
+        : null;
     const view = presentPatient(patient, { admission: open });
+    if (!open && latestDischarged) {
+      attachLatestDischargedStay(view, latestDischarged);
+    }
     if (blockInpatientRecordAccess(req, res, view)) return;
     if (isDoctorRole(req)) {
       const doctorIds = await resolveRequestDoctorIds(req);
@@ -785,17 +830,22 @@ router.post("/", async (req, res) => {
           doctorId: String(doctorId),
           doctorName: consultantDoctor,
           consultantDoctor,
-          date: new Date().toISOString().split("T")[0],
+          date: localYmd(),
           symptoms: "",
           vitals: [],
           doctorNotes: [],
           nurseNotes: [],
           diagnosticData: [],
           medicineData: [],
-          paymentMethod: newPatient.paymentMethod || "Personal",
-          insurance_provider: newPatient.insurance_provider,
-          insurance_providerId: newPatient.insurance_providerId,
-          policy_number: newPatient.policy_number,
+          paymentMethod: req.body.paymentMethod || "Personal",
+          insurance_provider: req.body.insurance_provider || "",
+          insurance_providerId: req.body.insurance_providerId || "",
+          policy_number: req.body.policy_number || "",
+          coPayPercentage: req.body.coPayPercentage ?? 0,
+          coPayLimit: req.body.coPayLimit ?? 0,
+          coPayType: req.body.coPayType || "percentage",
+          coverage: req.body.coverage || "",
+          expiry_date: req.body.expiry_date || "",
           pharmacyStatus: "pending",
         });
         initialVisit = doc.toObject ? doc.toObject() : doc;
@@ -1046,17 +1096,93 @@ router.get("/:id/interim-bill", async (req, res) => {
       InsuranceCompany.find({ hospitalId: req.hospitalId }),
     ]);
 
+    const IPAdmission = req.tenantDb.model("IPAdmission");
+    const Prescription = req.tenantDb.model("Prescription");
+    const requestedAdmissionId = String(req.query.admissionId || "");
+    const requestedPrescriptionId = String(req.query.prescriptionId || "");
+    const [stayRows, latestVisit] = await Promise.all([
+      IPAdmission.find({
+        hospitalId: req.hospitalId,
+        patientId: patient._id,
+      })
+        .sort({ admissionDate: -1, createdAt: -1 })
+        .lean(),
+      Prescription.findOne({
+        hospitalId: req.hospitalId,
+        patientId: patient._id,
+      })
+        .sort({ date: -1, createdAt: -1 })
+        .lean(),
+    ]);
+    const openStay =
+      stayRows.find((row) => row.patient_status === "Admitted") || null;
+    const requestedStay = requestedAdmissionId
+      ? stayRows.find((row) => String(row._id) === requestedAdmissionId) || null
+      : null;
+    const requestedVisit = requestedPrescriptionId
+      ? await Prescription.findOne({
+          hospitalId: req.hospitalId,
+          prescriptionId: requestedPrescriptionId,
+        }).lean()
+      : null;
+    const stay = requestedStay || openStay || null;
+    const visit = requestedVisit || latestVisit;
+    const coverageEvent = requestedStay || requestedVisit || openStay || visit || stayRows[0] || {};
+    const coverageSubject = {
+      paymentMethod: coverageEvent.paymentMethod || "Personal",
+      insurance_providerId: coverageEvent.insurance_providerId || "",
+      insurance_provider: coverageEvent.insurance_provider || "",
+      policy_number: coverageEvent.policy_number || "",
+      coPayPercentage: coverageEvent.coPayPercentage ?? 0,
+      coPayLimit: coverageEvent.coPayLimit ?? 0,
+      coPayType: coverageEvent.coPayType || "percentage",
+      coverage: coverageEvent.coverage || "",
+      expiry_date: coverageEvent.expiry_date || "",
+    };
+
     const insuranceCompany = (insuranceCompanies || []).find(
-      (c) => String(c._id) === String(patient.insurance_providerId),
+      (c) => String(c._id) === String(coverageSubject.insurance_providerId),
     );
 
     const settings = insuranceSettingsDoc?.toObject?.() || {};
-    const billBreakdown = calculateBillBreakdown(
-      patient,
+    const scopedConsultations = filterReceiptsForEvent(
       consultationReceipts,
-      actionReceipts,
+      coverageEvent,
+    );
+    const scopedActions = filterReceiptsForEvent(actionReceipts, coverageEvent);
+    const scopedDiagnostics = filterReceiptsForEvent(
       diagnosticsReceipts,
+      coverageEvent,
+    );
+    const scopedPharmacy = filterReceiptsForEvent(
       pharmacyReceipts,
+      coverageEvent,
+    );
+    const scopedAdvances = filterReceiptsForEvent(
+      advanceReceipts,
+      coverageEvent,
+    );
+
+    const billSource =
+      coverageEvent && coverageEvent.transfers
+        ? {
+            ...(typeof patient.toObject === "function"
+              ? patient.toObject()
+              : patient),
+            transfers: coverageEvent.transfers,
+            active: coverageEvent.patient_status
+              ? coverageEvent.patient_status === "Admitted"
+              : patient.active,
+            dischargeDate: coverageEvent.dischargeDate,
+            dischargedAt: coverageEvent.dischargedAt,
+          }
+        : patient;
+    const billBreakdown = calculateBillBreakdown(
+      billSource,
+      scopedConsultations,
+      scopedActions,
+      scopedDiagnostics,
+      scopedPharmacy,
       calculateEndDate,
     );
 
@@ -1078,7 +1204,7 @@ router.get("/:id/interim-bill", async (req, res) => {
             coPayAmount: 0,
             coPayPercentage: 0,
             coPayLimit: 0,
-            coPayType: patient.coPayType || "percentage",
+            coPayType: coverageSubject.coPayType || "percentage",
             deductible: 0,
             coveragePercentage: 0,
             coverageLimit: 0,
@@ -1087,7 +1213,7 @@ router.get("/:id/interim-bill", async (req, res) => {
             tariffValid: false,
           }
         : calculateInsuranceCoverage(
-            patient,
+            coverageSubject,
             insuranceTariffs,
             insuranceExclusions,
             billBreakdown,
@@ -1095,7 +1221,7 @@ router.get("/:id/interim-bill", async (req, res) => {
           );
 
     const totalAdvancePaid = calculateTotalAdvance(
-      advanceReceipts,
+      scopedAdvances,
       id,
       calculateEndDate,
     );
@@ -1105,13 +1231,6 @@ router.get("/:id/interim-bill", async (req, res) => {
     );
 
     const hospitalRow = req.hospitalRow || req.hospital;
-    const IPAdmission = req.tenantDb.model("IPAdmission");
-    const stay = await IPAdmission.findOne({
-      hospitalId: req.hospitalId,
-      patientId: patient._id,
-    })
-      .sort({ createdAt: -1 })
-      .lean();
 
     res.json({
       ...insuranceResult,
@@ -1138,14 +1257,14 @@ router.get("/:id/interim-bill", async (req, res) => {
         gender: patient.gender,
         phone: patient.phone,
         patient_type: stay ? "IP" : "OP",
-        paymentMethod: stay?.paymentMethod || patient.paymentMethod,
-        insurance_providerId: patient.insurance_providerId,
+        paymentMethod: coverageSubject.paymentMethod,
+        insurance_providerId: coverageSubject.insurance_providerId,
         insurance_provider:
-          patient.insurance_provider || insuranceCompany?.name || "",
-        policy_number: patient.policy_number || "",
-        coPayPercentage: patient.coPayPercentage,
-        coPayLimit: patient.coPayLimit,
-        coPayType: patient.coPayType,
+          coverageSubject.insurance_provider || insuranceCompany?.name || "",
+        policy_number: coverageSubject.policy_number,
+        coPayPercentage: coverageSubject.coPayPercentage,
+        coPayLimit: coverageSubject.coPayLimit,
+        coPayType: coverageSubject.coPayType,
         street_address: patient.street_address,
         city: patient.city,
         state: patient.state,

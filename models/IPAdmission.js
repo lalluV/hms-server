@@ -116,6 +116,7 @@ const ipAdmissionSchema = new mongoose.Schema(
     dangerSigns: { type: String },
     hospitalCourse: { type: String },
     dischargeOrders: { type: String },
+    counselling: { type: String },
 
     // Insurance for THIS Hospital Stay
     paymentMethod: { type: String, default: "Personal" },
@@ -153,6 +154,15 @@ const ipAdmissionSchema = new mongoose.Schema(
 
 ipAdmissionSchema.index({ hospitalId: 1, patientId: 1, admissionDate: -1 });
 ipAdmissionSchema.index({ hospitalId: 1, patient_status: 1, wardId: 1 });
-ipAdmissionSchema.index({ hospitalId: 1, ipNumber: 1 });
+ipAdmissionSchema.index({ hospitalId: 1, ipNumber: 1 }, { unique: true });
+// At most one open stay per patient; existing duplicate open stays must be closed before this index can build.
+ipAdmissionSchema.index(
+  { hospitalId: 1, patientId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { patient_status: "Admitted" },
+    name: "one_open_admission_per_patient",
+  },
+);
 
 module.exports = mongoose.model("IPAdmission", ipAdmissionSchema);

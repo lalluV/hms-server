@@ -51,6 +51,11 @@ const hospitalSchema = new mongoose.Schema(
       receiptFooterNote: { type: String },
       /** Bill Print Configuration (TatvaPractice / modern clinic format) */
       billPrintSettings: { type: mongoose.Schema.Types.Mixed, default: {} },
+      /** PRO bonus: extra share after monthly bills cross the threshold */
+      proCommission: {
+        threshold: { type: Number, default: 500000 },
+        bonusPercentage: { type: Number, default: 5 },
+      },
       /** Daily Owner Financial & Operational Digest Settings */
       dailyDigest: {
         enabled: { type: Boolean, default: false },
@@ -96,7 +101,7 @@ const hospitalSchema = new mongoose.Schema(
       },
     ],
   },
-  { strict: true, timestamps: true }
+  { strict: true, timestamps: true },
 );
 
 module.exports = mongoose.model("Hospital", hospitalSchema);

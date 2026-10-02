@@ -6,6 +6,9 @@
 
 const express = require("express");
 const router = express.Router();
+const { applyEntitlementsNoTenantDb } = require("../utils/applyTenantEntitlements");
+
+applyEntitlementsNoTenantDb(router, { moduleKey: "core" });
 const axios = require("axios");
 const {
   aiCompletionWithFallback,

@@ -183,7 +183,6 @@ function buildTrustedPublicPatientDoc({ hospitalId, data, publicRegistrationKey 
     state: data.state || "Telangana",
     postal_code: data.postal_code || "506002",
     country: "India",
-    paymentMethod: "Personal",
     registered_by: "Public self-registration",
     registration_date: now,
     publicRegistrationKey,

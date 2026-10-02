@@ -6,48 +6,27 @@ const {
   normalizeName,
 } = require("./patientFields");
 
-function asList(value) {
-  return Array.isArray(value) ? value : [];
-}
+const { claimBed, releaseBed } = require("./bedAllocation");
+const { localYmd, localHm } = require("./localDate");
 
-function itemKey(item) {
-  if (typeof item === "string") return item.trim().toLowerCase();
-  return String(
-    item?.name || item?.medicineName || item?.test_name || item?.description || "",
-  )
-    .trim()
-    .toLowerCase();
-}
+const isDuplicateKey = (error) => error?.code === 11000;
 
-/** First ERA list, plus any casualty-only rows that are not already in it. */
-function eraReferenceList(eraList, casualtyList) {
-  const first = asList(eraList);
-  const prior = asList(casualtyList);
-  if (!first.length) return prior;
-  const seen = new Set(first.map(itemKey).filter(Boolean));
-  const merged = [...first];
-  for (const item of prior) {
-    const key = itemKey(item);
-    if (key && seen.has(key)) continue;
-    if (key) seen.add(key);
-    merged.push(item);
-  }
-  return merged;
-}
-
-function generateIpNumber() {
-  const year = new Date().getFullYear();
-  const rand = Math.floor(1000 + Math.random() * 9000);
-  return `IP-${year}-${rand}`;
-}
-
-async function nextIpNumber(IPAdmission, hospitalId) {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const ipNumber = generateIpNumber();
+/** Sequential per-hospital, per-year IP number from the tenant Counter. */
+async function nextIpNumber(tenantDb, IPAdmission, hospitalId) {
+  const Counter = tenantDb.model("Counter");
+  const year = localYmd().slice(0, 4);
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const counter = await Counter.findByIdAndUpdate(
+      { _id: `IP-${hospitalId}-${year}` },
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true },
+    );
+    const ipNumber = `IP-${year}-${String(counter.seq).padStart(4, "0")}`;
+    // Legacy random IP numbers share this range; skip any already taken.
     const exists = await IPAdmission.exists({ hospitalId, ipNumber });
     if (!exists) return ipNumber;
   }
-  return `IP-${Date.now()}`;
+  return `IP-${year}-${Date.now()}`;
 }
 
 function eraVitalFromBody(body) {
@@ -78,10 +57,8 @@ function mergeEraVital(existing, entry) {
 }
 
 function stayPayload(body, patient, hospitalId, ipNumber) {
-  const admissionDate =
-    body.admissionDate || new Date().toISOString().split("T")[0];
-  const admissionTime =
-    body.admissionTime || new Date().toTimeString().slice(0, 5);
+  const admissionDate = body.admissionDate || localYmd();
+  const admissionTime = body.admissionTime || localHm();
   const status = body.patient_status || "Admitted";
   const wardId = body.wardId || "";
   const wardName = body.wardName || "";
@@ -137,20 +114,23 @@ function stayPayload(body, patient, hospitalId, ipNumber) {
     investigations: Array.isArray(body.investigations) ? body.investigations : [],
     procedures: Array.isArray(body.procedures) ? body.procedures : [],
     treatment: Array.isArray(body.treatment) ? body.treatment : [],
-    casualtyTreatment: eraReferenceList(body.treatment, body.casualtyTreatment),
+    casualtyTreatment: Array.isArray(body.casualtyTreatment)
+      ? body.casualtyTreatment
+      : [],
     casualtyInvestigations: Array.isArray(body.investigations)
       ? body.investigations
       : [],
-    paymentMethod: body.paymentMethod || patient.paymentMethod || "Personal",
-    insurance_provider: body.insurance_provider || patient.insurance_provider || "",
-    insurance_providerId:
-      body.insurance_providerId || patient.insurance_providerId || "",
-    policy_number: body.policy_number || patient.policy_number || "",
-    coPayPercentage: body.coPayPercentage ?? patient.coPayPercentage ?? 0,
-    coPayLimit: body.coPayLimit ?? patient.coPayLimit ?? 0,
-    coPayType: body.coPayType || patient.coPayType || "percentage",
-    coverage: body.coverage || patient.coverage || "",
-    expiry_date: body.expiry_date || patient.expiry_date || "",
+    counselling: body.counselling || "",
+    dischargeOrders: body.dischargeOrders || "",
+    paymentMethod: body.paymentMethod || "Personal",
+    insurance_provider: body.insurance_provider || "",
+    insurance_providerId: body.insurance_providerId || "",
+    policy_number: body.policy_number || "",
+    coPayPercentage: body.coPayPercentage ?? 0,
+    coPayLimit: body.coPayLimit ?? 0,
+    coPayType: body.coPayType || "percentage",
+    coverage: body.coverage || "",
+    expiry_date: body.expiry_date || "",
     claimNumber: body.claimNumber || "",
     preAuthAmount: body.preAuthAmount || 0,
     commissionEarnerType: body.commissionEarnerType,
@@ -242,13 +222,13 @@ async function admitPatient({ tenantDb, hospitalId, body }) {
     await patient.save();
   }
 
-  const open = await IPAdmission.findOne({
-    hospitalId,
-    patientId: patient._id,
-    patient_status: "Admitted",
-  });
-
-  if (open) {
+  const findOpen = () =>
+    IPAdmission.findOne({
+      hospitalId,
+      patientId: patient._id,
+      patient_status: "Admitted",
+    });
+  const openResponse = async (open) => {
     if (patient.name && open.patientName !== patient.name) {
       open.patientName = patient.name;
       await open.save();
@@ -263,13 +243,62 @@ async function admitPatient({ tenantDb, hospitalId, body }) {
         patient: presentPatient(patient, { admission: open }),
       },
     };
+  };
+
+  const open = await findOpen();
+  if (open) return openResponse(open);
+
+  const wantsBed =
+    (payload.patient_status || "Admitted") === "Admitted" &&
+    payload.wardId &&
+    payload.selectedBed;
+  let bedClaimed = false;
+  if (wantsBed) {
+    const claim = await claimBed(tenantDb, hospitalId, {
+      wardId: payload.wardId,
+      bed: payload.selectedBed,
+      patient,
+    });
+    if (!claim.ok) {
+      if (createdPatient) await Patient.deleteOne({ _id: patient._id, hospitalId });
+      return {
+        httpStatus: 409,
+        payload: { code: "BED_UNAVAILABLE", message: claim.reason },
+      };
+    }
+    bedClaimed = !claim.skipped;
   }
 
   try {
-    const ipNumber = await nextIpNumber(IPAdmission, hospitalId);
-    const admission = await IPAdmission.create(
-      stayPayload(payload, patient, hospitalId, ipNumber),
-    );
+    let admission = null;
+    for (let attempt = 0; attempt < 3 && !admission; attempt += 1) {
+      const ipNumber = await nextIpNumber(tenantDb, IPAdmission, hospitalId);
+      try {
+        admission = await IPAdmission.create(
+          stayPayload(payload, patient, hospitalId, ipNumber),
+        );
+      } catch (error) {
+        if (!isDuplicateKey(error)) throw error;
+        // A concurrent request opened a stay for this patient first.
+        const raced = await findOpen();
+        if (raced) {
+          if (
+            bedClaimed &&
+            (raced.wardId !== payload.wardId ||
+              raced.selectedBed !== payload.selectedBed)
+          ) {
+            await releaseBed(tenantDb, hospitalId, {
+              wardId: payload.wardId,
+              bed: payload.selectedBed,
+              umr: patient.UMRNo,
+            });
+          }
+          return openResponse(raced);
+        }
+        // Otherwise the IP number collided; retry with the next one.
+      }
+    }
+    if (!admission) throw new Error("Could not allocate a unique IP number");
     const presented = presentPatient(patient, {
       admission:
         admission.patient_status === "Admitted" ? admission : null,
@@ -286,6 +315,13 @@ async function admitPatient({ tenantDb, hospitalId, body }) {
       },
     };
   } catch (error) {
+    if (bedClaimed) {
+      await releaseBed(tenantDb, hospitalId, {
+        wardId: payload.wardId,
+        bed: payload.selectedBed,
+        umr: patient.UMRNo,
+      }).catch(() => {});
+    }
     if (createdPatient) {
       await Patient.deleteOne({ _id: patient._id, hospitalId });
     }
@@ -314,7 +350,10 @@ const ERA_UPDATE_KEYS = [
   "dischargeTo",
   "counselling",
   "dischargeOrders",
+  "consultantHistory",
 ];
+
+const ERA_EDITABLE_STATUSES = ["Admitted", "Refused Admission"];
 
 /**
  * Update the ER chart on an existing stay. Person fields go to the patient.
@@ -336,6 +375,56 @@ async function updateEraChart({ tenantDb, hospitalId, admissionId, body }) {
     _id: admission.patientId,
     hospitalId,
   });
+
+  if (
+    payload.patient_status !== undefined &&
+    payload.patient_status !== admission.patient_status &&
+    !ERA_EDITABLE_STATUSES.includes(payload.patient_status)
+  ) {
+    return {
+      httpStatus: 400,
+      payload: {
+        message: `Status "${payload.patient_status}" must be set through the discharge flow`,
+      },
+    };
+  }
+  if (
+    admission.patient_status !== "Admitted" &&
+    admission.patient_status !== "Refused Admission" &&
+    payload.patient_status !== undefined &&
+    payload.patient_status !== admission.patient_status
+  ) {
+    return {
+      httpStatus: 409,
+      payload: { message: `Stay is already ${admission.patient_status}` },
+    };
+  }
+
+  const prevStatus = admission.patient_status;
+  const prevWardId = admission.wardId || "";
+  const prevBed = admission.selectedBed || "";
+  const nextStatus = payload.patient_status ?? prevStatus;
+  const nextWardId = payload.wardId ?? prevWardId;
+  const nextBed = payload.selectedBed ?? prevBed;
+  const heldBefore = prevStatus === "Admitted" && prevWardId && prevBed;
+  const holdsAfter = nextStatus === "Admitted" && nextWardId && nextBed;
+  const bedMoved =
+    !heldBefore || !holdsAfter || prevWardId !== nextWardId || prevBed !== nextBed;
+
+  if (holdsAfter && bedMoved) {
+    const claim = await claimBed(tenantDb, hospitalId, {
+      wardId: nextWardId,
+      bed: nextBed,
+      patient: patient || { UMRNo: admission.UMRNo, name: admission.patientName },
+    });
+    if (!claim.ok) {
+      return {
+        httpStatus: 409,
+        payload: { code: "BED_UNAVAILABLE", message: claim.reason },
+      };
+    }
+  }
+
   if (patient) {
     assignPersonEdits(patient, payload);
     await patient.save();
@@ -344,6 +433,21 @@ async function updateEraChart({ tenantDb, hospitalId, admissionId, body }) {
 
   for (const key of ERA_UPDATE_KEYS) {
     if (payload[key] !== undefined) admission[key] = payload[key];
+  }
+
+  if (holdsAfter && heldBefore && prevWardId !== nextWardId) {
+    admission.transfers.push({
+      wardId: nextWardId,
+      wardName: payload.wardName ?? admission.wardName,
+      price: Number(
+        payload.bedPrice ??
+          (Array.isArray(payload.transfers)
+            ? payload.transfers[payload.transfers.length - 1]?.price
+            : 0) ??
+          0,
+      ) || 0,
+      transferDate: localYmd(),
+    });
   }
   if (Array.isArray(payload.casualtyTreatment)) {
     admission.casualtyTreatment = payload.casualtyTreatment;
@@ -363,6 +467,13 @@ async function updateEraChart({ tenantDb, hospitalId, admissionId, body }) {
   }
 
   await admission.save();
+  if (heldBefore && bedMoved) {
+    await releaseBed(tenantDb, hospitalId, {
+      wardId: prevWardId,
+      bed: prevBed,
+      umr: admission.UMRNo,
+    }).catch((error) => console.error("ERA bed release failed:", error));
+  }
   const presented = patient
     ? presentPatient(patient, {
         admission:

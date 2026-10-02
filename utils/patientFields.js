@@ -20,15 +20,6 @@ const PERSON_KEYS = [
   "pastMedicalHistory",
   "pastMedications",
   "personalHistory",
-  "paymentMethod",
-  "insurance_provider",
-  "insurance_providerId",
-  "policy_number",
-  "coPayPercentage",
-  "coPayLimit",
-  "coPayType",
-  "coverage",
-  "expiry_date",
   "registered_by",
   "registration_date",
   "publicRegistrationKey",
@@ -162,6 +153,15 @@ function presentPatient(patient, { admission = null, roster = "" } = {}) {
     obj.selectedBed = open.selectedBed || "";
     obj.consultantDoctor = open.consultantDoctor || "";
     obj.doctorId = open.doctorId || "";
+    obj.paymentMethod = open.paymentMethod || "Personal";
+    obj.insurance_provider = open.insurance_provider || "";
+    obj.insurance_providerId = open.insurance_providerId || "";
+    obj.policy_number = open.policy_number || "";
+    obj.coPayPercentage = open.coPayPercentage ?? 0;
+    obj.coPayLimit = open.coPayLimit ?? 0;
+    obj.coPayType = open.coPayType || "percentage";
+    obj.coverage = open.coverage || "";
+    obj.expiry_date = open.expiry_date || "";
     return obj;
   }
   obj.patient_type = "OP";
@@ -251,6 +251,38 @@ async function loadRosterSets(IPAdmission, Prescription, hospitalId, Patient) {
   return { openIds: [...openIds], dischargedIds, excludeFromOp };
 }
 
+/** When there is no open stay, copy billing/discharge fields from the latest IP stay. */
+function attachLatestDischargedStay(view, admission) {
+  if (!view || !admission) return view;
+  view.active = false;
+  view.patient_status = "Discharged";
+  view.activeAdmissionId = null;
+  view.patient_type = view.patient_type || "IP";
+  view.admissionDate = admission.admissionDate || view.admissionDate || "";
+  view.admissionTime = admission.admissionTime || view.admissionTime || "";
+  view.dischargeDate = admission.dischargeDate || view.dischargeDate || "";
+  view.dischargeTime = admission.dischargeTime || view.dischargeTime || "";
+  view.dischargedAt = admission.dischargedAt || view.dischargedAt || "";
+  view.wardName = admission.wardName || view.wardName || "";
+  view.wardId = admission.wardId || view.wardId || "";
+  view.selectedBed = admission.selectedBed || view.selectedBed || "";
+  view.consultantDoctor =
+    admission.consultantDoctor || view.consultantDoctor || "";
+  view.doctorId = admission.doctorId || view.doctorId || "";
+  if (admission.discount !== undefined) view.discount = admission.discount;
+  if (admission.insurance !== undefined) view.insurance = admission.insurance;
+  if (admission.finalBillAmount !== undefined) {
+    view.finalBillAmount = admission.finalBillAmount;
+  }
+  if (admission.paymentStatus !== undefined) {
+    view.paymentStatus = admission.paymentStatus;
+  }
+  if (Array.isArray(admission.transfers)) {
+    view.transfers = admission.transfers;
+  }
+  return view;
+}
+
 async function loadOpenAdmissionMap(IPAdmission, hospitalId, patientIds) {
   const ids = objectIds(patientIds);
   if (!ids.length) return new Map();
@@ -273,6 +305,7 @@ module.exports = {
   pickPerson,
   assignPersonEdits,
   presentPatient,
+  attachLatestDischargedStay,
   objectIds,
   loadRosterSets,
   loadOpenAdmissionMap,

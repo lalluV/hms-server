@@ -3,6 +3,8 @@ const mongoose = require("mongoose");
 const router = express.Router();
 const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
 const { admitPatient, updateEraChart } = require("../utils/admitPatient");
+const { claimBed, releaseBed } = require("../utils/bedAllocation");
+const { localYmd, localHm } = require("../utils/localDate");
 
 applyTenantEntitlements(router, { moduleKey: "core" });
 
@@ -628,7 +630,6 @@ router.put("/:id", async (req, res) => {
           repeatLabs: "",
           summarySections: "",
           dischargeMedications: "",
-          counselling: "",
         },
       },
       { new: true },
@@ -659,24 +660,57 @@ router.post("/:id/transfer-bed", async (req, res) => {
       ? { $or: [{ _id: id }, { ipNumber: id }], hospitalId: req.hospitalId }
       : { ipNumber: id, hospitalId: req.hospitalId };
 
+    if (!toWardId || !toBed) {
+      return res.status(400).json({ message: "toWardId and toBed are required" });
+    }
+
     const admission = await IPAdmission.findOne(query);
     if (!admission) {
       return res.status(404).json({ message: "Admission record not found" });
     }
+    if (admission.patient_status !== "Admitted") {
+      return res
+        .status(409)
+        .json({ message: `Cannot transfer a ${admission.patient_status} stay` });
+    }
 
-    const transferEntry = {
-      wardId: toWardId,
-      wardName: toWardName,
-      price: Number(price || 0),
-      transferDate: transferDate || new Date().toISOString().split("T")[0],
-    };
+    const prevWardId = admission.wardId;
+    const prevBed = admission.selectedBed;
+    const sameBed = prevWardId === toWardId && prevBed === String(toBed);
+    if (!sameBed) {
+      const claim = await claimBed(req.tenantDb, req.hospitalId, {
+        wardId: toWardId,
+        bed: toBed,
+        patient: { UMRNo: admission.UMRNo, name: admission.patientName },
+      });
+      if (!claim.ok) {
+        return res
+          .status(409)
+          .json({ code: "BED_UNAVAILABLE", message: claim.reason });
+      }
+    }
 
-    admission.transfers.push(transferEntry);
+    // A bed change inside the same ward does not start a new billing segment.
+    if (prevWardId !== toWardId) {
+      admission.transfers.push({
+        wardId: toWardId,
+        wardName: toWardName,
+        price: Number(price || 0),
+        transferDate: transferDate || localYmd(),
+      });
+    }
     admission.wardId = toWardId;
-    admission.wardName = toWardName;
+    admission.wardName = toWardName || admission.wardName;
     admission.selectedBed = toBed;
 
     await admission.save();
+    if (!sameBed) {
+      await releaseBed(req.tenantDb, req.hospitalId, {
+        wardId: prevWardId,
+        bed: prevBed,
+        umr: admission.UMRNo,
+      }).catch((error) => console.error("Bed release failed:", error));
+    }
 
     res.json(admission);
   } catch (error) {
@@ -695,78 +729,106 @@ router.post("/:id/discharge", async (req, res) => {
     const Patient = req.tenantDb.model("Patient");
     const { id } = req.params;
 
-    const {
-      dischargeDate = new Date().toISOString().split("T")[0],
-      dischargedAt = new Date().toISOString(),
-      dischargeCondition = "Stable",
-      dischargeTo = "Home",
-      dischargeDestination,
-      finalDiagnosis,
-      dischargeInstructions,
-      followUpPlan,
-      dischargeMedications,
-      dischargeSummary,
-      dischargeSummaryType = "standard",
-      counselling,
-      finalBillAmount,
-      discount = 0,
-      insurance = 0,
-      paymentStatus = "settled",
-    } = req.body;
+    const body = req.body || {};
+    const dischargeDate = body.dischargeDate || localYmd();
+    const dischargeTime = body.dischargeTime || localHm();
+    const dischargeCondition = body.dischargeCondition || "Stable";
+    const dischargeTo = body.dischargeTo || "Home";
 
     const query = mongoose.Types.ObjectId.isValid(id)
       ? { $or: [{ _id: id }, { ipNumber: id }], hospitalId: req.hospitalId }
       : { ipNumber: id, hospitalId: req.hospitalId };
 
-    const admission = await IPAdmission.findOne(query);
-    if (!admission) {
-      return res.status(404).json({ message: "Admission record not found" });
-    }
-
     const DischargeSummary = req.tenantDb.model("DischargeSummary");
 
-    admission.patient_status = "Discharged";
-    admission.dischargedAt = dischargedAt;
-    admission.finalBillAmount = finalBillAmount ?? admission.finalBillAmount;
-    admission.discount = discount;
-    admission.insurance = insurance;
-    admission.paymentStatus = paymentStatus;
-    await admission.save();
-
-    const summary = await DischargeSummary.findOneAndUpdate(
-      { hospitalId: req.hospitalId, admissionId: admission._id },
+    // Atomic status flip so two concurrent discharge calls cannot both win.
+    const admission = await IPAdmission.findOneAndUpdate(
+      { ...query, patient_status: { $ne: "Discharged" } },
       {
         $set: {
-          hospitalId: req.hospitalId,
-          patientId: admission.patientId,
-          admissionId: admission._id,
-          ipNumber: admission.ipNumber,
-          UMRNo: admission.UMRNo,
-          admissionDate: admission.admissionDate,
+          patient_status: "Discharged",
+          dischargedAt: body.dischargedAt || new Date().toISOString(),
           dischargeDate,
-          dischargeTime: req.body.dischargeTime || "",
-          lengthOfStay: req.body.lengthOfStay,
+          dischargeTime,
           dischargeCondition,
-          dischargeDestination: dischargeDestination || dischargeTo,
           dischargeTo,
-          finalDiagnosis: finalDiagnosis || "",
-          hospitalCourse: req.body.hospitalCourse || "",
-          dischargeInstructions: dischargeInstructions || "",
-          dangerSigns: req.body.dangerSigns || "",
-          followUpPlan: followUpPlan || "",
-          counselling: counselling || "",
-          summarySections: req.body.summarySections || [],
-          dischargeMedications: dischargeMedications || [],
-          repeatLabs: req.body.repeatLabs || [],
-          procedures: req.body.procedures || [],
-          summary: dischargeSummary || "",
-          summaryType: dischargeSummaryType,
-          dischargeSummaryStatus: req.body.dischargeSummaryStatus || "draft",
-          dischargeSummaryMeta: req.body.dischargeSummaryMeta || null,
+          dischargeDestination: body.dischargeDestination || dischargeTo,
+          ...(body.finalBillAmount !== undefined && {
+            finalBillAmount: Number(body.finalBillAmount) || 0,
+          }),
+          discount: Number(body.discount) || 0,
+          insurance: Number(body.insurance) || 0,
+          paymentStatus: body.paymentStatus || "settled",
         },
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
+      { new: true },
     );
+    if (!admission) {
+      const existing = await IPAdmission.findOne(query);
+      if (!existing) {
+        return res.status(404).json({ message: "Admission record not found" });
+      }
+      return res.json({
+        message: "Patient already discharged",
+        alreadyDischarged: true,
+        admission: existing,
+      });
+    }
+
+    await releaseBed(req.tenantDb, req.hospitalId, {
+      wardId: admission.wardId,
+      bed: admission.selectedBed,
+      umr: admission.UMRNo,
+    }).catch((error) => console.error("Discharge bed release failed:", error));
+
+    // Only write clinical fields the caller actually sent, so a billing-only
+    // discharge never blanks or un-signs the doctor's summary.
+    const summarySet = {
+      hospitalId: req.hospitalId,
+      patientId: admission.patientId,
+      admissionId: admission._id,
+      ipNumber: admission.ipNumber,
+      UMRNo: admission.UMRNo,
+      admissionDate: admission.admissionDate,
+      dischargeDate,
+      dischargeTime,
+    };
+    for (const key of [
+      "lengthOfStay",
+      "dischargeCondition",
+      "dischargeDestination",
+      "dischargeTo",
+      "finalDiagnosis",
+      "hospitalCourse",
+      "dischargeInstructions",
+      "dangerSigns",
+      "followUpPlan",
+      "counselling",
+      "summarySections",
+      "dischargeMedications",
+      "repeatLabs",
+      "procedures",
+    ]) {
+      if (body[key] !== undefined) summarySet[key] = body[key];
+    }
+    if (body.dischargeSummary !== undefined) summarySet.summary = body.dischargeSummary;
+    if (body.dischargeSummaryType !== undefined) summarySet.summaryType = body.dischargeSummaryType;
+
+    let summary = null;
+    try {
+      summary = await DischargeSummary.findOneAndUpdate(
+        { hospitalId: req.hospitalId, admissionId: admission._id },
+        { $set: summarySet },
+        { upsert: true, new: true, setDefaultsOnInsert: true, sort: { updatedAt: -1 } },
+      );
+    } catch (error) {
+      if (error?.code !== 11000) throw error;
+      summary = await DischargeSummary.findOneAndUpdate(
+        { hospitalId: req.hospitalId, admissionId: admission._id },
+        { $set: summarySet },
+        { new: true },
+      );
+    }
 
     const patient = await Patient.findById(admission.patientId);
     const { presentPatient } = require("../utils/patientFields");

@@ -1,5 +1,9 @@
 const dayjs = require("dayjs");
 const {
+  eventScopeFromRecord,
+  receiptBelongsToEvent,
+} = require("./visitReceiptScope");
+const {
   INSURANCE_SERVICE_KEYS,
   normalizeInsuranceServiceKey,
   emptyBillBreakdown,
@@ -56,16 +60,49 @@ function getTariffPrefix(serviceKey) {
   return serviceKey.toLowerCase();
 }
 
+function roundMoney(value) {
+  return Math.round(toAmount(value) * 100) / 100;
+}
+
+/** A saved 0 means "not set" and inherits the general tariff rate. */
+function tariffSpecific(tariff, key) {
+  const amount = Number(tariff?.[key]);
+  return Number.isFinite(amount) && amount > 0 ? amount : 0;
+}
+
+function tariffCoveragePercentage(tariff, prefix) {
+  const specific = tariffSpecific(tariff, `${prefix}CoveragePercentage`);
+  if (specific > 0) return specific;
+  return toAmount(tariff?.coveragePercentage);
+}
+
+function tariffCoverageLimit(tariff, prefix) {
+  return tariffSpecific(tariff, `${prefix}CoverageLimit`);
+}
+
+function tariffDeductible(tariff, prefix) {
+  return tariffSpecific(tariff, `${prefix}Deductible`);
+}
+
 function calculateWardChargesWithDailyInsurance(
   patient,
   applicableTariff,
   endDate = new Date(),
+  generalDeductiblePool = 0,
 ) {
   const patientTransfers = patient.transfers || [];
   let totalWardCharges = 0;
   let totalWardCoverage = 0;
+  let deductibleUsed = 0;
   const dailyBreakdown = [];
   const dischargeDt = getBillingEndDate(patient, endDate);
+  const ownDeductible = tariffDeductible(applicableTariff, "ward");
+  const dailyCoveragePercentage = tariffCoveragePercentage(
+    applicableTariff,
+    "ward",
+  );
+  const dailyCoverageLimit = tariffCoverageLimit(applicableTariff, "ward");
+  let deductiblePool = ownDeductible > 0 ? 0 : toAmount(generalDeductiblePool);
 
   for (let i = 0; i < patientTransfers.length; i++) {
     const currentTransfer = patientTransfers[i];
@@ -83,18 +120,13 @@ function calculateWardChargesWithDailyInsurance(
 
     for (let day = 0; day < daysSpent; day++) {
       const dailyCharge = wardPrice;
-      const dailyDeductible =
-        applicableTariff.wardDeductible !== undefined
-          ? toAmount(applicableTariff.wardDeductible)
-          : toAmount(applicableTariff.deductible);
-      const dailyCoveragePercentage =
-        applicableTariff.wardCoveragePercentage !== undefined
-          ? toAmount(applicableTariff.wardCoveragePercentage)
-          : toAmount(applicableTariff.coveragePercentage);
-      const dailyCoverageLimit =
-        applicableTariff.wardCoverageLimit !== undefined
-          ? toAmount(applicableTariff.wardCoverageLimit)
-          : toAmount(applicableTariff.coverageLimit);
+      let dailyDeductible = 0;
+      if (ownDeductible > 0) {
+        dailyDeductible = Math.min(ownDeductible, dailyCharge);
+      } else if (deductiblePool > 0) {
+        dailyDeductible = Math.min(deductiblePool, dailyCharge);
+        deductiblePool -= dailyDeductible;
+      }
 
       const amountAfterDeductible = Math.max(0, dailyCharge - dailyDeductible);
       let dailyCoverage =
@@ -105,7 +137,10 @@ function calculateWardChargesWithDailyInsurance(
       }
 
       dailyCoverage = Math.min(dailyCoverage, dailyCharge);
-      const dailyPatientShare = dailyCharge - dailyCoverage;
+      dailyCoverage = roundMoney(dailyCoverage);
+      dailyDeductible = roundMoney(dailyDeductible);
+      deductibleUsed += dailyDeductible;
+      const dailyPatientShare = roundMoney(dailyCharge - dailyCoverage);
 
       totalWardCharges += dailyCharge;
       totalWardCoverage += dailyCoverage;
@@ -128,8 +163,11 @@ function calculateWardChargesWithDailyInsurance(
   }
 
   return {
-    totalWardCharges,
-    totalWardCoverage,
+    totalWardCharges: roundMoney(totalWardCharges),
+    totalWardCoverage: roundMoney(totalWardCoverage),
+    deductibleUsed: roundMoney(deductibleUsed),
+    generalDeductibleRemaining: ownDeductible > 0 ? toAmount(generalDeductiblePool) : deductiblePool,
+    deductiblePerDay: ownDeductible,
     dailyBreakdown,
   };
 }
@@ -150,18 +188,20 @@ function calculateBillBreakdown(
   const filterByDate = (receipt) =>
     dayjs(receipt.createdAt).isBefore(end) ||
     dayjs(receipt.createdAt).isSame(end, "day");
+  const scope = eventScopeFromRecord(patient);
+  const onEvent = (receipt) => !scope || receiptBelongsToEvent(receipt, scope);
 
   const patientConsultations = consultationReceipts.filter(
-    (r) => r.patientId === patientId && filterByDate(r),
+    (r) => r.patientId === patientId && onEvent(r) && filterByDate(r),
   );
   const patientActions = actionReceipts.filter(
-    (r) => r.patientId === patientId && filterByDate(r),
+    (r) => r.patientId === patientId && onEvent(r) && filterByDate(r),
   );
   const patientDiagnostics = diagnosticsReceipts.filter(
-    (r) => r.patientId === patientId && filterByDate(r),
+    (r) => r.patientId === patientId && onEvent(r) && filterByDate(r),
   );
   const patientSales = pharmacyReceipts.filter(
-    (r) => r.patientId === patientId && filterByDate(r),
+    (r) => r.patientId === patientId && onEvent(r) && filterByDate(r),
   );
 
   let wardCharges = 0;
@@ -353,7 +393,7 @@ function calculateInsuranceCoverage(
   const applicableExclusions = (exclusions || []).filter(
     (e) =>
       matchesCompanyId(e, patient.insurance_providerId) &&
-      (e.status === "active" || !e.status),
+      (String(e.status || "active").toLowerCase() === "active"),
   );
 
   const exclusionsApplied = [];
@@ -373,13 +413,22 @@ function calculateInsuranceCoverage(
     billAfterExclusions[serviceKey] = 0;
   });
 
+  let generalDeductiblePool = tariffSpecific(applicableTariff, "deductible");
+
   const coverageBreakdown = INSURANCE_SERVICE_KEYS.map((service) => {
     const amount = toAmount(billBreakdown?.[service]);
     const serviceAfterExclusions = toAmount(billAfterExclusions?.[service]);
     const isExcluded = exclusionsApplied.some((ex) => ex.service === service);
     const prefix = getTariffPrefix(service);
+    const coveragePercentage = tariffCoveragePercentage(
+      applicableTariff,
+      prefix,
+    );
+    const coverageLimit = tariffCoverageLimit(applicableTariff, prefix);
 
     let serviceCoverage = 0;
+    let appliedDeductible = 0;
+    let deductiblePerDay = 0;
     let dailyBreakdown = null;
 
     if (!isExcluded && serviceAfterExclusions > 0) {
@@ -388,82 +437,103 @@ function calculateInsuranceCoverage(
           patient,
           applicableTariff,
           endDate,
+          generalDeductiblePool,
         );
-        serviceCoverage = wardCalc.totalWardCoverage;
-        dailyBreakdown = wardCalc.dailyBreakdown;
+        if (wardCalc.totalWardCharges > 0) {
+          serviceCoverage = wardCalc.totalWardCoverage;
+          dailyBreakdown = wardCalc.dailyBreakdown;
+          appliedDeductible = wardCalc.deductibleUsed;
+          deductiblePerDay = wardCalc.deductiblePerDay;
+          generalDeductiblePool = wardCalc.generalDeductibleRemaining;
+        } else {
+          const ownDeductible = tariffDeductible(applicableTariff, prefix);
+          if (ownDeductible > 0) {
+            appliedDeductible = Math.min(ownDeductible, serviceAfterExclusions);
+          } else if (generalDeductiblePool > 0) {
+            appliedDeductible = Math.min(
+              generalDeductiblePool,
+              serviceAfterExclusions,
+            );
+            generalDeductiblePool -= appliedDeductible;
+          }
+          const amountAfterDeductible = Math.max(
+            0,
+            serviceAfterExclusions - appliedDeductible,
+          );
+          serviceCoverage =
+            (amountAfterDeductible * coveragePercentage) / 100;
+          if (coverageLimit > 0 && serviceCoverage > coverageLimit) {
+            serviceCoverage = coverageLimit;
+          }
+          serviceCoverage = Math.min(serviceCoverage, serviceAfterExclusions);
+        }
       } else {
-        const serviceCoveragePercentage =
-          applicableTariff[`${prefix}CoveragePercentage`] !== undefined
-            ? toAmount(applicableTariff[`${prefix}CoveragePercentage`])
-            : toAmount(applicableTariff.coveragePercentage);
-        const serviceCoverageLimit =
-          applicableTariff[`${prefix}CoverageLimit`] !== undefined
-            ? toAmount(applicableTariff[`${prefix}CoverageLimit`])
-            : toAmount(applicableTariff.coverageLimit);
-        const serviceDeductible =
-          applicableTariff[`${prefix}Deductible`] !== undefined
-            ? toAmount(applicableTariff[`${prefix}Deductible`])
-            : toAmount(applicableTariff.deductible);
+        const ownDeductible = tariffDeductible(applicableTariff, prefix);
+        if (ownDeductible > 0) {
+          appliedDeductible = Math.min(ownDeductible, serviceAfterExclusions);
+        } else if (generalDeductiblePool > 0) {
+          appliedDeductible = Math.min(
+            generalDeductiblePool,
+            serviceAfterExclusions,
+          );
+          generalDeductiblePool -= appliedDeductible;
+        }
 
         const amountAfterDeductible = Math.max(
           0,
-          serviceAfterExclusions - serviceDeductible,
+          serviceAfterExclusions - appliedDeductible,
         );
-        serviceCoverage =
-          (amountAfterDeductible * serviceCoveragePercentage) / 100;
+        serviceCoverage = (amountAfterDeductible * coveragePercentage) / 100;
 
-        if (serviceCoverageLimit > 0 && serviceCoverage > serviceCoverageLimit) {
-          serviceCoverage = serviceCoverageLimit;
+        if (coverageLimit > 0 && serviceCoverage > coverageLimit) {
+          serviceCoverage = coverageLimit;
         }
         serviceCoverage = Math.min(serviceCoverage, serviceAfterExclusions);
       }
     }
 
-    const coveragePercentage =
-      service === "Ward"
-        ? applicableTariff.wardCoveragePercentage !== undefined
-          ? toAmount(applicableTariff.wardCoveragePercentage)
-          : toAmount(applicableTariff.coveragePercentage)
-        : applicableTariff[`${prefix}CoveragePercentage`] !== undefined
-          ? toAmount(applicableTariff[`${prefix}CoveragePercentage`])
-          : toAmount(applicableTariff.coveragePercentage);
-
-    const coverageLimit =
-      service === "Ward"
-        ? applicableTariff.wardCoverageLimit !== undefined
-          ? toAmount(applicableTariff.wardCoverageLimit)
-          : toAmount(applicableTariff.coverageLimit)
-        : applicableTariff[`${prefix}CoverageLimit`] !== undefined
-          ? toAmount(applicableTariff[`${prefix}CoverageLimit`])
-          : toAmount(applicableTariff.coverageLimit);
-
-    const deductible =
-      service === "Ward"
-        ? applicableTariff.wardDeductible !== undefined
-          ? toAmount(applicableTariff.wardDeductible)
-          : toAmount(applicableTariff.deductible)
-        : applicableTariff[`${prefix}Deductible`] !== undefined
-          ? toAmount(applicableTariff[`${prefix}Deductible`])
-          : toAmount(applicableTariff.deductible);
+    serviceCoverage = roundMoney(serviceCoverage);
+    appliedDeductible = roundMoney(appliedDeductible);
 
     return {
       service,
       amount,
       coverage: serviceCoverage,
-      patientShare: amount - serviceCoverage,
+      patientShare: roundMoney(Math.max(0, amount - serviceCoverage)),
       excluded: isExcluded,
       coveragePercentage,
       coverageLimit,
-      deductible,
+      deductible: appliedDeductible,
+      deductiblePerDay,
       insuranceCategory: prefix,
       dailyBreakdown,
     };
   });
 
-  const totalInsuranceCoverage = coverageBreakdown.reduce(
-    (sum, item) => sum + item.coverage,
-    0,
+  let totalInsuranceCoverage = roundMoney(
+    coverageBreakdown.reduce((sum, item) => sum + item.coverage, 0),
   );
+  const policyLimit = tariffSpecific(applicableTariff, "coverageLimit");
+  if (policyLimit > 0 && totalInsuranceCoverage > policyLimit) {
+    const scale = policyLimit / totalInsuranceCoverage;
+    let scaled = 0;
+    const coveredLines = coverageBreakdown.filter((item) => item.coverage > 0);
+    coveredLines.forEach((item, index) => {
+      if (index === coveredLines.length - 1) {
+        item.coverage = roundMoney(Math.max(0, policyLimit - scaled));
+      } else {
+        item.coverage = roundMoney(item.coverage * scale);
+        scaled += item.coverage;
+      }
+      item.patientShare = roundMoney(Math.max(0, item.amount - item.coverage));
+    });
+    totalInsuranceCoverage = roundMoney(
+      coverageBreakdown.reduce((sum, item) => sum + item.coverage, 0),
+    );
+    warnings.push(
+      `Policy coverage limit of ₹${policyLimit.toLocaleString("en-IN")} applied.`,
+    );
+  }
 
   const coPayPercentage = toAmount(patient.coPayPercentage);
   const coPayLimit = toAmount(patient.coPayLimit);
@@ -485,20 +555,18 @@ function calculateInsuranceCoverage(
   );
 
   const serviceCoverageDetails = {};
-  for (const key of ["ward", "consultation", "investigation", "procedure", "pharmacy"]) {
+  for (const key of [
+    "ward",
+    "consultation",
+    "investigation",
+    "procedure",
+    "service",
+    "pharmacy",
+  ]) {
     serviceCoverageDetails[key] = {
-      coveragePercentage:
-        applicableTariff[`${key}CoveragePercentage`] !== undefined
-          ? toAmount(applicableTariff[`${key}CoveragePercentage`])
-          : toAmount(applicableTariff.coveragePercentage),
-      coverageLimit:
-        applicableTariff[`${key}CoverageLimit`] !== undefined
-          ? toAmount(applicableTariff[`${key}CoverageLimit`])
-          : toAmount(applicableTariff.coverageLimit),
-      deductible:
-        applicableTariff[`${key}Deductible`] !== undefined
-          ? toAmount(applicableTariff[`${key}Deductible`])
-          : toAmount(applicableTariff.deductible),
+      coveragePercentage: tariffCoveragePercentage(applicableTariff, key),
+      coverageLimit: tariffCoverageLimit(applicableTariff, key),
+      deductible: tariffDeductible(applicableTariff, key),
     };
   }
 

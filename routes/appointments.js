@@ -1,6 +1,8 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const router = express.Router();
 const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
+const { localYmd } = require("../utils/localDate");
 const Hospital = require("../models/Hospital");
 const {
   sendAppointmentWhatsApp,
@@ -8,6 +10,14 @@ const {
 } = require("../utils/whatsappCloud");
 
 applyTenantEntitlements(router, { moduleKey: "core" });
+
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+router.param("id", (req, res, next, id) =>
+  mongoose.Types.ObjectId.isValid(id)
+    ? next()
+    : res.status(400).json({ message: "Invalid appointment id" }),
+);
 
 const APPOINTMENT_EVENT_TO_TEMPLATE = {
   booked: "appointment_booked",
@@ -76,34 +86,36 @@ router.get("/", async (req, res) => {
       query.status = status;
     }
 
-    // Filter by date range
-    if (startDate && endDate) {
-      query.slotDate = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
-      };
-    } else if (startDate) {
-      query.slotDate = { $gte: new Date(startDate) };
-    } else if (endDate) {
-      query.slotDate = { $lte: new Date(endDate) };
+    // slotDate is stored as a YYYY-MM-DD string; compare as hospital-local dates.
+    const toYmd = (value) => {
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? null : localYmd(parsed);
+    };
+    const fromYmd = startDate ? toYmd(startDate) : null;
+    const toYmdValue = endDate ? toYmd(endDate) : null;
+    if (fromYmd || toYmdValue) {
+      query.slotDate = {};
+      if (fromYmd) query.slotDate.$gte = fromYmd;
+      if (toYmdValue) query.slotDate.$lte = `${toYmdValue}\uffff`;
     }
 
     // Search filter
     if (search && search.length >= 2) {
+      const pattern = escapeRegex(search);
       query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { fullName: { $regex: search, $options: "i" } },
-        { phone: { $regex: search, $options: "i" } },
-        { mobile: { $regex: search, $options: "i" } },
-        { doctor: { $regex: search, $options: "i" } },
-        { doctorName: { $regex: search, $options: "i" } },
-        { treatment: { $regex: search, $options: "i" } },
+        { name: { $regex: pattern, $options: "i" } },
+        { fullName: { $regex: pattern, $options: "i" } },
+        { phone: { $regex: pattern, $options: "i" } },
+        { mobile: { $regex: pattern, $options: "i" } },
+        { doctor: { $regex: pattern, $options: "i" } },
+        { doctorName: { $regex: pattern, $options: "i" } },
+        { treatment: { $regex: pattern, $options: "i" } },
       ];
     }
 
     // Calculate pagination
-    const pageNum = parseInt(page);
-    const limitNum = parseInt(limit);
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10) || 20));
     const skip = (pageNum - 1) * limitNum;
 
     // Get total count
@@ -167,9 +179,10 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const Appointment = req.tenantDb.model("Appointment");
+    const { _id, hospitalId, createdAt, updatedAt, ...patch } = req.body || {};
     const appointment = await Appointment.findOneAndUpdate(
       { _id: req.params.id, hospitalId: req.hospitalId },
-      req.body,
+      { $set: patch },
       { new: true }
     );
     if (!appointment) {

@@ -59,17 +59,6 @@ const patientSchema = new mongoose.Schema(
       familyHistory: { type: String },
     },
 
-    // Saved Default Insurance Profile (Autofills on OP / IP visits)
-    paymentMethod: { type: String, default: "Personal" },
-    insurance_provider: { type: String },
-    insurance_providerId: { type: String },
-    policy_number: { type: String },
-    coPayPercentage: { type: Number, default: 0 },
-    coPayLimit: { type: Number, default: 0 },
-    coPayType: { type: String, default: "percentage" },
-    coverage: { type: String },
-    expiry_date: { type: String },
-
     // Registration & Audit
     registered_by: { type: String },
     registration_date: { type: String },

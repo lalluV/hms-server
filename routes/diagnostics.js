@@ -48,7 +48,7 @@ router.get("/", async (req, res) => {
     const Diagnostic = req.tenantDb.model("Diagnostic");
     const Parameter = req.tenantDb.model("Parameter");
 
-    const { search, page = 1, limit } = req.query;
+    const { search, page = 1, limit, deptScope } = req.query;
     const searchText = typeof search === "string" ? search.trim() : "";
 
     // Use different limits based on whether search is active
@@ -71,6 +71,22 @@ router.get("/", async (req, res) => {
         { "includedTests.name": contains },
         { "includedTests.code": contains },
         { "parameters.name": contains },
+      ];
+    }
+
+    if (deptScope === "radiology") {
+      searchQuery.deptname = { $regex: /^radiology$/i };
+    } else if (deptScope === "lab") {
+      searchQuery.$and = [
+        ...(searchQuery.$and || []),
+        {
+          $or: [
+            { deptname: { $exists: false } },
+            { deptname: null },
+            { deptname: "" },
+            { deptname: { $not: /^radiology$/i } },
+          ],
+        },
       ];
     }
 

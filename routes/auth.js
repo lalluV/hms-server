@@ -641,6 +641,7 @@ router.put("/hospital-profile", auth, async (req, res) => {
       "timezone",
       "dateFormat",
       "billPrintSettings",
+      "proCommission",
     ];
     const incomingBillPrint = req.body.settings?.billPrintSettings;
     if (

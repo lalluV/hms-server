@@ -2,6 +2,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const router = express.Router();
 const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
+const { localYmd } = require("../utils/localDate");
 const { getTenantConnection } = require("../utils/tenantDb");
 const Hospital = require("../models/Hospital");
 const {
@@ -401,8 +402,8 @@ function enrichQueueRow(rx, patientMap) {
     phone: patient?.phone,
     allergiesHistory: patient?.allergiesHistory || "",
     pastMedicalHistory: patient?.pastMedicalHistory || "",
-    paymentMethod: rx.paymentMethod || patient?.paymentMethod || "Personal",
-    insurance_provider: rx.insurance_provider || patient?.insurance_provider,
+    paymentMethod: rx.paymentMethod || "Personal",
+    insurance_provider: rx.insurance_provider || "",
     patient_type: "OP",
     active: true,
     registration_date: patient?.registration_date,
@@ -603,9 +604,16 @@ router.post("/check-in", async (req, res) => {
       });
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localYmd();
     const dateRange = buildDateStringRange(today, today);
 
+    const releaseCheckin =
+      reuseToday && !forceNew
+        ? await acquireKeyLock(
+            `${req.hospitalId}:${patient._id}:${resolvedDoctorId}:${today}`,
+          )
+        : () => {};
+    try {
     if (reuseToday && !forceNew) {
       const existing = await Prescription.findOne({
         hospitalId: req.hospitalId,
@@ -729,7 +737,7 @@ router.post("/check-in", async (req, res) => {
       doctorId: String(resolvedDoctorId),
       doctorName: resolvedDoctorName,
       consultantDoctor: resolvedDoctorName,
-      date: new Date().toISOString().split("T")[0],
+      date: localYmd(),
       symptoms: pastSymptoms || "",
       provisionalDiagnosis: pastProvisionalDiagnosis || "",
       weight: pastWeight || "",
@@ -739,10 +747,10 @@ router.post("/check-in", async (req, res) => {
       nurseNotes: [],
       diagnosticData: pastDiagnosticData,
       medicineData: pastMedicineData,
-      paymentMethod: patient.paymentMethod || "Personal",
-      insurance_provider: patient.insurance_provider,
-      insurance_providerId: patient.insurance_providerId,
-      policy_number: patient.policy_number,
+      paymentMethod: "Personal",
+      insurance_provider: "",
+      insurance_providerId: "",
+      policy_number: "",
       pharmacyStatus: "pending",
     });
     await prescriptionDoc.save();
@@ -761,6 +769,9 @@ router.post("/check-in", async (req, res) => {
       prescription: prescriptionDoc.toObject(),
       patient: presentPatient(patient, { admission: open }),
     });
+    } finally {
+      releaseCheckin();
+    }
   } catch (error) {
     console.error("Error checking in OP visit:", error);
     res.status(500).json({ message: error.message });
@@ -915,12 +926,12 @@ router.post("/", async (req, res) => {
     const {
       patientId,
       UMRNo,
-      prescriptionId = `RX-${Date.now()}`,
+      prescriptionId = `RX-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`,
       doctorId,
       doctorName,
       consultantDoctor,
       department,
-      date = new Date().toISOString().split("T")[0],
+      date = localYmd(),
       symptoms,
       provisionalDiagnosis,
       weight,
@@ -944,6 +955,10 @@ router.post("/", async (req, res) => {
       commissionEarnerName,
       commissionRates,
     } = req.body;
+
+    if (!doctorId) {
+      return res.status(400).json({ message: "doctorId is required" });
+    }
 
     // Resolve patient record
     let patient = null;
@@ -985,15 +1000,15 @@ router.post("/", async (req, res) => {
       nurseNotes: nurseNotes || [],
       diagnosticData: diagnosticData || [],
       medicineData: medicineData || [],
-      paymentMethod: paymentMethod || patient.paymentMethod || "Personal",
-      insurance_provider: insurance_provider ?? patient.insurance_provider,
-      insurance_providerId: insurance_providerId ?? patient.insurance_providerId,
-      policy_number: policy_number ?? patient.policy_number,
-      coPayPercentage: coPayPercentage ?? patient.coPayPercentage ?? 0,
-      coPayLimit: coPayLimit ?? patient.coPayLimit ?? 0,
-      coPayType: coPayType || patient.coPayType || "percentage",
-      coverage: coverage ?? patient.coverage,
-      expiry_date: expiry_date ?? patient.expiry_date,
+      paymentMethod: paymentMethod || "Personal",
+      insurance_provider: insurance_provider || "",
+      insurance_providerId: insurance_providerId || "",
+      policy_number: policy_number || "",
+      coPayPercentage: coPayPercentage ?? 0,
+      coPayLimit: coPayLimit ?? 0,
+      coPayType: coPayType || "percentage",
+      coverage: coverage || "",
+      expiry_date: expiry_date || "",
       commissionEarnerType,
       commissionEarnerId,
       commissionEarnerName,
@@ -1008,6 +1023,48 @@ router.post("/", async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+
+const keyLocks = new Map();
+/** Serialize work per key within this process. Resolves to a release function. */
+async function acquireKeyLock(key) {
+  const prev = keyLocks.get(key) || Promise.resolve();
+  let release;
+  const current = new Promise((resolve) => {
+    release = resolve;
+  });
+  const tail = prev.then(() => current);
+  keyLocks.set(key, tail);
+  await prev;
+  return () => {
+    release();
+    if (keyLocks.get(key) === tail) keyLocks.delete(key);
+  };
+}
+
+const normLineName = (value) =>
+  String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+const medicineLineKey = (line) =>
+  normLineName(line?.name || line?.description || line?.generic_name);
+const testLineKey = (line) =>
+  normLineName(line?.test_name || line?.name || line?.description);
+
+function keepBilledFlags(incoming, stored, keyOf, flags) {
+  const billedByKey = new Map();
+  for (const line of Array.isArray(stored) ? stored : []) {
+    const key = keyOf(line);
+    if (!key) continue;
+    const prev = billedByKey.get(key) || {};
+    for (const flag of flags) if (line?.[flag]) prev[flag] = true;
+    billedByKey.set(key, prev);
+  }
+  return incoming.map((line) => {
+    const kept = billedByKey.get(keyOf(line));
+    if (!kept || !line || typeof line !== "object") return line;
+    const next = { ...line };
+    for (const flag of flags) if (kept[flag]) next[flag] = true;
+    return next;
+  });
+}
 
 /**
  * PUT /api/prescriptions/:id
@@ -1036,6 +1093,33 @@ router.put("/:id", async (req, res) => {
     delete body._id;
     delete body.hospitalId;
     delete body.patientId;
+    delete body.prescriptionId;
+    delete body.UMRNo;
+
+    // Billing flags are one-way: a stale client copy must never un-bill a line.
+    if (Array.isArray(body.medicineData) || Array.isArray(body.diagnosticData)) {
+      const current = await Prescription.findOne(query)
+        .select("medicineData diagnosticData")
+        .lean();
+      if (current) {
+        if (Array.isArray(body.medicineData)) {
+          body.medicineData = keepBilledFlags(
+            body.medicineData,
+            current.medicineData,
+            medicineLineKey,
+            ["pharmacyBilled", "indentSent"],
+          );
+        }
+        if (Array.isArray(body.diagnosticData)) {
+          body.diagnosticData = keepBilledFlags(
+            body.diagnosticData,
+            current.diagnosticData,
+            testLineKey,
+            ["labBilled", "indentSent"],
+          );
+        }
+      }
+    }
 
     if (body.consultantDoctor && !body.doctorName) {
       body.doctorName = body.consultantDoctor;
@@ -1046,14 +1130,14 @@ router.put("/:id", async (req, res) => {
     let updated = await Prescription.findOneAndUpdate(
       query,
       { $set: body },
-      { new: true },
+      { new: true, runValidators: true },
     );
 
     if (!updated && req.hospitalId) {
       updated = await Prescription.findOneAndUpdate(
         { $or: orConditions },
         { $set: body },
-        { new: true },
+        { new: true, runValidators: true },
       );
     }
 

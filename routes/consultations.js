@@ -1,8 +1,17 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const router = express.Router();
 const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
 
 applyTenantEntitlements(router, { moduleKey: "clinical" });
+
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const byId = (raw) =>
+  mongoose.Types.ObjectId.isValid(raw) ? { _id: raw } : { receiptId: raw };
+const toIso = (value) => {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+};
 
 // Get all consultations with pagination support
 router.get("/", async (req, res) => {
@@ -38,31 +47,29 @@ router.get("/", async (req, res) => {
       query.paymentStatus = status;
     }
 
-    // Filter by date range
-    if (startDate && endDate) {
-      query.createdAt = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
-      };
-    } else if (startDate) {
-      query.createdAt = { $gte: new Date(startDate) };
-    } else if (endDate) {
-      query.createdAt = { $lte: new Date(endDate) };
+    // createdAt is stored as an ISO string; compare as ISO strings.
+    const fromIso = startDate ? toIso(startDate) : null;
+    const toIsoValue = endDate ? toIso(endDate) : null;
+    if (fromIso || toIsoValue) {
+      query.createdAt = {};
+      if (fromIso) query.createdAt.$gte = fromIso;
+      if (toIsoValue) query.createdAt.$lte = toIsoValue;
     }
 
     // Search filter
     if (search && search.length >= 2) {
+      const pattern = escapeRegex(search);
       query.$or = [
-        { receiptId: { $regex: search, $options: "i" } },
-        { patientId: { $regex: search, $options: "i" } },
-        { patientName: { $regex: search, $options: "i" } },
-        { doctorName: { $regex: search, $options: "i" } },
+        { receiptId: { $regex: pattern, $options: "i" } },
+        { patientId: { $regex: pattern, $options: "i" } },
+        { patientName: { $regex: pattern, $options: "i" } },
+        { doctorName: { $regex: pattern, $options: "i" } },
       ];
     }
 
     // Calculate pagination
-    const pageNum = parseInt(page);
-    const limitNum = parseInt(limit);
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10) || 20));
     const skip = (pageNum - 1) * limitNum;
 
     // Get total count
@@ -90,12 +97,30 @@ router.get("/", async (req, res) => {
   }
 });
 
+// Get consultations by date range
+router.get("/date-range", async (req, res) => {
+  try {
+    const Consultation = req.tenantDb.model("Consultation");
+    const { startDate, endDate } = req.query;
+    const createdAt = {};
+    if (toIso(startDate)) createdAt.$gte = toIso(startDate);
+    if (toIso(endDate)) createdAt.$lte = toIso(endDate);
+    const consultations = await Consultation.find({
+      ...(Object.keys(createdAt).length ? { createdAt } : {}),
+      hospitalId: req.hospitalId,
+    });
+    res.json(consultations);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Get consultation by ID
 router.get("/:id", async (req, res) => {
   try {
     const Consultation = req.tenantDb.model("Consultation");
     const consultation = await Consultation.findOne({
-      id: req.params.id,
+      ...byId(req.params.id),
       hospitalId: req.hospitalId,
     });
     if (!consultation) {
@@ -127,8 +152,8 @@ router.put("/:id", async (req, res) => {
   try {
     const Consultation = req.tenantDb.model("Consultation");
     const consultation = await Consultation.findOneAndUpdate(
-      { id: req.params.id, hospitalId: req.hospitalId },
-      req.body,
+      { ...byId(req.params.id), hospitalId: req.hospitalId },
+      { $set: (({ _id, hospitalId, ...rest }) => rest)(req.body || {}) },
       { new: true },
     );
     if (!consultation) {
@@ -145,7 +170,7 @@ router.delete("/:id", async (req, res) => {
   try {
     const Consultation = req.tenantDb.model("Consultation");
     const consultation = await Consultation.findOneAndDelete({
-      id: req.params.id,
+      ...byId(req.params.id),
       hospitalId: req.hospitalId,
     });
     if (!consultation) {
@@ -191,24 +216,6 @@ router.get("/status/:status", async (req, res) => {
     const Consultation = req.tenantDb.model("Consultation");
     const consultations = await Consultation.find({
       status: req.params.status,
-      hospitalId: req.hospitalId,
-    });
-    res.json(consultations);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Get consultations by date range
-router.get("/date-range", async (req, res) => {
-  try {
-    const Consultation = req.tenantDb.model("Consultation");
-    const { startDate, endDate } = req.query;
-    const consultations = await Consultation.find({
-      date: {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
-      },
       hospitalId: req.hospitalId,
     });
     res.json(consultations);

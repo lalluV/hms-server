@@ -46,21 +46,11 @@ const patientSchema = new mongoose.Schema(
       alcohol: { type: Boolean, default: false },
       smoking: { type: Boolean, default: false },
       illicitDrugs: { type: Boolean, default: false },
+      habitsNil: { type: Boolean, default: false },
       other: { type: String },
       maritalStatus: { type: String },
       familyHistory: { type: String },
     },
-
-    // Saved Default Insurance Profile
-    paymentMethod: { type: String, default: "Personal" },
-    insurance_provider: { type: String },
-    insurance_providerId: { type: String },
-    policy_number: { type: String },
-    coPayPercentage: { type: Number, default: 0 },
-    coPayLimit: { type: Number, default: 0 },
-    coPayType: { type: String, default: "percentage" },
-    coverage: { type: String },
-    expiry_date: { type: String },
 
     // Registration & Audit
     registered_by: { type: String },
@@ -85,8 +75,10 @@ patientSchema.index(
   { hospitalId: 1, publicRegistrationKey: 1 },
   {
     unique: true,
-    sparse: true,
-    name: "hospitalId_publicRegistrationKey_unique",
+    // sparse has no effect on a compound index whose hospitalId is always set,
+    // so every patient without a key would collide on null.
+    partialFilterExpression: { publicRegistrationKey: { $type: "string" } },
+    name: "hospitalId_publicRegistrationKey_partial_unique",
   },
 );
 
@@ -227,6 +219,9 @@ function registerTenantModels(connection) {
         maritalStatus: { type: String },
         familyHistory: { type: String },
       });
+    }
+    if (ph?.schema && !ph.schema.paths.habitsNil) {
+      ph.schema.add({ habitsNil: { type: Boolean, default: false } });
     }
   }
 
