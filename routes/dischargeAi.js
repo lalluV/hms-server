@@ -27,11 +27,11 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL =
   process.env.OPENAI_FALLBACK_MODEL ||
   process.env.OPENAI_MODEL ||
-  "gpt-4.1-mini";
+  "gpt-6-luna";
 const PARSE_NOTE_MODEL =
   process.env.GEMINI_PARSE_MODEL ||
   process.env.GEMINI_TRANSCRIBE_MODEL ||
-  "gemini-3.1-flash-lite";
+  "gemini-3.5-flash-lite";
 const PARSE_NOTE_TIMEOUT_MS =
   Number(process.env.GEMINI_PARSE_TIMEOUT_MS) ||
   Number(process.env.OPENAI_PARSE_TIMEOUT_MS) ||
@@ -464,9 +464,7 @@ router.post("/synthesize-case", async (req, res) => {
       patient.operationNotes ||
       "";
     const emergencyNotes =
-      patient.chiefComplaintsPresentIllnessHistory ||
-      patient.emergencyAssessment?.chiefComplaintsPresentIllnessHistory ||
-      "";
+      patient.ernote || patient.emergencyAssessment?.ernote || "";
     const provisionalDiagnosis =
       patient.provisionalDiagnosis ||
       patient.emergencyAssessment?.provisionalDiagnosis ||
@@ -491,10 +489,6 @@ router.post("/synthesize-case", async (req, res) => {
       patient.consciousness || emergencyAssessment.consciousness || "";
     const gcs = patient.gcs || emergencyAssessment.gcs || "";
     const pupils = patient.pupils || emergencyAssessment.pupils || "";
-    const emergencyExam =
-      patient.systemicExamination ||
-      emergencyAssessment.systemicExamination ||
-      "";
     const emergencyVitals =
       emergencyAssessment.vitals ||
       (Array.isArray(patient.vitals) && patient.vitals[0]) ||
@@ -638,7 +632,6 @@ CLINICAL STAY DATA:
 - Emergency / Casualty Presentation & Complaints: ${emergencyNotes || "None documented"}
 - Emergency Triage & Vitals: ${erTriageDetails || "None recorded"}
 - Emergency / Casualty Medications Given (Immediate ER Care): ${casualtyTreatmentStr || "None recorded"}
-- Emergency Systemic Examination: ${emergencyExam || "None recorded"}
 - Operative / Surgical / OT Notes: ${typeof otNotes === "string" ? otNotes : JSON.stringify(otNotes) || "None"}
 - Doctor Daily Progress Notes:
 ${doctorNotes || "No notes"}
@@ -747,8 +740,9 @@ router.post("/review-followup/reply-stream", async (req, res) => {
       {
         model: OPENAI_MODEL,
         stream: true,
+        reasoning_effort: "none",
         temperature: 0.2,
-        max_tokens: REVIEW_FOLLOWUP_REPLY_MAX_TOKENS,
+        max_completion_tokens: REVIEW_FOLLOWUP_REPLY_MAX_TOKENS,
         messages: [
           {
             role: "system",

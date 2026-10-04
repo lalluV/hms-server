@@ -25,9 +25,9 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL =
   process.env.OPENAI_FALLBACK_MODEL ||
   process.env.OPENAI_MODEL ||
-  "gpt-4.1-mini";
+  "gpt-6-luna";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-// AI Write chart JSON uses gpt-6-luna (see aiCompletionWithFallback). Typing streams stay on OPENAI_MODEL.
+// AI Write chart JSON goes through aiCompletionWithFallback (Gemini first).
 const PARSE_NOTE_TIMEOUT_MS =
   Number(process.env.GEMINI_PARSE_TIMEOUT_MS) ||
   Number(process.env.OPENAI_PARSE_TIMEOUT_MS) ||
@@ -459,6 +459,15 @@ COMPLETENESS AND SAFETY
 TEMPORAL AND SEMANTIC ROUTING
 - Past conditions, prior events, and background medicines → history (not diagnosis).
 - Observed findings → examination.
+
+SECTION PLACEMENT (HARD — UNIVERSAL)
+- complaints: the present illness. Every current symptom with its duration and course, plus every pertinent negative (a symptom the patient does not have) that describes this illness.
+- history: only conditions, illnesses, surgeries, admissions, or long-term medicines that existed before the present illness. A pertinent negative about the present illness is never history. If nothing pre-existing was stated, history is [].
+- examination: only findings observed or measured while examining the patient. Orders, diet restrictions, fluids, nursing instructions, and plans are never examination.
+- allergies: only stated allergies or an explicit statement of no known allergy. Otherwise [].
+- Each bullet is clinical content only. Never write a section name or heading as a bullet, and never place one section's heading inside another section.
+- Each fact goes in exactly one section. Do not repeat a fact across sections.
+- A section with no stated facts is []. Never write placeholders such as Nil.
 - Counsel, precautions, follow-up, conditional plans ("if needed", "if not better") → advice.
 - Today's drug products → medicines[]; ordered investigations (including smear/panel/imaging abbreviations) → labTests[] ONLY (never in notes, never as medicines); this-visit clinical acts/services → procedures[] (never medicines[]); measured vitals → vitals.
 - A finite medicine course that ends afterward remains action "add". action "stop" only when the doctor explicitly discontinues/holds/removes/omits a medicine.
@@ -864,7 +873,8 @@ const CLINICAL_JSON_SHAPE_BLOCK = `Return exactly this JSON shape:
     "history": ["one past-history bullet"],
     "examination": ["one exam bullet"],
     "diagnosis": ["one diagnosis bullet"],
-    "advice": ["one advice bullet"]
+    "advice": ["one advice bullet"],
+    "allergies": ["one allergy bullet"]
   },
   "noteOperations": [{
     "section": "complaints|history|examination|diagnosis|advice",
@@ -950,7 +960,7 @@ const PARSE_CLINICAL_NOTE_USER_PROMPT = (
     clinicalSetting === "discharge"
       ? `SETTING: DISCHARGE SUMMARY. Extract ONLY discharge-relevant content from the doctor's dictation. Fill dischargeFields.finalDiagnosis (confirmed diagnosis at discharge), dischargeFields.dischargeInstructions (counselling, precautions, diet, activity, warning signs, medication adherence), dischargeFields.followUpPlan (appointments, repeat tests, when to return). Discharge medicines the patient takes home → medicines[] with action "add" only (never stop/restart). Do NOT create labTests or procedures unless explicitly ordered at discharge. Leave doctorNotes and noteSections empty unless the doctor dictated extra narrative not captured in dischargeFields.`
       : clinicalSetting === "era"
-        ? `SETTING: OPD. "stop" removes a medicine from this visit prescription. "restart" is rarely used in OPD — only if the doctor explicitly restarts a stopped chart medicine. ERA ONLY: use the same OPD clinical note. The note has these five headings by default: Chief complaints, Past history, Systemic examination, Provisional diagnosis, Allergies. noteSections keys are complaints, history, examination, diagnosis, allergies. Do not use advice. Medicines: duration "" and omit quantity. Do not default a course length and do not calculate a dispense quantity. Procedures stay in procedures[], the same as OPD.`
+        ? `SETTING: OPD. "stop" removes a medicine from this visit prescription. "restart" is rarely used in OPD — only if the doctor explicitly restarts a stopped chart medicine. ERA ONLY: use the same OPD clinical note. The note has these headings by default: Chief complaints, Past medical history, Systemic examination, Provisional diagnosis, Allergies. noteSections keys are complaints, history, examination, diagnosis, allergies. Do not use advice. Medicines: duration "" and omit quantity. Do not default a course length and do not calculate a dispense quantity. Procedures stay in procedures[], the same as OPD.`
         : clinicalSetting === "ipd"
           ? `SETTING: IPD (ward progress note). "stop" discontinues a medicine. "restart" reactivates a previously stopped ward medicine (prefer existingContext.stoppedMedicineNames). DURATION OVERRIDE: do NOT default medicine duration to "5 days". Leave duration "" unless the doctor explicitly stated a course length (e.g. "3 days", "5d"). Ward medicines continue until stopped — never invent a course length. IV fluids still use hours when stated, else "Once". DIRECTIONS (IPD): morning/afternoon/evening/night schedule English WITHOUT a course length (no "for 5 days"). Prefer "Take in the morning and evening" style — do NOT invent per-slot tablet/ml amounts in directions unless the doctor stated an amount. dosages[] times + beforeFood only; leave amount empty or omit when not stated.`
           : `SETTING: OPD. "stop" removes a medicine from this visit prescription. "restart" is rarely used in OPD — only if the doctor explicitly restarts a stopped chart medicine.`;
@@ -967,12 +977,12 @@ ${modeLine}
 ${context ? `PATIENT: ${context}` : ""}
 ${existingLine}
 
-COMPLETENESS: Keep every clinical fact from CURRENT INPUT. Think like a senior clinician in any specialty — expand shorthand into clear English and place each fact by meaning (past→history, symptoms→complaints only never diagnosis, exam→examination, named impression→diagnosis else leave diagnosis empty, plan/follow-up/if-needed→advice, today's named drug orders→medicines[], ordered investigations→labTests[] never in notes, this-visit acts/services→procedures[] never medicines[], measured vitals→vitals). noteSections are bullet lists. Medicine name: keep the spoken product (brand+suffix stays as spoken; generic stays generic; expand only a standalone generic abbreviation; never rewrite a brand to its salt); leave generic_name "". Tapers = multiple medicines[] rows. Explicit stop/delete of a named drug = action stop. Explicit restart/resume of a previously stopped named drug = action restart. Tablet/Capsule/Injection unit "" (IU/ml only when stated); IV fluids duration hours or Once not 5 days; beforeFood when known. Do not drop clauses.
+COMPLETENESS: Keep every clinical fact from CURRENT INPUT. Think like a senior clinician in any specialty — expand shorthand into clear English and place each fact by meaning following SECTION PLACEMENT (pre-existing conditions→history, present-illness symptoms and their pertinent negatives→complaints only never diagnosis or history, exam→examination, named impression→diagnosis else leave diagnosis empty, plan/follow-up/if-needed→advice, today's named drug orders→medicines[], ordered investigations→labTests[] never in notes, this-visit acts/services→procedures[] never medicines[], measured vitals→vitals). noteSections are bullet lists. Medicine name: keep the spoken product (brand+suffix stays as spoken; generic stays generic; expand only a standalone generic abbreviation; never rewrite a brand to its salt); leave generic_name "". Tapers = multiple medicines[] rows. Explicit stop/delete of a named drug = action stop. Explicit restart/resume of a previously stopped named drug = action restart. Tablet/Capsule/Injection unit "" (IU/ml only when stated); IV fluids duration hours or Once not 5 days; beforeFood when known. Do not drop clauses.
 
 ${clinicalSetting === "discharge" ? DISCHARGE_JSON_SHAPE_BLOCK : CLINICAL_JSON_SHAPE_BLOCK}
 ${
   clinicalSetting === "era"
-    ? `ERA OVERRIDE: Same prompt as OPD, with only these differences. noteSections keys are complaints, history, examination, diagnosis, allergies — not advice. Those five headings are already on the note. Medicine duration is "" and quantity is omitted. Do not write a course length into directions. Keep procedures in procedures[] the same as OPD.`
+    ? `ERA OVERRIDE: Same prompt as OPD, with only these differences. noteSections keys are complaints, history, examination, diagnosis, allergies — not advice. Those headings are already on the note. Because ERA has no advice section, drug and fluid orders go to medicines[], and diet restrictions or nursing instructions go to procedures[]; none of them go in the note. Medicine duration is "" and quantity is omitted. Do not write a course length into directions. Keep procedures in procedures[] the same as OPD.`
     : ""
 }
 
@@ -1264,7 +1274,7 @@ const REVIEW_FOLLOWUP_USER_PROMPT = (
     clinicalSetting === "discharge"
       ? `SETTING: DISCHARGE SUMMARY follow-up. Patch only dischargeFields (finalDiagnosis, dischargeInstructions, followUpPlan) and discharge medicines[] — no labs/procedures/vitals.`
       : clinicalSetting === "era"
-        ? `SETTING: OPD. "stop" removes a medicine from this visit prescription. "restart" is rarely used in OPD — only if the doctor explicitly restarts a stopped chart medicine. ERA ONLY: use the same OPD clinical note. The note has these five headings by default: Chief complaints, Past history, Systemic examination, Provisional diagnosis, Allergies. noteSections keys are complaints, history, examination, diagnosis, allergies. Do not use advice. Medicines: duration "" and omit quantity. Do not default a course length and do not calculate a dispense quantity. Procedures stay in procedures[], the same as OPD.`
+        ? `SETTING: OPD. "stop" removes a medicine from this visit prescription. "restart" is rarely used in OPD — only if the doctor explicitly restarts a stopped chart medicine. ERA ONLY: use the same OPD clinical note. The note has these headings by default: Chief complaints, Past medical history, Systemic examination, Provisional diagnosis, Allergies. noteSections keys are complaints, history, examination, diagnosis, allergies. Do not use advice. Medicines: duration "" and omit quantity. Do not default a course length and do not calculate a dispense quantity. Procedures stay in procedures[], the same as OPD.`
         : clinicalSetting === "ipd"
           ? `SETTING: IPD (ward progress note). "stop" discontinues a medicine. "restart" reactivates a previously stopped ward medicine. DURATION OVERRIDE: do NOT default medicine duration to "5 days". Leave duration "" unless the doctor explicitly stated a course length. Ward medicines continue until stopped — never invent a course length. IV fluids: hours when stated, else "Once". DIRECTIONS (IPD): schedule English without course length; do not invent per-slot dose amounts unless stated.`
           : `SETTING: OPD. "stop" removes a medicine from this visit prescription.`;
@@ -1809,10 +1819,10 @@ router.post("/", validateRequest, async (req, res) => {
           content: DISCHARGE_SUMMARY_USER_PROMPT(patientData),
         },
       ],
-      max_tokens: 8000,
+      reasoning_effort: "none",
+      max_completion_tokens: 8000,
       temperature: 0.1,
       top_p: 0.9,
-      frequency_penalty: 0.1,
     });
 
     const summary = stripHtmlDocumentWrapper(
@@ -1897,10 +1907,11 @@ router.post("/rewrite-section", async (req, res) => {
               content: prompt,
             },
           ],
-          max_tokens: sectionType.toUpperCase() === "SOAP" ? 1200 : 800,
+          reasoning_effort: "none",
+          max_completion_tokens:
+            sectionType.toUpperCase() === "SOAP" ? 1200 : 800,
           temperature: 0.2,
           top_p: 0.9,
-          frequency_penalty: 0.3,
         },
         { timeout: 15000 },
       );
@@ -1981,10 +1992,7 @@ router.post("/course-chat", async (req, res) => {
     const procedureName =
       patientData.procedureName || patientData.surgeryName || "";
     const complaints =
-      patientData.emergencyAssessment
-        ?.chiefComplaintsPresentIllnessHistory ||
-      patientData.chiefComplaints ||
-      "";
+      patientData.emergencyAssessment?.ernote || patientData.ernote || "";
     const admissionVitals = patientData.vitals?.admission
       ? `BP: ${patientData.vitals.admission.bloodPressure || "—"}, HR: ${
           patientData.vitals.admission.heartRate || "—"
@@ -2071,7 +2079,8 @@ ${
         model: OPENAI_MODEL,
         messages,
         response_format: { type: "json_object" },
-        max_tokens: 1500,
+        reasoning_effort: "none",
+        max_completion_tokens: 1500,
         temperature: 0.2,
       });
 
@@ -2130,7 +2139,11 @@ function finalizeParsedClinicalNote(
     if (clinicalSetting === "era") {
       return { ...rest, generic_name: "", duration: "" };
     }
-    return { ...rest, generic_name: "", ...(_q != null ? { quantity: _q } : {}) };
+    return {
+      ...rest,
+      generic_name: "",
+      ...(_q != null ? { quantity: _q } : {}),
+    };
   });
   const labTests = Array.isArray(parsed.labTests)
     ? parsed.labTests
@@ -2874,11 +2887,11 @@ router.post("/review-followup/reply-stream", async (req, res) => {
     upstream = await openaiApi.post(
       "/chat/completions",
       {
-        // Tiny UI stream — stay on GPT-4.1 Mini; chart JSON uses gpt-6-luna.
         model: OPENAI_MODEL,
         stream: true,
+        reasoning_effort: "none",
         temperature: 0.2,
-        max_tokens: REVIEW_FOLLOWUP_REPLY_MAX_TOKENS,
+        max_completion_tokens: REVIEW_FOLLOWUP_REPLY_MAX_TOKENS,
         messages: [
           {
             role: "system",
@@ -2936,11 +2949,11 @@ router.post("/parse-clinical-note/reply-stream", async (req, res) => {
     upstream = await openaiApi.post(
       "/chat/completions",
       {
-        // Tiny UI stream — stay on GPT-4.1 Mini; chart JSON uses gpt-6-luna.
         model: OPENAI_MODEL,
         stream: true,
+        reasoning_effort: "none",
         temperature: 0.2,
-        max_tokens: REVIEW_FOLLOWUP_REPLY_MAX_TOKENS,
+        max_completion_tokens: REVIEW_FOLLOWUP_REPLY_MAX_TOKENS,
         messages: [
           {
             role: "system",

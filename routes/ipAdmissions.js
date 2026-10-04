@@ -551,14 +551,12 @@ const STAY_PATCH_KEYS = [
   "wardId",
   "selectedBed",
   "transfers",
-  "chiefComplaintsPresentIllnessHistory",
+  "ernote",
   "consciousness",
   "gcs",
   "pupils",
   "height",
   "weight",
-  "systemicExamination",
-  "provisionalDiagnosis",
   "vitals",
   "doctorNotes",
   "nurseNotes",
@@ -613,14 +611,29 @@ router.put("/:id", async (req, res) => {
   try {
     const IPAdmission = req.tenantDb.model("IPAdmission");
     const { id } = req.params;
+    const query = mongoose.Types.ObjectId.isValid(id)
+      ? { $or: [{ _id: id }, { ipNumber: id }], hospitalId: req.hospitalId }
+      : { ipNumber: id, hospitalId: req.hospitalId };
     const patch = {};
     for (const key of STAY_PATCH_KEYS) {
       if (req.body?.[key] !== undefined) patch[key] = req.body[key];
     }
-
-    const query = mongoose.Types.ObjectId.isValid(id)
-      ? { $or: [{ _id: id }, { ipNumber: id }], hospitalId: req.hospitalId }
-      : { ipNumber: id, hospitalId: req.hospitalId };
+    if (
+      patch.ernote === undefined &&
+      req.body?.chiefComplaintsPresentIllnessHistory !== undefined
+    ) {
+      patch.ernote = String(req.body.chiefComplaintsPresentIllnessHistory || "");
+    }
+    const existingNote = await IPAdmission.collection.findOne(query, {
+      projection: { ernote: 1, chiefComplaintsPresentIllnessHistory: 1 },
+    });
+    if (
+      patch.ernote === undefined &&
+      !String(existingNote?.ernote || "").trim() &&
+      String(existingNote?.chiefComplaintsPresentIllnessHistory || "").trim()
+    ) {
+      patch.ernote = String(existingNote.chiefComplaintsPresentIllnessHistory);
+    }
 
     const updated = await IPAdmission.findOneAndUpdate(
       query,
@@ -630,6 +643,9 @@ router.put("/:id", async (req, res) => {
           repeatLabs: "",
           summarySections: "",
           dischargeMedications: "",
+          chiefComplaintsPresentIllnessHistory: "",
+          systemicExamination: "",
+          provisionalDiagnosis: "",
         },
       },
       { new: true },

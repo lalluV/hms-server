@@ -799,8 +799,7 @@ async function get_patient_summary(ctx, args) {
   return {
     summary: {
       ...base,
-      chiefComplaintsPresentIllnessHistory:
-        chart.chiefComplaintsPresentIllnessHistory,
+      ernote: chart.ernote || "",
       pastMedicalHistory: patient.pastMedicalHistory,
       recentDoctorNotes: recentNotes,
       recentNurseNotes: recentNurse,

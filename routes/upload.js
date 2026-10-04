@@ -34,6 +34,11 @@ const s3Client = new S3Client({
 // Initialize file merger
 const fileMerger = new FileMerger();
 
+const REPORT_EXTRACT_OPENAI_MODEL =
+  process.env.OPENAI_REPORT_MODEL || "gpt-6-luna";
+const REPORT_EXTRACT_GEMINI_MODEL =
+  process.env.GEMINI_REPORT_MODEL || "gemini-3.1-flash-lite";
+
 // Test endpoint to verify the route is working
 router.get("/test-consent", (req, res) => {
   res.json({
@@ -360,7 +365,7 @@ router.post(
     // Generate the public URL
     const fileUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
 
-    // Extract full clinical content from the uploaded report via AI (OpenAI GPT-5.6-Luna / Gemini)
+    // Extract full clinical content from the uploaded report via AI (OpenAI GPT-6 Luna / Gemini)
     let textReport = "";
     let impression = "";
     let modality = "";
@@ -407,8 +412,8 @@ router.post(
 
 /**
  * Clinical report text extraction engine.
- * Primary: OpenAI GPT-5.6-Luna
- * Fallback: Google Gemini 3.6 Flash
+ * Primary: OpenAI GPT-6 Luna
+ * Fallback: Google Gemini 3.1 Flash-Lite
  */
 async function extractClinicalReportWithAi({ buffer, originalname, mimetype }) {
   if (!buffer || buffer.length === 0) {
@@ -426,12 +431,12 @@ Return valid JSON with this exact shape:
   "modality": "Modality or investigation name (e.g., Ultrasound Abdomen, Chest X-Ray, CT Brain, MRI Lumbar Spine, etc.)"
 }`;
 
-  // 1. Primary: OpenAI GPT-5.6-Luna
+  // 1. Primary: OpenAI GPT-6 Luna
   if (process.env.OPENAI_API_KEY) {
     let fileId = null;
     try {
       console.log(
-        `[AI Extract] Calling OpenAI gpt-5.6-luna for ${originalname || "document.pdf"} (${buffer.length} bytes)...`
+        `[AI Extract] Calling OpenAI ${REPORT_EXTRACT_OPENAI_MODEL} for ${originalname || "document.pdf"} (${buffer.length} bytes)...`
       );
       const axios = require("axios");
       const FormData = require("form-data");
@@ -457,7 +462,8 @@ Return valid JSON with this exact shape:
       const chatRes = await axios.post(
         "https://api.openai.com/v1/chat/completions",
         {
-          model: "gpt-5.6-luna",
+          model: REPORT_EXTRACT_OPENAI_MODEL,
+          reasoning_effort: "none",
           response_format: { type: "json_object" },
           messages: [
             {
@@ -482,18 +488,18 @@ Return valid JSON with this exact shape:
       if (rawJson) {
         const parsed = JSON.parse(rawJson);
         console.log(
-          `[AI Extract] gpt-5.6-luna extraction successful (${parsed.fullReportText?.length || 0} chars)`
+          `[AI Extract] ${REPORT_EXTRACT_OPENAI_MODEL} extraction successful (${parsed.fullReportText?.length || 0} chars)`
         );
         return {
           textReport: parsed.fullReportText || "",
           impression: parsed.impression || "",
           modality: parsed.modality || "",
-          modelUsed: "gpt-5.6-luna",
+          modelUsed: REPORT_EXTRACT_OPENAI_MODEL,
         };
       }
     } catch (openAiErr) {
       console.warn(
-        "[AI Extract] OpenAI gpt-5.6-luna error:",
+        `[AI Extract] OpenAI ${REPORT_EXTRACT_OPENAI_MODEL} error:`,
         openAiErr.response?.data || openAiErr.message
       );
     } finally {
@@ -511,16 +517,16 @@ Return valid JSON with this exact shape:
     }
   }
 
-  // 2. Fallback: Google Gemini 3.6 Flash
+  // 2. Fallback: Google Gemini 3.1 Flash-Lite
   if (process.env.GEMINI_API_KEY) {
     try {
-      console.log("[AI Extract] Using Gemini 3.6 Flash...");
+      console.log(`[AI Extract] Using ${REPORT_EXTRACT_GEMINI_MODEL}...`);
       const { GoogleGenAI } = require("@google/genai");
       const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const base64Doc = buffer.toString("base64");
 
       const aiResponse = await client.models.generateContent({
-        model: "gemini-3.6-flash",
+        model: REPORT_EXTRACT_GEMINI_MODEL,
         config: {
           responseMimeType: "application/json",
           temperature: 0.1,
@@ -553,7 +559,7 @@ Return valid JSON with this exact shape:
           textReport: parsedAi.fullReportText || "",
           impression: parsedAi.impression || "",
           modality: parsedAi.modality || "",
-          modelUsed: "gemini-3.6-flash",
+          modelUsed: REPORT_EXTRACT_GEMINI_MODEL,
         };
       }
     } catch (geminiErr) {

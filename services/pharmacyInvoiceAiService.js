@@ -7,6 +7,7 @@ const Vendor = require("../models/Vendor");
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_VISION_MODEL || "gemini-3.1-flash-lite";
+const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-6-luna";
 
 const INVOICE_PARSER_PROMPT = `You are a medical pharmacy auditor for an Indian clinic/hospital.
 Extract all distributor/vendor details, bill metadata, and EVERY medicine line item from this pharmaceutical purchase invoice into strict valid JSON.
@@ -53,7 +54,7 @@ CRITICAL RULES:
 6. Return valid JSON only with NO markdown fences, headers, or explanations.`;
 
 /**
- * Parses purchase invoice image or PDF using Gemini Vision
+ * Fallback invoice scanner: Gemini Vision (image or PDF).
  */
 async function parseInvoiceWithGemini({ buffer, mimeType }) {
   if (!GEMINI_API_KEY) {
@@ -100,7 +101,7 @@ async function parseInvoiceWithGemini({ buffer, mimeType }) {
 }
 
 /**
- * Fallback to OpenAI Vision (GPT-4o) if Gemini encounters rate limits or errors
+ * Primary invoice scanner: OpenAI GPT-6 Luna (images and PDFs).
  */
 async function parseInvoiceWithOpenAI({ buffer, mimeType }) {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -108,20 +109,25 @@ async function parseInvoiceWithOpenAI({ buffer, mimeType }) {
     throw new Error("OPENAI_API_KEY not configured.");
   }
 
-  const base64Data = buffer.toString("base64");
-  const dataUrl = `data:${mimeType || "image/jpeg"};base64,${base64Data}`;
+  const mime = mimeType || "image/jpeg";
+  const dataUrl = `data:${mime};base64,${buffer.toString("base64")}`;
+  const invoicePart =
+    mime === "application/pdf"
+      ? { type: "file", file: { filename: "invoice.pdf", file_data: dataUrl } }
+      : { type: "image_url", image_url: { url: dataUrl } };
 
   const response = await axios.post(
     "https://api.openai.com/v1/chat/completions",
     {
-      model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
+      model: OPENAI_VISION_MODEL,
+      reasoning_effort: "none",
       messages: [
         { role: "system", content: INVOICE_PARSER_PROMPT },
         {
           role: "user",
           content: [
             { type: "text", text: "Parse this purchase invoice into the requested JSON schema." },
-            { type: "image_url", image_url: { url: dataUrl } },
+            invoicePart,
           ],
         },
       ],
@@ -326,14 +332,17 @@ async function scanPharmacyInvoice({ buffer, mimeType, hospitalId }) {
   let parsedRaw = null;
 
   try {
-    parsedRaw = await parseInvoiceWithGemini({ buffer, mimeType });
-  } catch (geminiErr) {
-    console.warn("Gemini Vision failed for invoice scan, trying OpenAI fallback:", geminiErr.message);
+    parsedRaw = await parseInvoiceWithOpenAI({ buffer, mimeType });
+  } catch (openAiErr) {
+    console.warn(
+      "OpenAI invoice scan failed, trying Gemini fallback:",
+      openAiErr.response?.data?.error?.message || openAiErr.message,
+    );
     try {
-      parsedRaw = await parseInvoiceWithOpenAI({ buffer, mimeType });
-    } catch (openAiErr) {
-      console.error("Both Gemini and OpenAI Vision invoice extraction failed:", openAiErr);
-      throw new Error(`AI invoice scanning failed: ${geminiErr.message}`);
+      parsedRaw = await parseInvoiceWithGemini({ buffer, mimeType });
+    } catch (geminiErr) {
+      console.error("Both OpenAI and Gemini invoice extraction failed:", geminiErr);
+      throw new Error(`AI invoice scanning failed: ${openAiErr.message}`);
     }
   }
 

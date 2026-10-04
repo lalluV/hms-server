@@ -7,12 +7,14 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_FALLBACK_MODEL =
   process.env.OPENAI_FALLBACK_MODEL ||
   process.env.OPENAI_MODEL ||
-  "gpt-4.1-mini";
+  "gpt-6-luna";
+/** Used when the fallback model is missing on this OpenAI key. */
+const OPENAI_LEGACY_FALLBACK_MODEL = "gpt-5.6-luna";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_PRIMARY_MODEL =
   process.env.GEMINI_PARSE_MODEL ||
   process.env.GEMINI_TRANSCRIBE_MODEL ||
-  "gemini-3.1-flash-lite";
+  "gemini-3.5-flash-lite";
 
 const openaiClient = axios.create({
   baseURL: OPENAI_API_BASE_URL,
@@ -217,8 +219,39 @@ async function callGemini(
   };
 }
 
+/** GPT-5+ models take max_completion_tokens and reject temperature unless reasoning is off. */
+function isReasoningOpenAiModel(model) {
+  return /^gpt-(?:[5-9]|\d{2,})/i.test(String(model || ""));
+}
+
+function buildOpenAiPayload(model, messages, { maxTokens, responseJson }) {
+  const payload = {
+    model,
+    messages: Array.isArray(messages) ? messages : [],
+  };
+  if (isReasoningOpenAiModel(model)) {
+    if (/^gpt-6/i.test(model)) payload.reasoning_effort = "none";
+    payload.max_completion_tokens = maxTokens;
+  } else {
+    payload.temperature = 0.1;
+    payload.max_tokens = maxTokens;
+  }
+  if (responseJson) {
+    payload.response_format = { type: "json_object" };
+  }
+  return payload;
+}
+
+function isModelNotFound(error) {
+  return (
+    error?.response?.status === 404 ||
+    error?.response?.data?.error?.code === "model_not_found" ||
+    /model/i.test(String(error?.response?.data?.error?.message || ""))
+  );
+}
+
 /**
- * Call OpenAI (GPT-4.1 Mini) fallback with timeout.
+ * Call OpenAI (GPT-6 Luna) fallback with timeout.
  */
 async function callOpenAiFallback(
   messages,
@@ -235,57 +268,30 @@ async function callOpenAiFallback(
     throw err;
   }
 
-  const payload = {
-    model,
-    messages: Array.isArray(messages) ? messages : [],
-    temperature: 0.1,
-    max_tokens: maxTokens,
+  const post = async (modelName) => {
+    const response = await openaiClient.post(
+      "/chat/completions",
+      buildOpenAiPayload(modelName, messages, { maxTokens, responseJson }),
+      { timeout: timeoutMs },
+    );
+    return { data: { ...response.data, provider: "openai" } };
   };
 
-  if (responseJson) {
-    payload.response_format = { type: "json_object" };
-  }
-
   try {
-    const response = await openaiClient.post("/chat/completions", payload, {
-      timeout: timeoutMs,
-    });
-    return {
-      data: {
-        ...response.data,
-        provider: "openai",
-      },
-    };
+    return await post(model);
   } catch (error) {
-    // If gpt-4.1-mini is not recognized on an older OpenAI key, fallback to gpt-4o-mini
-    if (
-      model === "gpt-4.1-mini" &&
-      (error?.response?.status === 404 ||
-        error?.response?.data?.error?.code === "model_not_found" ||
-        /model/i.test(String(error?.response?.data?.error?.message || "")))
-    ) {
-      console.warn(
-        "OpenAI gpt-4.1-mini not found; falling back to gpt-4o-mini…",
-      );
-      payload.model = "gpt-4o-mini";
-      const retryResponse = await openaiClient.post(
-        "/chat/completions",
-        payload,
-        { timeout: timeoutMs },
-      );
-      return {
-        data: {
-          ...retryResponse.data,
-          provider: "openai",
-        },
-      };
+    if (model === OPENAI_LEGACY_FALLBACK_MODEL || !isModelNotFound(error)) {
+      throw error;
     }
-    throw error;
+    console.warn(
+      `OpenAI ${model} not available; falling back to ${OPENAI_LEGACY_FALLBACK_MODEL}…`,
+    );
+    return post(OPENAI_LEGACY_FALLBACK_MODEL);
   }
 }
 
 /**
- * AI Completion with instant failover from Gemini to GPT-4.1 Mini on 503 / high demand / timeout.
+ * AI Completion with instant failover from Gemini to GPT-6 Luna on 503 / high demand / timeout.
  */
 async function aiCompletionWithFallback(
   messages,
@@ -330,7 +336,7 @@ async function aiCompletionWithFallback(
       `[AI Failover] Gemini error (transient=${isTransient}): ${geminiErrMsg}. Switching to OpenAI (${openAiModel})…`,
     );
 
-    // 2. Instant Fallback to OpenAI GPT-4.1 Mini
+    // 2. Instant Fallback to OpenAI GPT-6 Luna
     if (OPENAI_API_KEY) {
       try {
         const fallbackResult = await callOpenAiFallback(messages, {

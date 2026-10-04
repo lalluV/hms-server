@@ -7,11 +7,11 @@ const { aiCompletionWithFallback } = require("./aiCompletionWithFallback");
 const PARSE_NOTE_MODEL =
   process.env.GEMINI_PARSE_MODEL ||
   process.env.GEMINI_TRANSCRIBE_MODEL ||
-  "gemini-3.1-flash-lite";
+  "gemini-3.5-flash-lite";
 const OPENAI_MODEL =
   process.env.OPENAI_FALLBACK_MODEL ||
   process.env.OPENAI_MODEL ||
-  "gpt-4.1-mini";
+  "gpt-6-luna";
 const SUGGEST_TIMEOUT_MS =
   Number(process.env.GEMINI_SUGGEST_TIMEOUT_MS) || 25000;
 const SUGGEST_MAX_TOKENS =

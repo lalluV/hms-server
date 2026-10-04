@@ -14,7 +14,7 @@ const NOTE_SECTION_ORDER = [
 
 const ERA_NOTE_SECTION_ORDER = [
   ["complaints", "Chief complaints"],
-  ["history", "Past history"],
+  ["history", "Past medical history"],
   ["examination", "Systemic examination"],
   ["diagnosis", "Provisional diagnosis"],
   ["allergies", "Allergies"],
@@ -26,6 +26,7 @@ const NOTE_SECTION_ALIASES = {
   chiefcomplaints: "complaints",
   history: "history",
   pasthistory: "history",
+  pastmedicalhistory: "history",
   medicalhistory: "history",
   examination: "examination",
   physicalexamination: "examination",
@@ -175,7 +176,7 @@ function formatDoctorNotesLayout(noteText, options = {}) {
   if (!text || /^\s*[SOAP]\s*:/m.test(text)) return text;
 
   text = text.replace(
-    /([^\n])\s*\b(Chief complaints & history of present illness|Chief complaints|Past history|Systemic examination|Provisional diagnosis|Complaints|History|Allergies|Examination|Diagnosis|Advice|Doctor'?s?\s*Advice|Past Medical History)\s*:/gi,
+    /([^\n])\s*\b(Chief complaints & history of present illness|Chief complaints|Past medical history|Past Medical History|Past history|Systemic examination|Provisional diagnosis|Complaints|Allergies|Examination|Diagnosis|Advice|Doctor'?s?\s*Advice|History)\s*:/gi,
     "$1\n$2:",
   );
 

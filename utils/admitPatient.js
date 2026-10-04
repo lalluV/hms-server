@@ -11,6 +11,48 @@ const { localYmd, localHm } = require("./localDate");
 
 const isDuplicateKey = (error) => error?.code === 11000;
 
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+/** Exact ER note. Accepts ernote, or the form note field during the switch. */
+function eraNoteFromBody(body) {
+  if (!body || typeof body !== "object") return undefined;
+  if (body.ernote !== undefined && body.ernote !== null) {
+    return String(body.ernote);
+  }
+  if (body.chiefComplaintsPresentIllnessHistory !== undefined) {
+    return String(body.chiefComplaintsPresentIllnessHistory || "");
+  }
+  return undefined;
+}
+
+const ERA_NOTE_UNSET = {
+  chiefComplaintsPresentIllnessHistory: "",
+  systemicExamination: "",
+  provisionalDiagnosis: "",
+};
+
+function personalHistoryFromBody(body) {
+  const source = body?.personalHistory || {};
+  return {
+    alcohol: Boolean(source.alcohol),
+    smoking: Boolean(source.smoking),
+    illicitDrugs: Boolean(source.illicitDrugs),
+    habitsNil: Boolean(source.habitsNil),
+    other: String(source.other || ""),
+    maritalStatus: String(source.maritalStatus || ""),
+    familyHistory: String(source.familyHistory || ""),
+  };
+}
+
+/** Frozen copy of the treatment list written with this ERA save. */
+function casualtyTreatmentFromBody(body) {
+  const treatment = Array.isArray(body?.treatment) ? body.treatment : [];
+  if (treatment.length) return cloneJson(treatment);
+  return Array.isArray(body?.casualtyTreatment) ? body.casualtyTreatment : [];
+}
+
 /** Sequential per-hospital, per-year IP number from the tenant Counter. */
 async function nextIpNumber(tenantDb, IPAdmission, hospitalId) {
   const Counter = tenantDb.model("Counter");
@@ -97,15 +139,13 @@ function stayPayload(body, patient, hospitalId, ipNumber) {
     wardId,
     selectedBed: body.selectedBed || "",
     transfers,
-    chiefComplaintsPresentIllnessHistory:
-      body.chiefComplaintsPresentIllnessHistory || "",
+    ernote: eraNoteFromBody(body) || "",
     consciousness: body.consciousness || "",
     gcs: body.gcs || "",
     pupils: body.pupils || "",
     height: body.height || "",
     weight: body.weight || "",
-    systemicExamination: body.systemicExamination || "",
-    provisionalDiagnosis: body.provisionalDiagnosis || "",
+    personalHistory: personalHistoryFromBody(body),
     vitals: Array.isArray(body.vitals) ? body.vitals : [],
     eraVitalEntry: eraVitalFromBody(body),
     doctorNotes: Array.isArray(body.doctorNotes) ? body.doctorNotes : [],
@@ -114,9 +154,7 @@ function stayPayload(body, patient, hospitalId, ipNumber) {
     investigations: Array.isArray(body.investigations) ? body.investigations : [],
     procedures: Array.isArray(body.procedures) ? body.procedures : [],
     treatment: Array.isArray(body.treatment) ? body.treatment : [],
-    casualtyTreatment: Array.isArray(body.casualtyTreatment)
-      ? body.casualtyTreatment
-      : [],
+    casualtyTreatment: casualtyTreatmentFromBody(body),
     casualtyInvestigations: Array.isArray(body.investigations)
       ? body.investigations
       : [],
@@ -335,14 +373,13 @@ const ERA_UPDATE_KEYS = [
   "doctorId",
   "medicalOfficerName",
   "medicalOfficerId",
-  "chiefComplaintsPresentIllnessHistory",
+  "ernote",
   "consciousness",
   "gcs",
   "pupils",
   "height",
   "weight",
-  "systemicExamination",
-  "provisionalDiagnosis",
+  "personalHistory",
   "wardName",
   "wardId",
   "selectedBed",
@@ -434,6 +471,23 @@ async function updateEraChart({ tenantDb, hospitalId, admissionId, body }) {
   for (const key of ERA_UPDATE_KEYS) {
     if (payload[key] !== undefined) admission[key] = payload[key];
   }
+  const rawNote = await IPAdmission.collection.findOne(
+    { _id: admission._id },
+    { projection: { ernote: 1, chiefComplaintsPresentIllnessHistory: 1 } },
+  );
+  const incomingNote = eraNoteFromBody(payload);
+  if (incomingNote !== undefined) {
+    admission.ernote = incomingNote;
+  } else if (
+    !String(admission.ernote || rawNote?.ernote || "").trim() &&
+    String(rawNote?.chiefComplaintsPresentIllnessHistory || "").trim()
+  ) {
+    admission.ernote = String(rawNote.chiefComplaintsPresentIllnessHistory);
+  }
+  if (payload.personalHistory && typeof payload.personalHistory === "object") {
+    admission.personalHistory = personalHistoryFromBody(payload);
+    admission.markModified("personalHistory");
+  }
 
   if (holdsAfter && heldBefore && prevWardId !== nextWardId) {
     admission.transfers.push({
@@ -449,7 +503,10 @@ async function updateEraChart({ tenantDb, hospitalId, admissionId, body }) {
       transferDate: localYmd(),
     });
   }
-  if (Array.isArray(payload.casualtyTreatment)) {
+  if (Array.isArray(payload.treatment) && payload.treatment.length) {
+    admission.casualtyTreatment = cloneJson(payload.treatment);
+    admission.markModified("casualtyTreatment");
+  } else if (Array.isArray(payload.casualtyTreatment)) {
     admission.casualtyTreatment = payload.casualtyTreatment;
     admission.markModified("casualtyTreatment");
   }
@@ -467,6 +524,10 @@ async function updateEraChart({ tenantDb, hospitalId, admissionId, body }) {
   }
 
   await admission.save();
+  await IPAdmission.collection.updateOne(
+    { _id: admission._id },
+    { $unset: ERA_NOTE_UNSET },
+  );
   if (heldBefore && bedMoved) {
     await releaseBed(tenantDb, hospitalId, {
       wardId: prevWardId,

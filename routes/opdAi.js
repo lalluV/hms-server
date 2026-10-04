@@ -6,7 +6,9 @@
 
 const express = require("express");
 const router = express.Router();
-const { applyEntitlementsNoTenantDb } = require("../utils/applyTenantEntitlements");
+const {
+  applyEntitlementsNoTenantDb,
+} = require("../utils/applyTenantEntitlements");
 
 applyEntitlementsNoTenantDb(router, { moduleKey: "core" });
 const axios = require("axios");
@@ -25,11 +27,11 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL =
   process.env.OPENAI_FALLBACK_MODEL ||
   process.env.OPENAI_MODEL ||
-  "gpt-4.1-mini";
+  "gpt-6-luna";
 const PARSE_NOTE_MODEL =
   process.env.GEMINI_PARSE_MODEL ||
   process.env.GEMINI_TRANSCRIBE_MODEL ||
-  "gemini-3.1-flash-lite";
+  "gemini-3.5-flash-lite";
 const PARSE_NOTE_TIMEOUT_MS =
   Number(process.env.GEMINI_PARSE_TIMEOUT_MS) ||
   Number(process.env.OPENAI_PARSE_TIMEOUT_MS) ||
@@ -790,8 +792,9 @@ router.post("/review-followup/reply-stream", async (req, res) => {
       {
         model: OPENAI_MODEL,
         stream: true,
+        reasoning_effort: "none",
         temperature: 0.2,
-        max_tokens: REVIEW_FOLLOWUP_REPLY_MAX_TOKENS,
+        max_completion_tokens: REVIEW_FOLLOWUP_REPLY_MAX_TOKENS,
         messages: [
           {
             role: "system",

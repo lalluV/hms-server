@@ -13,7 +13,9 @@
 
 const express = require("express");
 const router = express.Router();
-const { applyEntitlementsNoTenantDb } = require("../utils/applyTenantEntitlements");
+const {
+  applyEntitlementsNoTenantDb,
+} = require("../utils/applyTenantEntitlements");
 
 applyEntitlementsNoTenantDb(router, { moduleKey: "core" });
 const axios = require("axios");
@@ -31,11 +33,11 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL =
   process.env.OPENAI_FALLBACK_MODEL ||
   process.env.OPENAI_MODEL ||
-  "gpt-4.1-mini";
+  "gpt-6-luna";
 const PARSE_NOTE_MODEL =
   process.env.GEMINI_PARSE_MODEL ||
   process.env.GEMINI_TRANSCRIBE_MODEL ||
-  "gemini-3.1-flash-lite";
+  "gemini-3.5-flash-lite";
 const PARSE_NOTE_TIMEOUT_MS =
   Number(process.env.GEMINI_PARSE_TIMEOUT_MS) ||
   Number(process.env.OPENAI_PARSE_TIMEOUT_MS) ||
@@ -68,7 +70,7 @@ const NOTE_SECTION_ORDER = [
 
 const ERA_NOTE_SECTION_ORDER = [
   ["complaints", "Chief complaints"],
-  ["history", "Past history"],
+  ["history", "Past medical history"],
   ["examination", "Systemic examination"],
   ["diagnosis", "Provisional diagnosis"],
   ["allergies", "Allergies"],
@@ -80,6 +82,7 @@ const NOTE_SECTION_ALIASES = {
   chiefcomplaints: "complaints",
   history: "history",
   pasthistory: "history",
+  pastmedicalhistory: "history",
   medicalhistory: "history",
   examination: "examination",
   physicalexamination: "examination",
@@ -299,12 +302,12 @@ function mergeNoteWithOps(
     );
   }
 
-  const appended = sectionOrder.filter(
-    ([key]) => sections[key]?.length,
-  ).map(
-    ([key, label]) =>
-      `${label}:\n${sections[key].map((item) => `• ${item}`).join("\n")}`,
-  );
+  const appended = sectionOrder
+    .filter(([key]) => sections[key]?.length)
+    .map(
+      ([key, label]) =>
+        `${label}:\n${sections[key].map((item) => `• ${item}`).join("\n")}`,
+    );
   if (!appended.length) return String(currentNoteText || "");
   const base = String(currentNoteText || "").trim();
   return base ? `${base}\n\n${appended.join("\n\n")}` : appended.join("\n\n");
@@ -459,7 +462,9 @@ function mergeInpatientChartDelta(
         generic_name: "",
         action: "add",
         origin: "review",
-        ...(isEra ? { eraRoute: eraRoute || "continue_on_ward", quantity: undefined } : {}),
+        ...(isEra
+          ? { eraRoute: eraRoute || "continue_on_ward", quantity: undefined }
+          : {}),
       });
     } else if (kind === "edit" && op.medicine) {
       const stepsToInsert =
@@ -472,7 +477,9 @@ function mergeInpatientChartDelta(
         generic_name: "",
         action: "add",
         origin: "review",
-        ...(isEra ? { eraRoute: eraRoute || "continue_on_ward", quantity: undefined } : {}),
+        ...(isEra
+          ? { eraRoute: eraRoute || "continue_on_ward", quantity: undefined }
+          : {}),
       }));
 
       if (activeIdx >= 0) {
@@ -691,7 +698,7 @@ IPD WARD ROUND FOLLOW-UP MODE — PATCH ONLY (CRITICAL — KEEP OUTPUT TINY)
 4. WARD NOTES (SOAP):
 - Keep clinical facts cleanly placed by meaning:
   - Symptoms/fever/pain -> DO NOT process into complaints for now; only process diagnosis, labs, and medications.
-  - Past history -> noteOps section: "history"
+  - Conditions that existed before this illness -> noteOps section: "history" (pertinent negatives about the present illness are never history)
   - Physical exam / vitals findings -> noteOps section: "examination"
   - Provisional / confirmed diagnosis -> noteOps section: "diagnosis"
   - Ward advice, diet, nursing care -> noteOps section: "advice"
@@ -755,15 +762,18 @@ Return exactly this JSON shape:
 const ERA_OPD_DELTA = `
 
 ERA DIFFERENCES FROM OPD (only these):
-- The clinical note already has these five headings: Chief complaints, Past history, Systemic examination, Provisional diagnosis, Allergies.
-- noteOps sections are complaints, history, examination, diagnosis, allergies. Do not use advice. Write every heading the doctor mentioned, including complaints, the same way OPD writes a clinical note.
+- The clinical note already has these headings: Chief complaints, Past medical history, Systemic examination, Provisional diagnosis, Allergies.
+- noteOps sections are complaints, history, examination, diagnosis, allergies. Do not use advice. History and allergies stay inside the note. Write every heading the doctor mentioned, including complaints, the same way OPD writes a clinical note.
+- complaints holds the present illness: current symptoms, their duration and course, and pertinent negatives about this illness.
+- history holds only conditions, surgeries, admissions, or long-term medicines that existed before the present illness. A pertinent negative about the present illness is never history.
+- examination holds only findings observed or measured on examination. Drug and fluid orders go to medicineOps; diet restrictions and nursing instructions go to procedureOps. None of them go in the note.
+- Each noteOps text is clinical content only, never a section name or heading. Each fact goes in one section only. Do not add placeholder text such as Nil.
 - Medicines: duration must be "" and quantity must be omitted. Do not default a course length. Do not calculate a dispense quantity. Do not write "for N days" into directions.
 - Procedures stay. Put this-visit procedures in procedureOps the same way OPD does.
 `;
 
 const ERA_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM = `${OPD_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM}
 ${ERA_OPD_DELTA}`;
-
 
 function buildInpatientReviewFollowUpUserPrompt(
   instruction,
@@ -773,7 +783,7 @@ function buildInpatientReviewFollowUpUserPrompt(
   if (isEra) {
     return `${buildOpdReviewFollowUpUserPrompt(instruction, currentChart)}
 
-ERA ONLY: Same as OPD, except the note uses Chief complaints, Past history, Systemic examination, Provisional diagnosis, and Allergies (not advice). Medicine duration is "" and quantity is omitted. Keep procedures.`;
+ERA ONLY: Same as OPD, except the note uses Chief complaints, Past medical history, Systemic examination, Provisional diagnosis, and Allergies (not advice). Medicine duration is "" and quantity is omitted. Keep procedures.`;
   }
   const chart =
     currentChart && typeof currentChart === "object" ? currentChart : {};
@@ -1053,8 +1063,9 @@ router.post("/review-followup/reply-stream", async (req, res) => {
       {
         model: OPENAI_MODEL,
         stream: true,
+        reasoning_effort: "none",
         temperature: 0.2,
-        max_tokens: REVIEW_FOLLOWUP_REPLY_MAX_TOKENS,
+        max_completion_tokens: REVIEW_FOLLOWUP_REPLY_MAX_TOKENS,
         messages: [
           {
             role: "system",

@@ -66,7 +66,8 @@ const ipAdmissionSchema = new mongoose.Schema(
     ],
 
     // Inpatient Clinical Charts
-    chiefComplaintsPresentIllnessHistory: { type: String },
+    /** Exact ER form note. Not split into complaint, exam, or diagnosis fields. */
+    ernote: { type: String },
     pastMedicalHistory: { type: String },
     pastMedications: { type: String },
     allergiesHistory: { type: String },
@@ -84,8 +85,6 @@ const ipAdmissionSchema = new mongoose.Schema(
       maritalStatus: { type: String },
       familyHistory: { type: String },
     },
-    systemicExamination: { type: String },
-    provisionalDiagnosis: { type: String },
     vitals: [mongoose.Schema.Types.Mixed],
     /** Vitals entered on the ER form. Ward readings stay on vitals. */
     eraVitalEntry: { type: mongoose.Schema.Types.Mixed },

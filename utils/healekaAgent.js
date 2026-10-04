@@ -18,7 +18,7 @@ const { buildGapComposeDraft } = require("./healekaPrescriptionHelpers");
 
 const OPENAI_API_BASE_URL = "https://api.openai.com/v1";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_MODEL = "gpt-4o-mini";
+const OPENAI_MODEL = process.env.HEALEKA_OPENAI_MODEL || "gpt-6-luna";
 const MAX_TOOL_ITERATIONS = 8;
 const MAX_HISTORY_MESSAGES = 24;
 
@@ -512,9 +512,11 @@ async function runHealekaAgent({
   const requireToolsFirst = looksDataRelated(lastUser?.content);
 
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
+    // GPT-6 Luna allows tool calling on Chat Completions only with reasoning off.
     const payload = {
       model: OPENAI_MODEL,
       messages: openaiMessages,
+      reasoning_effort: "none",
       temperature: 0.3,
     };
     if (tools.length) {
@@ -621,6 +623,7 @@ async function runHealekaAgent({
               "Give your final answer now from the tool results only. If a draft is ready, summarize it and ask them to Confirm. If fields are missing, ask only for those. Do not call more tools.",
           },
         ],
+        reasoning_effort: "none",
         temperature: 0.3,
       });
       reply = (final.data?.choices?.[0]?.message?.content || "").trim();
