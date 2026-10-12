@@ -88,24 +88,15 @@ async function initializeMeilisearch() {
     ]);
     console.log("✅ Master Lab Items index configured");
 
-    // Hospital diagnostics — order/list search. Master index is creation-only.
-    await hospitalDiagnosticsIndex.updateSearchableAttributes([
-      "name",
-      "code",
-      "includedTestNames",
-      "parameterNames",
-      "description",
-      "subdeptname",
-    ]);
-    await hospitalDiagnosticsIndex.updateFilterableAttributes([
-      "hospitalId",
-      "deptScope",
-      "active",
-      "type",
-    ]);
-    await hospitalDiagnosticsIndex.updateSortableAttributes(["name", "code"]);
-    await hospitalDiagnosticsIndex.updatePagination({ maxTotalHits: 10000 });
-    console.log("✅ Hospital Diagnostics index configured");
+    try {
+      await configureHospitalDiagnosticsIndex();
+      console.log("✅ Hospital Diagnostics index configured");
+    } catch (error) {
+      console.error(
+        "❌ Hospital diagnostics index settings failed:",
+        error.message,
+      );
+    }
 
     console.log("✅ All Meilisearch indices initialized successfully");
     return true;
@@ -861,6 +852,58 @@ function meiliQuote(value) {
   return `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
+function normalizeHospitalId(hospitalId) {
+  return String(hospitalId || "").trim().toLowerCase();
+}
+
+async function waitForIndexTask(task) {
+  if (!task?.taskUid && task?.taskUid !== 0) return null;
+  const finished = await hospitalDiagnosticsIndex.waitForTask(task.taskUid, {
+    timeOutMs: 180000,
+    intervalMs: 100,
+  });
+  if (finished?.status === "failed") {
+    const message = finished.error?.message || finished.error || "task failed";
+    throw new Error(
+      typeof message === "string" ? message : JSON.stringify(message),
+    );
+  }
+  return finished;
+}
+
+async function configureHospitalDiagnosticsIndex() {
+  const tasks = [
+    await hospitalDiagnosticsIndex.updateSearchableAttributes([
+      "name",
+      "code",
+      "includedTestNames",
+      "parameterNames",
+      "description",
+      "subdeptname",
+    ]),
+    await hospitalDiagnosticsIndex.updateFilterableAttributes([
+      "hospitalId",
+      "deptScope",
+      "active",
+      "type",
+    ]),
+    await hospitalDiagnosticsIndex.updateSortableAttributes(["name", "code"]),
+  ];
+  try {
+    tasks.push(
+      await hospitalDiagnosticsIndex.updatePagination({ maxTotalHits: 10000 }),
+    );
+  } catch (error) {
+    console.warn(
+      "⚠️  Hospital diagnostics pagination setting skipped:",
+      error.message,
+    );
+  }
+  for (const task of tasks) {
+    await waitForIndexTask(task);
+  }
+}
+
 function namesFromParameters(parameters) {
   if (!Array.isArray(parameters)) return [];
   return parameters
@@ -892,7 +935,7 @@ function toHospitalDiagnosticSearchDoc(diagnostic) {
   const deptname = String(diagnostic.deptname || "").trim();
   return {
     id: diagnostic._id.toString(),
-    hospitalId: String(diagnostic.hospitalId),
+    hospitalId: normalizeHospitalId(diagnostic.hospitalId),
     name: diagnostic.name || "",
     code: diagnostic.code || "",
     description: diagnostic.description || "",
@@ -909,25 +952,35 @@ function toHospitalDiagnosticSearchDoc(diagnostic) {
 async function indexHospitalDiagnostic(diagnostic) {
   const document = toHospitalDiagnosticSearchDoc(diagnostic);
   if (!document) return false;
-  await hospitalDiagnosticsIndex.addDocuments([document]);
+  const task = await hospitalDiagnosticsIndex.addDocuments([document]);
+  await waitForIndexTask(task);
   return true;
 }
 
 async function indexHospitalDiagnostics(diagnostics = []) {
-  const documents = diagnostics
-    .map((diagnostic) => toHospitalDiagnosticSearchDoc(diagnostic))
-    .filter(Boolean);
+  const documents = [];
+  const seen = new Set();
+  for (const diagnostic of diagnostics) {
+    const document = toHospitalDiagnosticSearchDoc(diagnostic);
+    if (!document || seen.has(document.id)) continue;
+    seen.add(document.id);
+    documents.push(document);
+  }
   if (documents.length === 0) return true;
   const batchSize = 500;
   for (let i = 0; i < documents.length; i += batchSize) {
-    await hospitalDiagnosticsIndex.addDocuments(documents.slice(i, i + batchSize));
+    const task = await hospitalDiagnosticsIndex.addDocuments(
+      documents.slice(i, i + batchSize),
+    );
+    await waitForIndexTask(task);
   }
   return true;
 }
 
 async function deleteHospitalDiagnostic(id) {
   if (!id) return false;
-  await hospitalDiagnosticsIndex.deleteDocument(String(id));
+  const task = await hospitalDiagnosticsIndex.deleteDocument(String(id));
+  await waitForIndexTask(task);
   return true;
 }
 
@@ -936,7 +989,7 @@ async function deleteHospitalDiagnostic(id) {
  */
 async function searchHospitalDiagnostics(query, options = {}) {
   const cleanQuery = String(query || "").trim();
-  const hospitalId = String(options.hospitalId || "");
+  const hospitalId = normalizeHospitalId(options.hospitalId);
   if (!cleanQuery || !hospitalId) {
     return { hits: [], estimatedTotalHits: 0 };
   }
@@ -953,8 +1006,6 @@ async function searchHospitalDiagnostics(query, options = {}) {
     filter,
     limit,
     offset,
-    attributesToRetrieve: ["id"],
-    attributesToHighlight: [],
   });
 
   return {
@@ -963,10 +1014,18 @@ async function searchHospitalDiagnostics(query, options = {}) {
   };
 }
 
+async function hospitalDiagnosticIndexCount(hospitalId) {
+  const page = await hospitalDiagnosticsIndex.search("", {
+    filter: [`hospitalId = ${meiliQuote(normalizeHospitalId(hospitalId))}`],
+    limit: 1,
+  });
+  return page.estimatedTotalHits ?? page.hits?.length ?? 0;
+}
+
 async function listIndexedHospitalDiagnosticIds(hospitalId) {
   const ids = [];
   let offset = 0;
-  const filter = [`hospitalId = ${meiliQuote(hospitalId)}`];
+  const filter = [`hospitalId = ${meiliQuote(normalizeHospitalId(hospitalId))}`];
 
   while (true) {
     const page = await hospitalDiagnosticsIndex.search("", {
@@ -986,67 +1045,103 @@ async function listIndexedHospitalDiagnosticIds(hospitalId) {
   return ids;
 }
 
+async function syncHospitalDiagnostics(hospitalId, Diagnostic) {
+  const key = normalizeHospitalId(hospitalId);
+  if (!key) return { indexed: 0, removed: 0 };
+
+  const hospitalObjectId = require("mongoose").Types.ObjectId.isValid(key)
+    ? new (require("mongoose").Types.ObjectId)(key)
+    : key;
+  const docs = await Diagnostic.find({
+    $or: [{ hospitalId: hospitalObjectId }, { hospitalId: key }],
+  }).lean();
+
+  if (docs.length > 0) {
+    await indexHospitalDiagnostics(docs);
+  }
+
+  let removed = 0;
+  try {
+    const liveIds = new Set(
+      docs.map((diagnostic) => (diagnostic?._id ? String(diagnostic._id) : "")).filter(Boolean),
+    );
+    const indexedIds = await listIndexedHospitalDiagnosticIds(key);
+    if (docs.length > 0 && indexedIds.length === 0) {
+      console.warn(
+        `⚠️  Hospital ${key} tests were sent to search but are not visible yet`,
+      );
+      return { indexed: docs.length, removed: 0 };
+    }
+    const staleIds = indexedIds.filter((id) => !liveIds.has(id));
+    if (staleIds.length > 0) {
+      const task = await hospitalDiagnosticsIndex.deleteDocuments(staleIds);
+      await waitForIndexTask(task);
+      removed = staleIds.length;
+    }
+  } catch (error) {
+    console.warn(
+      `⚠️  Hospital ${key} search cleanup skipped:`,
+      error.message,
+    );
+  }
+
+  console.log(
+    `✅ Hospital diagnostics indexed for ${key}: ${docs.length} (${removed} stale removed)`,
+  );
+  return { indexed: docs.length, removed };
+}
+
+/**
+ * First search after deploy indexes this hospital if Meilisearch has no rows yet.
+ */
+async function ensureHospitalDiagnosticsIndexed(hospitalId, Diagnostic) {
+  const key = normalizeHospitalId(hospitalId);
+  if (!key) return 0;
+
+  let count = 0;
+  try {
+    count = await hospitalDiagnosticIndexCount(key);
+  } catch (error) {
+    console.warn(
+      "⚠️  Hospital diagnostic index is not searchable yet:",
+      error.message,
+    );
+    await configureHospitalDiagnosticsIndex();
+  }
+
+  if (count > 0) return count;
+
+  await syncHospitalDiagnostics(key, Diagnostic);
+  try {
+    return await hospitalDiagnosticIndexCount(key);
+  } catch (error) {
+    console.warn(
+      "⚠️  Hospital diagnostic index count after sync failed:",
+      error.message,
+    );
+    return 0;
+  }
+}
+
 /**
  * Upsert every hospital diagnostic and drop index rows that no longer exist.
  */
 async function syncAllHospitalDiagnostics() {
   const Hospital = require("../models/Hospital");
   const { resolveTenantConnection } = require("./tenantRouter");
-  const { hydrateDiagnostics } = require("./hydrateDiagnosticParameters");
 
   const hospitals = await Hospital.find({}).select("_id").lean();
   let indexed = 0;
   let removed = 0;
 
   for (const hospital of hospitals) {
-    const hospitalId = String(hospital._id);
+    const hospitalId = normalizeHospitalId(hospital._id);
     try {
       const connection = await resolveTenantConnection(hospitalId);
       const Diagnostic = connection.model("Diagnostic");
-      const Parameter = connection.model("Parameter");
-      const hospitalKey = hospital._id;
-      const docs = await Diagnostic.find({
-        $or: [{ hospitalId: hospitalKey }, { hospitalId }],
-      }).lean();
-
-      const hydratedAll = [];
-      for (let i = 0; i < docs.length; i += 200) {
-        const slice = docs.slice(i, i + 200);
-        let hydrated = slice;
-        try {
-          hydrated = await hydrateDiagnostics(Parameter, slice);
-        } catch (error) {
-          console.warn(
-            `⚠️  Parameter hydrate skipped for hospital ${hospitalId}:`,
-            error.message,
-          );
-        }
-        const list = Array.isArray(hydrated) ? hydrated : [hydrated];
-        hydratedAll.push(...list.filter(Boolean));
-      }
-
-      if (hydratedAll.length > 0) {
-        await indexHospitalDiagnostics(hydratedAll);
-      }
-
-      const liveIds = new Set(
-        hydratedAll
-          .map((diagnostic) =>
-            diagnostic?._id ? String(diagnostic._id) : "",
-          )
-          .filter(Boolean),
-      );
-      const indexedIds = await listIndexedHospitalDiagnosticIds(hospitalId);
-      const staleIds = indexedIds.filter((id) => !liveIds.has(id));
-      if (staleIds.length > 0) {
-        await hospitalDiagnosticsIndex.deleteDocuments(staleIds);
-        removed += staleIds.length;
-      }
-
-      indexed += hydratedAll.length;
-      console.log(
-        `✅ Hospital diagnostics indexed for ${hospitalId}: ${hydratedAll.length}`,
-      );
+      const result = await syncHospitalDiagnostics(hospitalId, Diagnostic);
+      indexed += result.indexed;
+      removed += result.removed;
     } catch (error) {
       console.warn(
         `⚠️  Hospital diagnostics index skipped for ${hospitalId}:`,
@@ -1088,5 +1183,6 @@ module.exports = {
   indexHospitalDiagnostics,
   deleteHospitalDiagnostic,
   searchHospitalDiagnostics,
+  ensureHospitalDiagnosticsIndexed,
   syncAllHospitalDiagnostics,
 };

@@ -15,6 +15,8 @@ const axios = require("axios");
  *   WHATSAPP_TEMPLATE_APPOINTMENT_RESCHEDULED
  *   WHATSAPP_TEMPLATE_APPOINTMENT_CANCELLED
  *   WHATSAPP_TEMPLATE_LAB_REPORT_READY  (URL button → /view/report/{{1}}, language: en)
+ *   WHATSAPP_TEMPLATE_DISCHARGE_SUMMARY (URL button → /view/discharge/{{1}})
+ *     When unset, discharge summaries are sent as a text message with the view link.
  */
 
 const GRAPH_API_VERSION = process.env.WHATSAPP_API_VERSION || "v21.0";
@@ -74,6 +76,13 @@ const TEMPLATE_CATALOG = {
     defaultName: "daily_financial_digest",
     defaultLanguage: "en",
     hasUrlButton: false,
+  },
+  discharge_summary_ready: {
+    envKey: "WHATSAPP_TEMPLATE_DISCHARGE_SUMMARY",
+    defaultName: "discharge_summary_ready",
+    defaultLanguage: "en",
+    /** body: patient, hospital, doctor — URL button suffix is the public token */
+    hasUrlButton: true,
   },
 };
 
@@ -295,6 +304,45 @@ async function sendAppointmentWhatsApp({
   });
 }
 
+/** Discharge summary ready — template when configured, otherwise a text message with the link */
+async function sendDischargeSummaryWhatsApp({
+  phone,
+  patientName,
+  hospitalName,
+  doctorName,
+  token,
+  viewUrl,
+}) {
+  if (process.env.WHATSAPP_TEMPLATE_DISCHARGE_SUMMARY) {
+    try {
+      return await sendWhatsAppTemplate({
+        phone,
+        templateKey: "discharge_summary_ready",
+        bodyParams: [
+          toWhatsAppTemplateParam(patientName || "Patient"),
+          toWhatsAppTemplateParam(hospitalName || "Hospital"),
+          toWhatsAppTemplateParam(doctorName || "-"),
+        ],
+        buttonUrlSuffix: token,
+      });
+    } catch (templateErr) {
+      console.warn(
+        "Discharge summary template failed, falling back to text:",
+        templateErr.message,
+      );
+    }
+  }
+
+  const message =
+    `*${hospitalName || "Hospital"}*\n\n` +
+    `Dear ${patientName || "Patient"},\n\n` +
+    `Your discharge summary is ready.\n` +
+    `Consultant: ${doctorName || "-"}\n\n` +
+    `Open your summary:\n${viewUrl}`;
+
+  return sendWhatsAppTextMessage({ phone, message, previewUrl: true });
+}
+
 /** Lab / diagnostics report ready — URL button suffix = public report token */
 async function sendLabReportWhatsApp({
   phone,
@@ -319,7 +367,7 @@ async function sendLabReportWhatsApp({
  * Send a direct text message via Meta WhatsApp Cloud API.
  * Ideal for daily administrative digests or conversational responses within 24h window.
  */
-async function sendWhatsAppTextMessage({ phone, message }) {
+async function sendWhatsAppTextMessage({ phone, message, previewUrl = false }) {
   const { accessToken, phoneNumberId } = getCredentials();
 
   if (!accessToken || !phoneNumberId) {
@@ -343,7 +391,7 @@ async function sendWhatsAppTextMessage({ phone, message }) {
     to: destination,
     type: "text",
     text: {
-      preview_url: false,
+      preview_url: Boolean(previewUrl),
       body: String(message || ""),
     },
   };
@@ -461,6 +509,7 @@ module.exports = {
   sendPrescriptionWhatsApp,
   sendAppointmentWhatsApp,
   sendLabReportWhatsApp,
+  sendDischargeSummaryWhatsApp,
   sendDailyDigestWhatsApp,
   mapWhatsAppHttpError,
 };

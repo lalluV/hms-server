@@ -12,6 +12,7 @@ const {
   indexHospitalDiagnostic,
   deleteHospitalDiagnostic,
   searchHospitalDiagnostics,
+  ensureHospitalDiagnosticsIndexed,
 } = require("../utils/meilisearch");
 
 applyTenantEntitlements(router, { moduleKey: "lab" });
@@ -47,6 +48,7 @@ router.get("/", async (req, res) => {
     if (searchText) {
       let searchResults;
       try {
+        await ensureHospitalDiagnosticsIndexed(req.hospitalId, Diagnostic);
         searchResults = await searchHospitalDiagnostics(searchText, {
           hospitalId: req.hospitalId,
           limit: actualLimit,
@@ -66,18 +68,25 @@ router.get("/", async (req, res) => {
       totalDiagnostics = searchResults.estimatedTotalHits || 0;
 
       if (orderedIds.length > 0) {
-        const hospitalKey = String(req.hospitalId);
-        const hospitalObjectId = mongoose.Types.ObjectId.isValid(hospitalKey)
-          ? new mongoose.Types.ObjectId(hospitalKey)
-          : req.hospitalId;
+        const hospitalKey = String(req.hospitalId).trim().toLowerCase();
         const rows = await Diagnostic.find({
-          _id: { $in: orderedIds },
-          $or: [{ hospitalId: hospitalObjectId }, { hospitalId: hospitalKey }],
+          _id: {
+            $in: orderedIds.map((id) => new mongoose.Types.ObjectId(String(id))),
+          },
         });
-        const byId = new Map(rows.map((row) => [String(row._id), row]));
+        const byId = new Map(
+          rows
+            .filter((row) => String(row.hospitalId).trim().toLowerCase() === hospitalKey)
+            .map((row) => [String(row._id), row]),
+        );
         diagnostics = orderedIds
           .map((id) => byId.get(String(id)))
           .filter(Boolean);
+        if (diagnostics.length === 0) {
+          console.warn(
+            `Lab search ranked ${orderedIds.length} tests but none matched hospital ${hospitalKey}`,
+          );
+        }
       }
     } else {
       const searchQuery = { hospitalId: req.hospitalId };

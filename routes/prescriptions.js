@@ -164,6 +164,69 @@ function buildPublicPatient(patient) {
   };
 }
 
+function sanitizeSummaryHtml(html) {
+  if (!html || typeof html !== "string") return "";
+  return html
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
+    .replace(/<iframe[\s\S]*?>[\s\S]*?<\/iframe>/gi, "")
+    .replace(/\son\w+\s*=\s*(['"]).*?\1/gi, "")
+    .replace(/javascript:/gi, "");
+}
+
+async function buildPublicDischargeSummary(
+  connection,
+  { hospitalId, hospitalObjectId, umrNo, admissionId },
+) {
+  const DischargeSummary = connection.model("DischargeSummary");
+  const Patient = connection.model("Patient");
+  const query = { UMRNo: umrNo, hospitalId: hospitalObjectId };
+  if (admissionId && mongoose.Types.ObjectId.isValid(admissionId)) {
+    query.admissionId = new mongoose.Types.ObjectId(admissionId);
+  }
+
+  const draft = await DischargeSummary.findOne(query)
+    .sort({ updatedAt: -1 })
+    .lean();
+  const summaryHtml = sanitizeSummaryHtml(draft?.summary || "");
+  if (!draft || !summaryHtml.trim()) return null;
+
+  const patient = await Patient.findOne({
+    UMRNo: umrNo,
+    hospitalId: hospitalObjectId,
+  })
+    .select("name age gender UMRNo phone consultantDoctor")
+    .lean();
+
+  const hospital = await Hospital.findById(hospitalId)
+    .select("name address city state zipCode phone logoUrl")
+    .lean();
+  const doctorName =
+    draft.dischargeSummaryMeta?.approvedBy?.name ||
+    patient?.consultantDoctor ||
+    "";
+
+  return {
+    documentType: "dischargeSummary",
+    hospital: buildPublicHospital(hospital),
+    doctor: doctorName ? { name: doctorName } : null,
+    patient: {
+      name: patient?.name || "Patient",
+      age: patient?.age || "",
+      gender: patient?.gender || "",
+      UMRNo: patient?.UMRNo || umrNo,
+      phone: patient?.phone || "",
+    },
+    summary: {
+      html: summaryHtml,
+      ipNumber: draft.ipNumber || "",
+      admissionDate: draft.admissionDate || "",
+      dischargeDate: draft.dischargeDate || "",
+      dischargeTime: draft.dischargeTime || "",
+      status: draft.dischargeSummaryStatus || "draft",
+    },
+  };
+}
+
 function buildPublicHospital(hospital) {
   if (!hospital) return null;
   return {
@@ -229,12 +292,31 @@ router.get("/public/:token", async (req, res) => {
       return res.status(400).json({ message: "Invalid or expired link." });
     }
 
-    const { hospitalId, patientId, prescriptionId } = decoded;
+    const { hospitalId, patientId, prescriptionId, kind, admissionId } = decoded;
 
     if (!mongoose.Types.ObjectId.isValid(hospitalId)) {
       return res.status(400).json({ message: "Invalid or expired link." });
     }
     const hospitalObjectId = new mongoose.Types.ObjectId(hospitalId);
+
+    if (kind === "ds") {
+      const connection = await getTenantConnection(hospitalId);
+      if (!connection) {
+        return res
+          .status(500)
+          .json({ message: "Unable to load discharge summary." });
+      }
+      const payload = await buildPublicDischargeSummary(connection, {
+        hospitalId,
+        hospitalObjectId,
+        umrNo: patientId,
+        admissionId: admissionId || prescriptionId,
+      });
+      if (!payload) {
+        return res.status(404).json({ message: "Discharge summary not found." });
+      }
+      return res.json(payload);
+    }
 
     const connection = await getTenantConnection(hospitalId);
     if (!connection) {

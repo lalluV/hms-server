@@ -2,8 +2,16 @@ const express = require("express");
 const mongoose = require("mongoose");
 const router = express.Router();
 const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
-
-applyTenantEntitlements(router, { moduleKey: "core" });
+const { getTenantConnection } = require("../utils/tenantDb");
+const Hospital = require("../models/Hospital");
+const {
+  createDischargeSummaryToken,
+  verifyDischargeSummaryToken,
+} = require("../utils/dischargeSummaryToken");
+const {
+  sendDischargeSummaryWhatsApp,
+  mapWhatsAppHttpError,
+} = require("../utils/whatsappCloud");
 
 const DISCHARGE_FIELDS = [
   "patientId",
@@ -150,6 +158,109 @@ function getModels(req) {
     Patient: require("../models/Patient"),
   };
 }
+
+function sanitizeSummaryHtml(html) {
+  if (!html || typeof html !== "string") return "";
+  return html
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
+    .replace(/<iframe[\s\S]*?>[\s\S]*?<\/iframe>/gi, "")
+    .replace(/\son\w+\s*=\s*(['"]).*?\1/gi, "")
+    .replace(/javascript:/gi, "");
+}
+
+function buildPublicHospital(hospital) {
+  if (!hospital) return null;
+  return {
+    name: hospital.name,
+    address: hospital.address,
+    city: hospital.city,
+    state: hospital.state,
+    zipCode: hospital.zipCode,
+    phone: hospital.phone,
+    logoUrl: hospital.logoUrl,
+  };
+}
+
+/**
+ * PUBLIC (no auth): view a discharge summary via a signed token.
+ * Registered before tenant auth so patients can open the WhatsApp link.
+ * GET /api/discharge-draft/public/:token
+ */
+router.get("/public/:token", async (req, res) => {
+  try {
+    let decoded;
+    try {
+      decoded = verifyDischargeSummaryToken(req.params.token);
+    } catch {
+      return res.status(400).json({ message: "Invalid or expired link." });
+    }
+
+    const { hospitalId, umrNo, admissionId } = decoded;
+    if (!mongoose.Types.ObjectId.isValid(hospitalId)) {
+      return res.status(400).json({ message: "Invalid or expired link." });
+    }
+
+    const connection = await getTenantConnection(hospitalId);
+    if (!connection) {
+      return res
+        .status(500)
+        .json({ message: "Unable to load discharge summary." });
+    }
+
+    const DischargeSummary = connection.model("DischargeSummary");
+    const Patient = connection.model("Patient");
+    const hospitalObjectId = new mongoose.Types.ObjectId(hospitalId);
+    const query = { UMRNo: umrNo, hospitalId: hospitalObjectId };
+    if (admissionId && mongoose.Types.ObjectId.isValid(admissionId)) {
+      query.admissionId = new mongoose.Types.ObjectId(admissionId);
+    }
+
+    const draft = await DischargeSummary.findOne(query)
+      .sort({ updatedAt: -1 })
+      .lean();
+    const summaryHtml = sanitizeSummaryHtml(draft?.summary || "");
+    if (!draft || !summaryHtml.trim()) {
+      return res.status(404).json({ message: "Discharge summary not found." });
+    }
+
+    const patient = await Patient.findOne({
+      UMRNo: umrNo,
+      hospitalId: hospitalObjectId,
+    })
+      .select("name age gender UMRNo consultantDoctor")
+      .lean();
+
+    const hospital = await Hospital.findById(hospitalId).lean();
+    const approvedBy = draft.dischargeSummaryMeta?.approvedBy?.name || "";
+
+    return res.json({
+      hospital: buildPublicHospital(hospital),
+      patient: {
+        name: patient?.name || "Patient",
+        age: patient?.age || "",
+        gender: patient?.gender || "",
+        UMRNo: patient?.UMRNo || umrNo,
+        consultantDoctor: approvedBy || patient?.consultantDoctor || "",
+      },
+      summary: {
+        html: summaryHtml,
+        ipNumber: draft.ipNumber || "",
+        admissionDate: draft.admissionDate || "",
+        dischargeDate: draft.dischargeDate || "",
+        dischargeTime: draft.dischargeTime || "",
+        status: draft.dischargeSummaryStatus || "draft",
+        approvedBy,
+      },
+    });
+  } catch (error) {
+    console.error("Public discharge summary error:", error);
+    return res
+      .status(500)
+      .json({ message: "Unable to load discharge summary." });
+  }
+});
+
+applyTenantEntitlements(router, { moduleKey: "core" });
 
 /**
  * GET /api/discharge-draft/:umrNo
@@ -466,6 +577,97 @@ router.delete("/:umrNo", async (req, res) => {
       error: "Failed to delete discharge draft",
       details: error.message,
     });
+  }
+});
+
+/**
+ * POST /api/discharge-draft/:umrNo/send-whatsapp
+ * Send the saved discharge summary to the patient's mobile.
+ * Body: { viewBaseUrl, admissionId? }
+ */
+router.post("/:umrNo/send-whatsapp", async (req, res) => {
+  try {
+    const { viewBaseUrl, admissionId: requestedAdmissionId } = req.body || {};
+    if (!viewBaseUrl) {
+      return res
+        .status(400)
+        .json({ message: "viewBaseUrl is required to build the view link." });
+    }
+
+    const { DischargeSummary, IPAdmission, Patient } = getModels(req);
+    const umrNo = req.params.umrNo;
+    const hospitalId = req.hospitalId;
+
+    const patient = await Patient.findOne({
+      UMRNo: umrNo,
+      ...(hospitalId ? { hospitalId } : {}),
+    }).lean();
+    if (!patient) {
+      return res.status(404).json({ message: "Patient not found." });
+    }
+    if (!patient.phone) {
+      return res
+        .status(400)
+        .json({ message: "Patient does not have a mobile number on file." });
+    }
+
+    const resolved = await resolveAdmissionId(IPAdmission, {
+      umrNo,
+      hospitalId,
+      admissionId: String(requestedAdmissionId || "").trim(),
+    });
+    const admissionId =
+      resolved && mongoose.Types.ObjectId.isValid(resolved) ? resolved : "";
+    const query = {
+      UMRNo: umrNo,
+      ...(hospitalId ? { hospitalId } : {}),
+      ...(admissionId ? { admissionId } : {}),
+    };
+    const draft = await DischargeSummary.findOne(query)
+      .sort({ updatedAt: -1 })
+      .lean();
+    if (!draft?.summary || !String(draft.summary).trim()) {
+      return res.status(400).json({
+        message: "Save the discharge summary before sending it on WhatsApp.",
+      });
+    }
+
+    const hospital = await Hospital.findById(hospitalId).lean();
+    const hospitalName = hospital?.name || "Hospital";
+    const doctorName =
+      draft.dischargeSummaryMeta?.approvedBy?.name ||
+      patient.consultantDoctor ||
+      "Consultant";
+
+    const token = createDischargeSummaryToken({
+      hospitalId: String(hospitalId),
+      umrNo,
+      admissionId,
+    });
+    const cleanBase = String(viewBaseUrl).replace(/\/+$/, "");
+    const viewUrl = `${cleanBase}/view/discharge/${encodeURIComponent(token)}`;
+
+    const result = await sendDischargeSummaryWhatsApp({
+      phone: patient.phone,
+      patientName: patient.name,
+      hospitalName,
+      doctorName,
+      token,
+      viewUrl,
+    });
+
+    return res.json({
+      success: true,
+      viewUrl,
+      destination: result.destination,
+    });
+  } catch (error) {
+    console.error("Send discharge summary WhatsApp error:", error);
+    const mapped = mapWhatsAppHttpError(error, res);
+    if (mapped) return mapped;
+    return res
+      .status(500)
+      .json({ message: "Failed to send discharge summary on WhatsApp." });
   }
 });
 

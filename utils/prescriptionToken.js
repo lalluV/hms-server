@@ -56,7 +56,13 @@ function splitToken(token) {
  * @param {{ hospitalId: string, patientId: string, prescriptionId: string }} params
  * @returns {string} opaque, URL-safe token (no "." so SPA fallback works)
  */
-function createPrescriptionToken({ hospitalId, patientId, prescriptionId }) {
+function createPrescriptionToken({
+  hospitalId,
+  patientId,
+  prescriptionId,
+  kind,
+  admissionId,
+}) {
   if (!hospitalId || !patientId || !prescriptionId) {
     throw new Error(
       "hospitalId, patientId and prescriptionId are required to create a token.",
@@ -69,6 +75,8 @@ function createPrescriptionToken({ hospitalId, patientId, prescriptionId }) {
     r: String(prescriptionId),
     iat: Date.now(),
   };
+  if (kind) payload.k = String(kind);
+  if (admissionId) payload.a = String(admissionId);
 
   const payloadPart = base64UrlEncode(JSON.stringify(payload));
   const signaturePart = sign(payloadPart);
@@ -139,6 +147,8 @@ function verifyPrescriptionToken(token) {
     hospitalId: payload.h,
     patientId: payload.p,
     prescriptionId: payload.r,
+    kind: payload.k || "",
+    admissionId: payload.a || "",
     iat: payload.iat,
   };
 }
