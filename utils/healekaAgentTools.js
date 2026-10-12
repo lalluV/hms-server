@@ -74,12 +74,14 @@ const ROLE_TOOL_ACCESS = {
   search_lab_inventory: [
     "LabTechnician",
     "Phlebotomist",
+    "Receptionist",
     "SuperAdmin",
     "Admin",
   ],
   get_lab_sales: [
     "LabTechnician",
     "Phlebotomist",
+    "Receptionist",
     "SuperAdmin",
     "Admin",
   ],
@@ -1266,7 +1268,7 @@ function explain_hms_howto(ctx, args) {
     Nurse:
       "As a Nurse you use Home, Patients, Consultations, Patient Records, and IPD nurse tools when enabled.",
     Receptionist:
-      "As Receptionist focus on Dashboard, Patients, Appointments, and OP billing.",
+      "As Receptionist focus on Dashboard, Patients, Appointments, OP billing, and lab/radiology billing (indents, sale, returns).",
     Pharmacist: "As Pharmacist focus on Pharmacy sale, purchase, inventory, and indents.",
     LabTechnician:
       "As LabTechnician focus on Lab sale, purchase, inventory, and test completion.",

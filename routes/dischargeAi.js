@@ -81,6 +81,10 @@ DISCHARGE SUMMARY FOLLOW-UP MODE — PATCH ONLY
 4. ASSISTANT REPLY:
 - assistantReply is required: ONE short, natural spoken sentence confirming the discharge updates.
 
+5. PATCH RULES:
+- If the instruction only changes take-home medicines or repeat labs, OMIT dischargeFields entirely (do not send empty strings or empty summarySections).
+- Only include dischargeFields keys you are actually updating with non-empty values.
+
 Return exactly this JSON shape:
 {
   "assistantReply": "one short natural spoken sentence",
@@ -131,7 +135,45 @@ ${JSON.stringify(chart)}
 INSTRUCTION:
 ${instruction}
 
-REMINDER: Output minimal JSON patch for discharge take-home orders, labs, and fields.`;
+REMINDER: Output minimal JSON patch. Omit dischargeFields when unchanged; never use empty strings to clear existing chart text.`;
+}
+
+/** Apply AI dischargeFields delta without wiping existing text with empty placeholders. */
+function mergeDischargeFieldsPatch(existing = {}, incoming = {}) {
+  const prev =
+    existing && typeof existing === "object" ? { ...existing } : {};
+  const inc = incoming && typeof incoming === "object" ? incoming : {};
+
+  const pickText = (key, fallback = "") => {
+    const previous = prev[key] ?? fallback;
+    if (inc[key] === undefined) return previous;
+    const trimmed = String(inc[key]).trim();
+    return trimmed || previous;
+  };
+
+  const next = {
+    ...prev,
+    finalDiagnosis: pickText("finalDiagnosis"),
+    dischargeInstructions: pickText("dischargeInstructions"),
+    followUpPlan: pickText("followUpPlan"),
+    dischargeCondition: pickText("dischargeCondition", "Stable") || "Stable",
+    dischargeDestination: pickText("dischargeDestination", "Home") || "Home",
+  };
+
+  if (inc.dischargeDate !== undefined) {
+    const d = String(inc.dischargeDate).trim();
+    if (d) next.dischargeDate = d;
+  }
+  if (inc.lengthOfStay !== undefined && !Number.isNaN(Number(inc.lengthOfStay))) {
+    next.lengthOfStay = Number(inc.lengthOfStay);
+  }
+  if (Array.isArray(inc.summarySections) && inc.summarySections.length > 0) {
+    next.summarySections = inc.summarySections;
+  } else if (!Array.isArray(prev.summarySections)) {
+    next.summarySections = [];
+  }
+
+  return next;
 }
 
 function parseFollowUpDeltaJson(content) {
@@ -382,36 +424,10 @@ router.post("/review-followup", async (req, res) => {
       }
     }
 
-    const existingFields = chart.dischargeFields || {};
-    const incomingFields = delta.dischargeFields || {};
-    const dischargeFields = {
-      ...existingFields,
-      finalDiagnosis:
-        incomingFields.finalDiagnosis !== undefined
-          ? String(incomingFields.finalDiagnosis).trim()
-          : existingFields.finalDiagnosis || "",
-      dischargeCondition:
-        incomingFields.dischargeCondition !== undefined
-          ? String(incomingFields.dischargeCondition).trim()
-          : existingFields.dischargeCondition || "Stable",
-      dischargeDestination:
-        incomingFields.dischargeDestination !== undefined
-          ? String(incomingFields.dischargeDestination).trim()
-          : existingFields.dischargeDestination || "Home",
-      dischargeInstructions:
-        incomingFields.dischargeInstructions !== undefined
-          ? String(incomingFields.dischargeInstructions).trim()
-          : existingFields.dischargeInstructions || "",
-      followUpPlan:
-        incomingFields.followUpPlan !== undefined
-          ? String(incomingFields.followUpPlan).trim()
-          : existingFields.followUpPlan || "",
-      summarySections:
-        incomingFields.summarySections !== undefined &&
-        Array.isArray(incomingFields.summarySections)
-          ? incomingFields.summarySections
-          : existingFields.summarySections || [],
-    };
+    const dischargeFields = mergeDischargeFieldsPatch(
+      chart.dischargeFields || {},
+      delta.dischargeFields || {},
+    );
 
     const result = {
       medicines,
