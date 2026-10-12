@@ -17,6 +17,7 @@ const ERA_NOTE_SECTION_ORDER = [
   ["history", "Past medical history"],
   ["examination", "Systemic examination"],
   ["diagnosis", "Provisional diagnosis"],
+  ["advice", "Advice"],
   ["allergies", "Allergies"],
 ];
 
@@ -185,7 +186,6 @@ function formatDoctorNotesLayout(noteText, options = {}) {
     if (sectionOrder !== ERA_NOTE_SECTION_ORDER) {
       sections = peelHistoryOfFromComplaints(sections);
     }
-    if (sectionOrder === ERA_NOTE_SECTION_ORDER) delete sections.advice;
     return composeNoteFromSections(sections, sectionOrder) || text;
   }
   return text;

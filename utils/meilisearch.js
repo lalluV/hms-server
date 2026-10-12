@@ -17,6 +17,7 @@ const masterMedicinesIndex = client.index("master_medicines");
 const masterDiagnosticsIndex = client.index("master_diagnostics");
 const masterParametersIndex = client.index("master_parameters");
 const masterLabItemsIndex = client.index("master_lab_items");
+const hospitalDiagnosticsIndex = client.index("hospital_diagnostics");
 
 /**
  * Initialize all Meilisearch indices with proper configuration
@@ -86,6 +87,25 @@ async function initializeMeilisearch() {
       "createdAt",
     ]);
     console.log("✅ Master Lab Items index configured");
+
+    // Hospital diagnostics — order/list search. Master index is creation-only.
+    await hospitalDiagnosticsIndex.updateSearchableAttributes([
+      "name",
+      "code",
+      "includedTestNames",
+      "parameterNames",
+      "description",
+      "subdeptname",
+    ]);
+    await hospitalDiagnosticsIndex.updateFilterableAttributes([
+      "hospitalId",
+      "deptScope",
+      "active",
+      "type",
+    ]);
+    await hospitalDiagnosticsIndex.updateSortableAttributes(["name", "code"]);
+    await hospitalDiagnosticsIndex.updatePagination({ maxTotalHits: 10000 });
+    console.log("✅ Hospital Diagnostics index configured");
 
     console.log("✅ All Meilisearch indices initialized successfully");
     return true;
@@ -835,6 +855,209 @@ async function getAllIndexStats() {
   }
 }
 
+// ==================== HOSPITAL DIAGNOSTICS ====================
+
+function meiliQuote(value) {
+  return `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function namesFromParameters(parameters) {
+  if (!Array.isArray(parameters)) return [];
+  return parameters
+    .map((parameter) => String(parameter?.name || "").trim())
+    .filter(Boolean);
+}
+
+/**
+ * Search document for a hospital Diagnostic. Master catalog is not indexed here.
+ */
+function toHospitalDiagnosticSearchDoc(diagnostic) {
+  if (!diagnostic || !diagnostic._id || !diagnostic.hospitalId) return null;
+
+  const included = Array.isArray(diagnostic.includedTests)
+    ? diagnostic.includedTests
+    : [];
+  const includedNames = [];
+  const parameterNames = namesFromParameters(diagnostic.parameters);
+
+  for (const test of included) {
+    const label = [test?.name, test?.code, test?.test_name]
+      .map((part) => String(part || "").trim())
+      .filter(Boolean)
+      .join(" ");
+    if (label) includedNames.push(label);
+    parameterNames.push(...namesFromParameters(test?.parameters));
+  }
+
+  const deptname = String(diagnostic.deptname || "").trim();
+  return {
+    id: diagnostic._id.toString(),
+    hospitalId: String(diagnostic.hospitalId),
+    name: diagnostic.name || "",
+    code: diagnostic.code || "",
+    description: diagnostic.description || "",
+    deptname,
+    subdeptname: diagnostic.subdeptname || "",
+    deptScope: deptname.toLowerCase() === "radiology" ? "radiology" : "lab",
+    type: diagnostic.type || "",
+    active: diagnostic.active !== false,
+    includedTestNames: includedNames.join(" "),
+    parameterNames: [...new Set(parameterNames)].join(" "),
+  };
+}
+
+async function indexHospitalDiagnostic(diagnostic) {
+  const document = toHospitalDiagnosticSearchDoc(diagnostic);
+  if (!document) return false;
+  await hospitalDiagnosticsIndex.addDocuments([document]);
+  return true;
+}
+
+async function indexHospitalDiagnostics(diagnostics = []) {
+  const documents = diagnostics
+    .map((diagnostic) => toHospitalDiagnosticSearchDoc(diagnostic))
+    .filter(Boolean);
+  if (documents.length === 0) return true;
+  const batchSize = 500;
+  for (let i = 0; i < documents.length; i += batchSize) {
+    await hospitalDiagnosticsIndex.addDocuments(documents.slice(i, i + batchSize));
+  }
+  return true;
+}
+
+async function deleteHospitalDiagnostic(id) {
+  if (!id) return false;
+  await hospitalDiagnosticsIndex.deleteDocument(String(id));
+  return true;
+}
+
+/**
+ * Fuzzy search of one hospital's diagnostics. Throws if Meilisearch is down.
+ */
+async function searchHospitalDiagnostics(query, options = {}) {
+  const cleanQuery = String(query || "").trim();
+  const hospitalId = String(options.hospitalId || "");
+  if (!cleanQuery || !hospitalId) {
+    return { hits: [], estimatedTotalHits: 0 };
+  }
+
+  const limit = Math.min(Math.max(parseInt(options.limit, 10) || 20, 1), 100);
+  const offset = Math.max(parseInt(options.offset, 10) || 0, 0);
+  const filter = [`hospitalId = ${meiliQuote(hospitalId)}`];
+
+  if (options.deptScope === "radiology" || options.deptScope === "lab") {
+    filter.push(`deptScope = ${meiliQuote(options.deptScope)}`);
+  }
+
+  const searchResults = await hospitalDiagnosticsIndex.search(cleanQuery, {
+    filter,
+    limit,
+    offset,
+    attributesToRetrieve: ["id"],
+    attributesToHighlight: [],
+  });
+
+  return {
+    hits: searchResults.hits || [],
+    estimatedTotalHits: searchResults.estimatedTotalHits || 0,
+  };
+}
+
+async function listIndexedHospitalDiagnosticIds(hospitalId) {
+  const ids = [];
+  let offset = 0;
+  const filter = [`hospitalId = ${meiliQuote(hospitalId)}`];
+
+  while (true) {
+    const page = await hospitalDiagnosticsIndex.search("", {
+      filter,
+      limit: 1000,
+      offset,
+      attributesToRetrieve: ["id"],
+    });
+    const hits = page.hits || [];
+    for (const hit of hits) {
+      if (hit?.id) ids.push(String(hit.id));
+    }
+    if (hits.length < 1000) break;
+    offset += hits.length;
+  }
+
+  return ids;
+}
+
+/**
+ * Upsert every hospital diagnostic and drop index rows that no longer exist.
+ */
+async function syncAllHospitalDiagnostics() {
+  const Hospital = require("../models/Hospital");
+  const { resolveTenantConnection } = require("./tenantRouter");
+  const { hydrateDiagnostics } = require("./hydrateDiagnosticParameters");
+
+  const hospitals = await Hospital.find({}).select("_id").lean();
+  let indexed = 0;
+  let removed = 0;
+
+  for (const hospital of hospitals) {
+    const hospitalId = String(hospital._id);
+    try {
+      const connection = await resolveTenantConnection(hospitalId);
+      const Diagnostic = connection.model("Diagnostic");
+      const Parameter = connection.model("Parameter");
+      const hospitalKey = hospital._id;
+      const docs = await Diagnostic.find({
+        $or: [{ hospitalId: hospitalKey }, { hospitalId }],
+      }).lean();
+
+      const hydratedAll = [];
+      for (let i = 0; i < docs.length; i += 200) {
+        const slice = docs.slice(i, i + 200);
+        let hydrated = slice;
+        try {
+          hydrated = await hydrateDiagnostics(Parameter, slice);
+        } catch (error) {
+          console.warn(
+            `⚠️  Parameter hydrate skipped for hospital ${hospitalId}:`,
+            error.message,
+          );
+        }
+        const list = Array.isArray(hydrated) ? hydrated : [hydrated];
+        hydratedAll.push(...list.filter(Boolean));
+      }
+
+      if (hydratedAll.length > 0) {
+        await indexHospitalDiagnostics(hydratedAll);
+      }
+
+      const liveIds = new Set(
+        hydratedAll
+          .map((diagnostic) =>
+            diagnostic?._id ? String(diagnostic._id) : "",
+          )
+          .filter(Boolean),
+      );
+      const indexedIds = await listIndexedHospitalDiagnosticIds(hospitalId);
+      const staleIds = indexedIds.filter((id) => !liveIds.has(id));
+      if (staleIds.length > 0) {
+        await hospitalDiagnosticsIndex.deleteDocuments(staleIds);
+        removed += staleIds.length;
+      }
+
+      indexed += hydratedAll.length;
+      console.log(
+        `✅ Hospital diagnostics indexed for ${hospitalId}: ${hydratedAll.length}`,
+      );
+    } catch (error) {
+      console.warn(
+        `⚠️  Hospital diagnostics index skipped for ${hospitalId}:`,
+        error.message,
+      );
+    }
+  }
+
+  return { success: true, indexed, removed, hospitals: hospitals.length };
+}
+
 module.exports = {
   client,
   initializeMeilisearch,
@@ -860,4 +1083,10 @@ module.exports = {
   deleteMasterLabItem,
   searchMasterLabItems,
   indexAllMasterLabItems,
+  // Hospital diagnostics (order / lab list search)
+  indexHospitalDiagnostic,
+  indexHospitalDiagnostics,
+  deleteHospitalDiagnostic,
+  searchHospitalDiagnostics,
+  syncAllHospitalDiagnostics,
 };

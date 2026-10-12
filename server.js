@@ -6,6 +6,7 @@ const {
   initializeMeilisearch,
   indexAllMasterData,
   getAllIndexStats,
+  syncAllHospitalDiagnostics,
 } = require("./utils/meilisearch");
 const { initializeMasterDatabase } = require("./utils/tenantDb");
 
@@ -221,6 +222,19 @@ app.listen(PORT, "0.0.0.0", async () => {
             console.log(`   - Total: ${totalIndexed} documents indexed`);
           }
         }
+
+        syncAllHospitalDiagnostics()
+          .then((result) => {
+            console.log(
+              `✅ Hospital diagnostics search index: ${result.indexed} tests across ${result.hospitals} hospitals (${result.removed} stale removed)`,
+            );
+          })
+          .catch((error) => {
+            console.error(
+              "❌ Hospital diagnostics search index failed:",
+              error.message,
+            );
+          });
       } else {
         console.log(
           "⚠️  Meilisearch initialization failed - master data search will use MongoDB fallback",

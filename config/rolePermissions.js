@@ -15,6 +15,9 @@ const ROLE_ALIASES = {
   "it support": "IT Support",
   itsupport: "IT Support",
   pro: "PRO",
+  mo: "MO",
+  "medical officer": "MO",
+  medicalofficer: "MO",
 };
 
 const ALL_STAFF_ROLES = [
@@ -22,6 +25,7 @@ const ALL_STAFF_ROLES = [
   "Admin",
   "Doctor",
   "Nurse",
+  "MO",
   "Pharmacist",
   "LabTechnician",
   "Phlebotomist",
@@ -55,6 +59,7 @@ const ROLE_PERMISSIONS = {
   ]),
   Doctor: new Set(["staff.read", "self.password.change", "self.profile.update"]),
   Nurse: new Set(["staff.read", "self.password.change", "self.profile.update"]),
+  MO: new Set(["staff.read", "self.password.change", "self.profile.update"]),
   Pharmacist: new Set(["staff.read", "self.password.change", "self.profile.update"]),
   LabTechnician: new Set(["staff.read", "self.password.change", "self.profile.update"]),
   Phlebotomist: new Set(["staff.read", "self.password.change", "self.profile.update"]),

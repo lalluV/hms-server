@@ -25,6 +25,7 @@ const ALL_STAFF_ROLES = [
   "Admin",
   "Doctor",
   "Nurse",
+  "MO",
   "Pharmacist",
   "LabTechnician",
   "Phlebotomist",
@@ -35,11 +36,12 @@ const ALL_STAFF_ROLES = [
   "PRO",
 ];
 
-const CLINICAL_ROLES = ["Doctor", "Nurse", "SuperAdmin", "Admin"];
+const CLINICAL_ROLES = ["Doctor", "Nurse", "MO", "SuperAdmin", "Admin"];
 
 const PATIENT_ACCESS_ROLES = [
   "Doctor",
   "Nurse",
+  "MO",
   "Receptionist",
   "SuperAdmin",
   "Admin",
@@ -65,6 +67,7 @@ const ROLE_TOOL_ACCESS = {
     "SuperAdmin",
     "Doctor",
     "Nurse",
+    "MO",
     "Receptionist",
   ],
   search_pharmacy_inventory: ["Pharmacist", "SuperAdmin", "Admin"],

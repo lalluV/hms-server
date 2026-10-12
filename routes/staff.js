@@ -20,6 +20,7 @@ applyTenantEntitlements(router, { moduleKey: "staff", useAuth: "flexible" });
 const ROLE_MODULE_REQUIREMENTS = {
   Doctor: "clinical",
   Nurse: "ipdNursePanel",
+  MO: "ipdNursePanel",
   Pharmacist: "pharmacy",
   LabTechnician: "lab",
   Phlebotomist: "lab",

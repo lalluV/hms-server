@@ -25,9 +25,7 @@ const {
 const OPENAI_API_BASE_URL = "https://api.openai.com/v1";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL =
-  process.env.OPENAI_FALLBACK_MODEL ||
-  process.env.OPENAI_MODEL ||
-  "gpt-6-luna";
+  process.env.OPENAI_FALLBACK_MODEL || process.env.OPENAI_MODEL || "gpt-6-luna";
 const PARSE_NOTE_MODEL =
   process.env.GEMINI_PARSE_MODEL ||
   process.env.GEMINI_TRANSCRIBE_MODEL ||
@@ -65,7 +63,7 @@ REVIEW FOLLOW-UP MODE — UNIVERSAL CLINICAL RULES (PATCH ONLY)
 - INSTRUCTION is the single new update requested right now.
 - Output ONLY operations for items that INSTRUCTION explicitly changes. The app preserves every omitted item as-is.
 - FORBIDDEN: Re-listing unchanged medicines, labs, or notes. Output minimal ops only.
-- If the instruction does not name a medicine, medicineOps MUST be []. Same for labs/procedures. DO NOT emit or process Complaints for now. Focus strictly on Diagnosis, Labs, and Medications.
+- If the instruction does not name a medicine, medicineOps MUST be []. Same for labs/procedures. Emit noteOps only for note sections the INSTRUCTION touches.
 - Match existing items using their exact "name" from CURRENT CHART.
 
 2. CONDITIONAL & CONTINGENT ORDERS vs IMMEDIATE ORDERS (CRITICAL):
@@ -103,8 +101,7 @@ REVIEW FOLLOW-UP MODE — UNIVERSAL CLINICAL RULES (PATCH ONLY)
     - "dd" or "d/d" = Differential Diagnosis (e.g. "dd viral vs strep" -> record under Diagnosis: "Differential Diagnosis: Viral vs Streptococcal pharyngitis", NEVER as lab tests).
   - Shorthand conjunctions: In dictations, "n", "+", and "&" mean "and" (e.g. "azithro n cbp" = Azithromycin and CBP test).
   - In multi-item or comma-separated dictations, parse EVERY single spoken token into its true clinical domain:
-  - DIAGNOSIS (MANDATORY) — DO NOT PROCESS COMPLAINTS FOR NOW:
-    - Do NOT emit noteOps for "complaints" or symptoms (e.g. fever, pain, cough). Only process Diagnosis, Labs, and Medications.
+  - DIAGNOSIS (when the instruction implies a diagnosis):
     - UTI (Urinary tract infection) is ALWAYS a clinical medical Diagnosis, NEVER an investigation or lab test. Even with question marks before or after (e.g. "uti??", "?uti", "maybe uti"), ALWAYS emit a noteOp for UTI under Diagnosis! If returning doctorNotes string, always include "Diagnosis:\n• Urinary tract infection".
     - When the instruction mentions any disease, migraine, infection, or pathology (e.g. "migraine", "uti", "?uti", "?malaria", "tinea", "stone", "anemia", "menorrhagia")—without forbidding diagnosis—you MUST emit a noteOp under Diagnosis: {"section": "diagnosis", "action": "add", "text": "exact condition name"}.
   - INVESTIGATIONS: Extract EVERY single diagnostic test, scan, imaging acronym, swab, culture, and abbreviation into labOps without skipping shorthand items (e.g. KFT, LFT, CBP):
@@ -869,3 +866,4 @@ module.exports.PARSE_CLINICAL_NOTE_SYSTEM_PROMPT =
   PARSE_CLINICAL_NOTE_SYSTEM_PROMPT;
 module.exports.buildOpdReviewFollowUpUserPrompt =
   buildOpdReviewFollowUpUserPrompt;
+module.exports.mergeOpdChartDelta = mergeOpdChartDelta;

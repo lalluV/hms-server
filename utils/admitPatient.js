@@ -46,11 +46,24 @@ function personalHistoryFromBody(body) {
   };
 }
 
-/** Frozen copy of the treatment list written with this ERA save. */
+/** Frozen ER meds snapshot from this ERA save. */
 function casualtyTreatmentFromBody(body) {
+  const casualty = Array.isArray(body?.casualtyTreatment)
+    ? body.casualtyTreatment
+    : [];
+  if (casualty.length) return cloneJson(casualty);
   const treatment = Array.isArray(body?.treatment) ? body.treatment : [];
-  if (treatment.length) return cloneJson(treatment);
-  return Array.isArray(body?.casualtyTreatment) ? body.casualtyTreatment : [];
+  return treatment.length ? cloneJson(treatment) : [];
+}
+
+/** Frozen ER investigations snapshot from this ERA save. */
+function casualtyInvestigationsFromBody(body) {
+  const casualty = Array.isArray(body?.casualtyInvestigations)
+    ? body.casualtyInvestigations
+    : [];
+  if (casualty.length) return cloneJson(casualty);
+  const labs = Array.isArray(body?.investigations) ? body.investigations : [];
+  return labs.length ? cloneJson(labs) : [];
 }
 
 /** Sequential per-hospital, per-year IP number from the tenant Counter. */
@@ -151,13 +164,19 @@ function stayPayload(body, patient, hospitalId, ipNumber) {
     doctorNotes: Array.isArray(body.doctorNotes) ? body.doctorNotes : [],
     nurseNotes: Array.isArray(body.nurseNotes) ? body.nurseNotes : [],
     insulinChart: Array.isArray(body.insulinChart) ? body.insulinChart : [],
-    investigations: Array.isArray(body.investigations) ? body.investigations : [],
     procedures: Array.isArray(body.procedures) ? body.procedures : [],
-    treatment: Array.isArray(body.treatment) ? body.treatment : [],
     casualtyTreatment: casualtyTreatmentFromBody(body),
-    casualtyInvestigations: Array.isArray(body.investigations)
-      ? body.investigations
-      : [],
+    casualtyInvestigations: casualtyInvestigationsFromBody(body),
+    treatment: (() => {
+      const ward = Array.isArray(body.treatment) ? body.treatment : [];
+      if (ward.length) return ward;
+      return cloneJson(casualtyTreatmentFromBody(body));
+    })(),
+    investigations: (() => {
+      const ward = Array.isArray(body.investigations) ? body.investigations : [];
+      if (ward.length) return ward;
+      return cloneJson(casualtyInvestigationsFromBody(body));
+    })(),
     counselling: body.counselling || "",
     dischargeOrders: body.dischargeOrders || "",
     paymentMethod: body.paymentMethod || "Personal",
@@ -503,15 +522,12 @@ async function updateEraChart({ tenantDb, hospitalId, admissionId, body }) {
       transferDate: localYmd(),
     });
   }
-  if (Array.isArray(payload.treatment) && payload.treatment.length) {
-    admission.casualtyTreatment = cloneJson(payload.treatment);
-    admission.markModified("casualtyTreatment");
-  } else if (Array.isArray(payload.casualtyTreatment)) {
+  if (Array.isArray(payload.casualtyTreatment)) {
     admission.casualtyTreatment = payload.casualtyTreatment;
     admission.markModified("casualtyTreatment");
   }
-  if (Array.isArray(payload.investigations)) {
-    admission.casualtyInvestigations = payload.investigations;
+  if (Array.isArray(payload.casualtyInvestigations)) {
+    admission.casualtyInvestigations = payload.casualtyInvestigations;
     admission.markModified("casualtyInvestigations");
   }
 

@@ -3,6 +3,8 @@ const router = express.Router();
 const mongoose = require("mongoose");
 const MasterParameter = require("../models/MasterParameter");
 const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
+const { hydrateDiagnostics } = require("../utils/hydrateDiagnosticParameters");
+const { indexHospitalDiagnostics } = require("../utils/meilisearch");
 
 applyTenantEntitlements(router, { moduleKey: "lab" });
 
@@ -18,12 +20,13 @@ function escapeRegex(s) {
 
 /** Count hospital diagnostics that reference this Parameter id */
 async function countTestsUsingParameter(Diagnostic, hospitalId, parameterId) {
-  const idStr = String(parameterId);
-  const ids = [idStr];
-  if (mongoose.Types.ObjectId.isValid(idStr)) {
-    ids.push(new mongoose.Types.ObjectId(idStr));
-  }
-  return Diagnostic.countDocuments({
+  return Diagnostic.countDocuments(
+    testsUsingParameterQuery(hospitalId, parameterIdVariants(parameterId)),
+  );
+}
+
+function testsUsingParameterQuery(hospitalId, ids) {
+  return {
     $and: [
       hospitalIdFilter(hospitalId),
       {
@@ -33,7 +36,35 @@ async function countTestsUsingParameter(Diagnostic, hospitalId, parameterId) {
         ],
       },
     ],
-  });
+  };
+}
+
+function parameterIdVariants(parameterId) {
+  const idStr = String(parameterId);
+  const ids = [idStr];
+  if (mongoose.Types.ObjectId.isValid(idStr)) {
+    ids.push(new mongoose.Types.ObjectId(idStr));
+  }
+  return ids;
+}
+
+/** Parameter names are denormalized into the hospital diagnostic search index. */
+function reindexTestsUsingParameter(Diagnostic, Parameter, hospitalId, parameterId) {
+  const ids = parameterIdVariants(parameterId);
+  Diagnostic.find(testsUsingParameterQuery(hospitalId, ids))
+    .lean()
+    .then((docs) => {
+      if (!docs.length) return null;
+      return hydrateDiagnostics(Parameter, docs).then((hydrated) =>
+        indexHospitalDiagnostics(hydrated),
+      );
+    })
+    .catch((error) => {
+      console.warn(
+        "⚠️  Failed to reindex hospital diagnostics after parameter change:",
+        error.message,
+      );
+    });
 }
 
 // Get all parameters with pagination and search
@@ -289,6 +320,15 @@ router.put("/:id", async (req, res) => {
     );
     if (!parameter) {
       return res.status(404).json({ message: "Parameter not found" });
+    }
+    if (body.name !== undefined) {
+      const Diagnostic = req.tenantDb.model("Diagnostic");
+      reindexTestsUsingParameter(
+        Diagnostic,
+        Parameter,
+        req.hospitalId,
+        parameter._id,
+      );
     }
     res.json(parameter);
   } catch (error) {

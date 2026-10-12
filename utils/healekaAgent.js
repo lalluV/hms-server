@@ -286,7 +286,7 @@ function buildSuggestedActions(role, { pendingAction, missingFields, actionsTake
   // Ambiguous / need patient
   const needsPatient = missingFields?.includes("patientRef");
   if (needsPatient || results.some((r) => r?.matches?.length || r?.ambiguous?.length)) {
-    if (role === "Doctor" || role === "Nurse") {
+    if (role === "Doctor" || role === "Nurse" || role === "MO") {
       push("Today's OP", "List today's OP patients I can work with");
       push("Search patient", "I need to find a patient — ask me for UMR, name, or phone");
     }

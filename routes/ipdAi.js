@@ -26,14 +26,13 @@ const {
   OPD_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM,
   PARSE_CLINICAL_NOTE_SYSTEM_PROMPT: OPD_PARSE_CLINICAL_NOTE_SYSTEM_PROMPT,
   buildOpdReviewFollowUpUserPrompt,
+  mergeOpdChartDelta,
 } = require("./opdAi");
 
 const OPENAI_API_BASE_URL = "https://api.openai.com/v1";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL =
-  process.env.OPENAI_FALLBACK_MODEL ||
-  process.env.OPENAI_MODEL ||
-  "gpt-6-luna";
+  process.env.OPENAI_FALLBACK_MODEL || process.env.OPENAI_MODEL || "gpt-6-luna";
 const PARSE_NOTE_MODEL =
   process.env.GEMINI_PARSE_MODEL ||
   process.env.GEMINI_TRANSCRIBE_MODEL ||
@@ -73,6 +72,7 @@ const ERA_NOTE_SECTION_ORDER = [
   ["history", "Past medical history"],
   ["examination", "Systemic examination"],
   ["diagnosis", "Provisional diagnosis"],
+  ["advice", "Advice"],
   ["allergies", "Allergies"],
 ];
 
@@ -294,7 +294,6 @@ function mergeNoteWithOps(
     sections[key] = list;
   }
 
-  if (sectionOrder === ERA_NOTE_SECTION_ORDER) delete sections.advice;
   if (isStructured) {
     return (
       composeNoteFromSections(sections, sectionOrder) ||
@@ -311,6 +310,50 @@ function mergeNoteWithOps(
   if (!appended.length) return String(currentNoteText || "");
   const base = String(currentNoteText || "").trim();
   return base ? `${base}\n\n${appended.join("\n\n")}` : appended.join("\n\n");
+}
+
+/* ========================================================================== */
+/* ERA delta merge (OPD engine + ERA post-process)                            */
+/* ========================================================================== */
+
+function mergeEraChartDelta(currentChart, delta, instruction = "") {
+  const chart =
+    currentChart && typeof currentChart === "object" ? currentChart : {};
+  const d = delta && typeof delta === "object" ? delta : {};
+
+  const opdMerged = mergeOpdChartDelta(chart, d, instruction);
+
+  let doctorNotes = opdMerged.doctorNotes;
+  if (d.clearNote) {
+    doctorNotes = "";
+  } else if (Array.isArray(d.noteOps) && d.noteOps.length > 0) {
+    const noteBase =
+      String(opdMerged.doctorNotes || "").trim() ||
+      String(chart.doctorNotes || "");
+    doctorNotes = mergeNoteWithOps(noteBase, d.noteOps, ERA_NOTE_SECTION_ORDER);
+  }
+
+  const medicines = (opdMerged.medicines || []).map((med) => {
+    const {
+      quantity: _quantity,
+      duration: _duration,
+      eraRoute: _eraRoute,
+      ...rest
+    } = med;
+    return {
+      ...rest,
+      duration: "",
+    };
+  });
+
+  return {
+    medicines,
+    labTests: opdMerged.labTests,
+    procedures: opdMerged.procedures,
+    vitals: opdMerged.vitals || {},
+    doctorNotes,
+    eraManualExam: chart.eraManualExam || null,
+  };
 }
 
 /* ========================================================================== */
@@ -761,15 +804,10 @@ Return exactly this JSON shape:
 
 const ERA_OPD_DELTA = `
 
-ERA DIFFERENCES FROM OPD (only these):
-- The clinical note already has these headings: Chief complaints, Past medical history, Systemic examination, Provisional diagnosis, Allergies.
-- noteOps sections are complaints, history, examination, diagnosis, allergies. Do not use advice. History and allergies stay inside the note. Write every heading the doctor mentioned, including complaints, the same way OPD writes a clinical note.
-- complaints holds the present illness: current symptoms, their duration and course, and pertinent negatives about this illness.
-- history holds only conditions, surgeries, admissions, or long-term medicines that existed before the present illness. A pertinent negative about the present illness is never history.
-- examination holds only findings observed or measured on examination. Drug and fluid orders go to medicineOps; diet restrictions and nursing instructions go to procedureOps. None of them go in the note.
-- Each noteOps text is clinical content only, never a section name or heading. Each fact goes in one section only. Do not add placeholder text such as Nil.
-- Medicines: duration must be "" and quantity must be omitted. Do not default a course length. Do not calculate a dispense quantity. Do not write "for N days" into directions.
-- Procedures stay. Put this-visit procedures in procedureOps the same way OPD does.
+ERA (casualty) — only these differ from OPD above:
+- Note headings: Chief complaints, Past medical history, Systemic examination, Provisional diagnosis, Allergies. Same noteOps keys as OPD plus allergies.
+- complaints = present illness; history = conditions before this illness (not pertinent negatives of the present illness).
+- Every medicine: duration "" and omit quantity.
 `;
 
 const ERA_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM = `${OPD_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM}
@@ -783,7 +821,7 @@ function buildInpatientReviewFollowUpUserPrompt(
   if (isEra) {
     return `${buildOpdReviewFollowUpUserPrompt(instruction, currentChart)}
 
-ERA ONLY: Same as OPD, except the note uses Chief complaints, Past medical history, Systemic examination, Provisional diagnosis, and Allergies (not advice). Medicine duration is "" and quantity is omitted. Keep procedures.`;
+ERA ONLY: Use ERA note headings from system addendum. Medicine duration "" and omit quantity (ignore quantity reminder below).`;
   }
   const chart =
     currentChart && typeof currentChart === "object" ? currentChart : {};
@@ -971,10 +1009,12 @@ router.post("/review-followup", async (req, res) => {
       }
     }
 
-    const merged = mergeInpatientChartDelta(chart, delta, {
-      isEra,
-      instruction,
-    });
+    const merged = isEra
+      ? mergeEraChartDelta(chart, delta, instruction)
+      : mergeInpatientChartDelta(chart, delta, {
+          isEra: false,
+          instruction,
+        });
 
     console.log(`=== [${isEra ? "ERA" : "IPD"} AI FINAL RESULT] ===`);
     console.log(

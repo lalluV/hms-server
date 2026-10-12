@@ -8,38 +8,21 @@ const {
   resolveDiagnosticBodyForHospital,
   hydrateDiagnostics,
 } = require("../utils/hydrateDiagnosticParameters");
+const {
+  indexHospitalDiagnostic,
+  deleteHospitalDiagnostic,
+  searchHospitalDiagnostics,
+} = require("../utils/meilisearch");
 
 applyTenantEntitlements(router, { moduleKey: "lab" });
 
-function escapeRegex(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function regexMatchField(field, pattern) {
-  return {
-    $regexMatch: {
-      input: { $ifNull: [field, ""] },
-      regex: pattern,
-      options: "i",
-    },
-  };
-}
-
-/** Lower score is a closer match. Name and code outrank description and department. */
-function diagnosticSearchRank(pattern) {
-  const exact = `^${pattern}$`;
-  const prefix = `^${pattern}`;
-  return {
-    $switch: {
-      branches: [
-        { case: regexMatchField("$name", exact), then: 0 },
-        { case: regexMatchField("$name", prefix), then: 1 },
-        { case: regexMatchField("$name", pattern), then: 2 },
-        { case: regexMatchField("$code", pattern), then: 3 },
-      ],
-      default: 4,
-    },
-  };
+function indexHospitalDiagnosticSafely(diagnostic) {
+  indexHospitalDiagnostic(diagnostic).catch((error) => {
+    console.warn(
+      "⚠️  Failed to index hospital diagnostic:",
+      error.message,
+    );
+  });
 }
 
 // Get all diagnostics with pagination and search
@@ -55,66 +38,65 @@ router.get("/", async (req, res) => {
     const defaultLimit = searchText ? 10 : 50;
     const actualLimit = limit ? parseInt(limit) : defaultLimit;
 
-    // Build search query. Type and visit type are excluded: "lab" / "opd"
-    // would otherwise match every test that merely has that field set.
-    let searchQuery = { hospitalId: req.hospitalId };
-    let escapedSearch = "";
-    if (searchText) {
-      escapedSearch = escapeRegex(searchText);
-      const contains = { $regex: escapedSearch, $options: "i" };
-      searchQuery.$or = [
-        { name: contains },
-        { code: contains },
-        { description: contains },
-        { deptname: contains },
-        { subdeptname: contains },
-        { "includedTests.name": contains },
-        { "includedTests.code": contains },
-        { "parameters.name": contains },
-      ];
-    }
-
-    if (deptScope === "radiology") {
-      searchQuery.deptname = { $regex: /^radiology$/i };
-    } else if (deptScope === "lab") {
-      searchQuery.$and = [
-        ...(searchQuery.$and || []),
-        {
-          $or: [
-            { deptname: { $exists: false } },
-            { deptname: null },
-            { deptname: "" },
-            { deptname: { $not: /^radiology$/i } },
-          ],
-        },
-      ];
-    }
-
-    // Calculate skip value for pagination
+    // Typed search is Meilisearch on hospital diagnostics only.
+    // Master diagnostics are used when creating a test, not when listing.
     const skip = (parseInt(page) - 1) * actualLimit;
+    let totalDiagnostics = 0;
+    let diagnostics = [];
 
-    // Get total count for pagination info
-    const totalDiagnostics = await Diagnostic.countDocuments(searchQuery);
-
-    // Do not populate diagnosticId → MasterDiagnostic (lives on master DB, not tenant)
-    let diagnostics;
     if (searchText) {
-      // Aggregate $match does not cast hospitalId. A string id matches
-      // nothing, so the search list comes back empty.
-      const hospitalObjectId = mongoose.Types.ObjectId.isValid(
-        String(req.hospitalId),
-      )
-        ? new mongoose.Types.ObjectId(String(req.hospitalId))
-        : req.hospitalId;
-      diagnostics = await Diagnostic.aggregate([
-        { $match: { ...searchQuery, hospitalId: hospitalObjectId } },
-        { $addFields: { _searchRank: diagnosticSearchRank(escapedSearch) } },
-        { $sort: { _searchRank: 1, name: 1 } },
-        { $skip: skip },
-        { $limit: actualLimit },
-        { $project: { _searchRank: 0 } },
-      ]);
+      let searchResults;
+      try {
+        searchResults = await searchHospitalDiagnostics(searchText, {
+          hospitalId: req.hospitalId,
+          limit: actualLimit,
+          offset: skip,
+          deptScope,
+        });
+      } catch (searchError) {
+        console.error("Hospital diagnostic search failed:", searchError.message);
+        return res.status(503).json({
+          message: "Lab search is unavailable",
+        });
+      }
+
+      const orderedIds = (searchResults.hits || [])
+        .map((hit) => hit.id)
+        .filter((id) => mongoose.Types.ObjectId.isValid(String(id)));
+      totalDiagnostics = searchResults.estimatedTotalHits || 0;
+
+      if (orderedIds.length > 0) {
+        const hospitalKey = String(req.hospitalId);
+        const hospitalObjectId = mongoose.Types.ObjectId.isValid(hospitalKey)
+          ? new mongoose.Types.ObjectId(hospitalKey)
+          : req.hospitalId;
+        const rows = await Diagnostic.find({
+          _id: { $in: orderedIds },
+          $or: [{ hospitalId: hospitalObjectId }, { hospitalId: hospitalKey }],
+        });
+        const byId = new Map(rows.map((row) => [String(row._id), row]));
+        diagnostics = orderedIds
+          .map((id) => byId.get(String(id)))
+          .filter(Boolean);
+      }
     } else {
+      const searchQuery = { hospitalId: req.hospitalId };
+      if (deptScope === "radiology") {
+        searchQuery.deptname = { $regex: /^radiology$/i };
+      } else if (deptScope === "lab") {
+        searchQuery.$and = [
+          {
+            $or: [
+              { deptname: { $exists: false } },
+              { deptname: null },
+              { deptname: "" },
+              { deptname: { $not: /^radiology$/i } },
+            ],
+          },
+        ];
+      }
+
+      totalDiagnostics = await Diagnostic.countDocuments(searchQuery);
       diagnostics = await Diagnostic.find(searchQuery)
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -312,6 +294,7 @@ router.post("/from-master/:masterId", async (req, res) => {
 
     const newDiagnostic = await hospitalDiagnostic.save();
     const hydrated = await hydrateDiagnostics(Parameter, newDiagnostic);
+    indexHospitalDiagnosticSafely(hydrated);
     res.status(201).json(hydrated);
   } catch (error) {
     console.error("Error creating diagnostic from master:", error);
@@ -346,6 +329,7 @@ router.post("/", async (req, res) => {
     });
     const newDiagnostic = await diagnostic.save();
     const hydrated = await hydrateDiagnostics(Parameter, newDiagnostic);
+    indexHospitalDiagnosticSafely(hydrated);
     res.status(201).json(hydrated);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -372,6 +356,7 @@ router.put("/:id", async (req, res) => {
     Object.assign(diagnostic, normalized);
     await diagnostic.save();
     const hydrated = await hydrateDiagnostics(Parameter, diagnostic);
+    indexHospitalDiagnosticSafely(hydrated);
     res.json(hydrated);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -400,6 +385,12 @@ router.delete("/:id", async (req, res) => {
     }
 
     await diagnostic.deleteOne();
+    deleteHospitalDiagnostic(diagnostic._id).catch((error) => {
+      console.warn(
+        "⚠️  Failed to delete hospital diagnostic from search:",
+        error.message,
+      );
+    });
     res.json({ message: "Diagnostic deleted", id: diagnostic._id });
   } catch (error) {
     console.error("Error deleting diagnostic:", error);

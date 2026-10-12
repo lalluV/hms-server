@@ -9,6 +9,9 @@ const {
   isDoctorRole,
 } = require("../utils/doctorPatientAccess");
 const {
+  isIpdClinicalPanelWithoutEntitlement,
+} = require("../utils/clinicalStaffRoles");
+const {
   calculateBillBreakdown,
   calculateInsuranceCoverage,
   calculateTotalAdvance,
@@ -309,13 +312,6 @@ function isDoctorWithoutIpdDoctorRecord(req) {
   );
 }
 
-function isNurseWithoutIpdPanel(req) {
-  return (
-    normalizeRole(req.user?.type) === "Nurse" &&
-    req.entitlements?.modules?.ipdNursePanel !== true
-  );
-}
-
 function sendModuleForbidden(res, moduleKey, message) {
   return res.status(403).json({
     code: "MODULE_NOT_IN_PLAN",
@@ -344,11 +340,11 @@ function blockInpatientRecordAccess(req, res, patient) {
     );
     return true;
   }
-  if (isNurseWithoutIpdPanel(req)) {
+  if (isIpdClinicalPanelWithoutEntitlement(req)) {
     sendModuleForbidden(
       res,
       "ipdNursePanel",
-      "Nurse IPD panel is not included in your subscription plan.",
+      "IPD clinical panel is not included in your subscription plan.",
     );
     return true;
   }
@@ -389,13 +385,13 @@ router.get("/", async (req, res) => {
     );
     const forceOp =
       isDoctorWithoutIpdDoctorRecord(req) ||
-      isNurseWithoutIpdPanel(req) ||
+      isIpdClinicalPanelWithoutEntitlement(req) ||
       (req.entitlements?.modules?.ipd !== true && patientType !== "OP");
 
     if (forceOp && patientType && patientType !== "OP") {
       const moduleKey = isDoctorWithoutIpdDoctorRecord(req)
         ? "ipdDoctorRecord"
-        : isNurseWithoutIpdPanel(req)
+        : isIpdClinicalPanelWithoutEntitlement(req)
           ? "ipdNursePanel"
           : "ipd";
       return sendModuleForbidden(
@@ -670,7 +666,10 @@ router.get("/phone/:phoneNumber", async (req, res) => {
     };
     const patients = await Patient.find(query);
     let rows = patients;
-    if (isDoctorWithoutIpdDoctorRecord(req) || isNurseWithoutIpdPanel(req)) {
+    if (
+      isDoctorWithoutIpdDoctorRecord(req) ||
+      isIpdClinicalPanelWithoutEntitlement(req)
+    ) {
       const IPAdmission = req.tenantDb.model("IPAdmission");
       const openMap = await loadOpenAdmissionMap(
         IPAdmission,
@@ -772,13 +771,13 @@ router.post("/", async (req, res) => {
       );
     }
     if (
-      isNurseWithoutIpdPanel(req) &&
+      isIpdClinicalPanelWithoutEntitlement(req) &&
       INPATIENT_TYPES.has(req.body?.patient_type)
     ) {
       return sendModuleForbidden(
         res,
         "ipdNursePanel",
-        "Nurse IPD panel is not included in your subscription plan.",
+        "IPD clinical panel is not included in your subscription plan.",
       );
     }
     if (
@@ -907,11 +906,14 @@ router.put("/:id", async (req, res) => {
         "Doctor IPD patient record is not included in your subscription plan.",
       );
     }
-    if (isNurseWithoutIpdPanel(req) && INPATIENT_TYPES.has(requestedType)) {
+    if (
+      isIpdClinicalPanelWithoutEntitlement(req) &&
+      INPATIENT_TYPES.has(requestedType)
+    ) {
       return sendModuleForbidden(
         res,
         "ipdNursePanel",
-        "Nurse IPD panel is not included in your subscription plan.",
+        "IPD clinical panel is not included in your subscription plan.",
       );
     }
     if (

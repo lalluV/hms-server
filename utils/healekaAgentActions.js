@@ -33,7 +33,7 @@ const APPOINTMENT_ROLES = [
   "Doctor",
 ];
 const REGISTER_ROLES = ["Receptionist", "Admin", "SuperAdmin"];
-const NOTE_ROLES = ["Doctor", "Nurse", "Admin", "SuperAdmin"];
+const NOTE_ROLES = ["Doctor", "Nurse", "MO", "Admin", "SuperAdmin"];
 const PRESCRIPTION_ROLES = ["Doctor", "Nurse", "Admin", "SuperAdmin"];
 
 const ACTION_ROLE_ACCESS = {
@@ -833,7 +833,7 @@ async function prepare_add_note(ctx, args) {
     note: args.note,
     noteType:
       args.noteType ||
-      (ctx.role === "Nurse" ? "nurse" : "doctor"),
+      (ctx.role === "Nurse" || ctx.role === "MO" ? "nurse" : "doctor"),
   });
   const missing = missingOf(NOTE_REQUIRED, collected);
   if (missing.length) {
@@ -881,7 +881,8 @@ async function prepare_add_note(ctx, args) {
     UMRNo: resolved.UMRNo,
     patientName: resolved.name,
     note: collected.note,
-    noteType: ctx.role === "Nurse" ? "nurse" : noteType,
+    noteType:
+      ctx.role === "Nurse" || ctx.role === "MO" ? "nurse" : noteType,
     author: ctx.userId || actorId(ctx),
   };
   const summary = `Add ${payload.noteType} note on **${payload.UMRNo}** (${payload.patientName})`;
