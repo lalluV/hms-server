@@ -889,22 +889,25 @@ async function ensureHospitalDiagnosticsPrimaryKey() {
   }
 }
 
+let hospitalDiagnosticsConfigured = false;
+
 async function configureHospitalDiagnosticsIndex() {
+  if (hospitalDiagnosticsConfigured) return;
   await ensureHospitalDiagnosticsPrimaryKey();
   const tasks = [
     await hospitalDiagnosticsIndex.updateSearchableAttributes([
-      "name",
       "code",
-      "includedTestNames",
-      "parameterNames",
+      "name",
       "description",
+      "deptname",
       "subdeptname",
     ]),
     await hospitalDiagnosticsIndex.updateFilterableAttributes([
-      "hospitalId",
-      "deptScope",
+      "hospital",
       "active",
-      "type",
+      "deptname",
+      "subdeptname",
+      "deptScope",
     ]),
     await hospitalDiagnosticsIndex.updateSortableAttributes(["name", "code"]),
   ];
@@ -921,50 +924,29 @@ async function configureHospitalDiagnosticsIndex() {
   for (const task of tasks) {
     await waitForIndexTask(task);
   }
-}
-
-function namesFromParameters(parameters) {
-  if (!Array.isArray(parameters)) return [];
-  return parameters
-    .map((parameter) => String(parameter?.name || "").trim())
-    .filter(Boolean);
+  hospitalDiagnosticsConfigured = true;
 }
 
 /**
- * Search document for a hospital Diagnostic. Master catalog is not indexed here.
+ * Hospital Diagnostic fields used for search. Ids other than the document id
+ * stay out of the index so Meilisearch can use `id` as the primary key.
+ * Tenant filter is `hospital`, not `hospitalId`.
  */
 function toHospitalDiagnosticSearchDoc(diagnostic) {
   if (!diagnostic || !diagnostic._id || !diagnostic.hospitalId) return null;
 
-  const included = Array.isArray(diagnostic.includedTests)
-    ? diagnostic.includedTests
-    : [];
-  const includedNames = [];
-  const parameterNames = namesFromParameters(diagnostic.parameters);
-
-  for (const test of included) {
-    const label = [test?.name, test?.code, test?.test_name]
-      .map((part) => String(part || "").trim())
-      .filter(Boolean)
-      .join(" ");
-    if (label) includedNames.push(label);
-    parameterNames.push(...namesFromParameters(test?.parameters));
-  }
-
   const deptname = String(diagnostic.deptname || "").trim();
   return {
     id: diagnostic._id.toString(),
-    hospitalId: normalizeHospitalId(diagnostic.hospitalId),
-    name: diagnostic.name || "",
+    hospital: normalizeHospitalId(diagnostic.hospitalId),
     code: diagnostic.code || "",
+    name: diagnostic.name || "",
     description: diagnostic.description || "",
     deptname,
     subdeptname: diagnostic.subdeptname || "",
-    deptScope: deptname.toLowerCase() === "radiology" ? "radiology" : "lab",
     type: diagnostic.type || "",
     active: diagnostic.active !== false,
-    includedTestNames: includedNames.join(" "),
-    parameterNames: [...new Set(parameterNames)].join(" "),
+    deptScope: deptname.toLowerCase() === "radiology" ? "radiology" : "lab",
   };
 }
 
@@ -1007,28 +989,47 @@ async function deleteHospitalDiagnostic(id) {
 }
 
 /**
- * Fuzzy search of one hospital's diagnostics. Throws if Meilisearch is down.
+ * Same Meilisearch query as master diagnostics, limited to one hospital.
  */
 async function searchHospitalDiagnostics(query, options = {}) {
   const cleanQuery = String(query || "").trim();
   const hospitalId = normalizeHospitalId(options.hospitalId);
-  if (!cleanQuery || !hospitalId) {
+  if (!cleanQuery || cleanQuery.length < 2 || !hospitalId) {
     return { hits: [], estimatedTotalHits: 0 };
   }
 
-  const limit = Math.min(Math.max(parseInt(options.limit, 10) || 20, 1), 100);
-  const offset = Math.max(parseInt(options.offset, 10) || 0, 0);
-  const filter = [`hospitalId = ${meiliQuote(hospitalId)}`];
+  const searchParams = {
+    attributesToSearchOn: [
+      "code",
+      "name",
+      "description",
+      "deptname",
+      "subdeptname",
+    ],
+    limit: Math.min(Math.max(parseInt(options.limit, 10) || 20, 1), 50),
+    offset: Math.max(parseInt(options.offset, 10) || 0, 0),
+    attributesToRetrieve: [
+      "id",
+      "code",
+      "name",
+      "description",
+      "deptname",
+      "subdeptname",
+    ],
+    attributesToHighlight: [],
+    showRankingScore: false,
+    showMatchesPosition: false,
+    filter: [`hospital = ${meiliQuote(hospitalId)}`],
+  };
 
   if (options.deptScope === "radiology" || options.deptScope === "lab") {
-    filter.push(`deptScope = ${meiliQuote(options.deptScope)}`);
+    searchParams.filter.push(`deptScope = ${meiliQuote(options.deptScope)}`);
   }
 
-  const searchResults = await hospitalDiagnosticsIndex.search(cleanQuery, {
-    filter,
-    limit,
-    offset,
-  });
+  const searchResults = await hospitalDiagnosticsIndex.search(
+    cleanQuery,
+    searchParams,
+  );
 
   return {
     hits: searchResults.hits || [],
@@ -1038,7 +1039,7 @@ async function searchHospitalDiagnostics(query, options = {}) {
 
 async function hospitalDiagnosticIndexCount(hospitalId) {
   const page = await hospitalDiagnosticsIndex.search("", {
-    filter: [`hospitalId = ${meiliQuote(normalizeHospitalId(hospitalId))}`],
+    filter: [`hospital = ${meiliQuote(normalizeHospitalId(hospitalId))}`],
     limit: 1,
   });
   return page.estimatedTotalHits ?? page.hits?.length ?? 0;
@@ -1047,7 +1048,7 @@ async function hospitalDiagnosticIndexCount(hospitalId) {
 async function listIndexedHospitalDiagnosticIds(hospitalId) {
   const ids = [];
   let offset = 0;
-  const filter = [`hospitalId = ${meiliQuote(normalizeHospitalId(hospitalId))}`];
+  const filter = [`hospital = ${meiliQuote(normalizeHospitalId(hospitalId))}`];
 
   while (true) {
     const page = await hospitalDiagnosticsIndex.search("", {
@@ -1122,6 +1123,8 @@ async function ensureHospitalDiagnosticsIndexed(hospitalId, Diagnostic) {
   const key = normalizeHospitalId(hospitalId);
   if (!key) return 0;
 
+  await configureHospitalDiagnosticsIndex();
+
   let count = 0;
   try {
     count = await hospitalDiagnosticIndexCount(key);
@@ -1135,6 +1138,7 @@ async function ensureHospitalDiagnosticsIndexed(hospitalId, Diagnostic) {
 
   if (count > 0) return count;
 
+  await configureHospitalDiagnosticsIndex();
   await syncHospitalDiagnostics(key, Diagnostic);
   try {
     return await hospitalDiagnosticIndexCount(key);
@@ -1157,6 +1161,8 @@ async function syncAllHospitalDiagnostics() {
   const hospitals = await Hospital.find({}).select("_id").lean();
   let indexed = 0;
   let removed = 0;
+
+  await configureHospitalDiagnosticsIndex();
 
   for (const hospital of hospitals) {
     const hospitalId = normalizeHospitalId(hospital._id);
