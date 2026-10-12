@@ -871,7 +871,26 @@ async function waitForIndexTask(task) {
   return finished;
 }
 
+async function ensureHospitalDiagnosticsPrimaryKey() {
+  try {
+    const info = await hospitalDiagnosticsIndex.fetchInfo();
+    if (info.primaryKey) return;
+    const task = await hospitalDiagnosticsIndex.update({ primaryKey: "id" });
+    await waitForIndexTask(task);
+  } catch (error) {
+    const missing =
+      error?.code === "index_not_found" ||
+      /index .+ not found/i.test(String(error?.message || ""));
+    if (!missing) throw error;
+    const task = await client.createIndex("hospital_diagnostics", {
+      primaryKey: "id",
+    });
+    await waitForIndexTask(task);
+  }
+}
+
 async function configureHospitalDiagnosticsIndex() {
+  await ensureHospitalDiagnosticsPrimaryKey();
   const tasks = [
     await hospitalDiagnosticsIndex.updateSearchableAttributes([
       "name",
@@ -952,7 +971,9 @@ function toHospitalDiagnosticSearchDoc(diagnostic) {
 async function indexHospitalDiagnostic(diagnostic) {
   const document = toHospitalDiagnosticSearchDoc(diagnostic);
   if (!document) return false;
-  const task = await hospitalDiagnosticsIndex.addDocuments([document]);
+  const task = await hospitalDiagnosticsIndex.addDocuments([document], {
+    primaryKey: "id",
+  });
   await waitForIndexTask(task);
   return true;
 }
@@ -971,6 +992,7 @@ async function indexHospitalDiagnostics(diagnostics = []) {
   for (let i = 0; i < documents.length; i += batchSize) {
     const task = await hospitalDiagnosticsIndex.addDocuments(
       documents.slice(i, i + batchSize),
+      { primaryKey: "id" },
     );
     await waitForIndexTask(task);
   }
@@ -1048,6 +1070,8 @@ async function listIndexedHospitalDiagnosticIds(hospitalId) {
 async function syncHospitalDiagnostics(hospitalId, Diagnostic) {
   const key = normalizeHospitalId(hospitalId);
   if (!key) return { indexed: 0, removed: 0 };
+
+  await ensureHospitalDiagnosticsPrimaryKey();
 
   const hospitalObjectId = require("mongoose").Types.ObjectId.isValid(key)
     ? new (require("mongoose").Types.ObjectId)(key)
