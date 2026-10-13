@@ -750,6 +750,29 @@ router.get("/:id", async (req, res) => {
       }
     }
 
+    // OP billing: consultant lives on the visit prescription, not on Patient.
+    if (!open && patient.UMRNo) {
+      const Prescription = req.tenantDb.model("Prescription");
+      const latestRx = await Prescription.findOne({
+        hospitalId: req.hospitalId,
+        $or: [{ patientId: patient._id }, { UMRNo: patient.UMRNo }],
+      })
+        .sort({ createdAt: -1, date: -1 })
+        .select(
+          "doctorId consultantDoctor doctorName prescriptionId",
+        )
+        .lean();
+      if (latestRx) {
+        view.doctorId = latestRx.doctorId || view.doctorId || "";
+        view.consultantDoctor =
+          latestRx.consultantDoctor ||
+          latestRx.doctorName ||
+          view.consultantDoctor ||
+          "";
+        view.selectedPrescriptionId = latestRx.prescriptionId || null;
+      }
+    }
+
     res.json(view);
   } catch (error) {
     res.status(500).json({ message: error.message });
