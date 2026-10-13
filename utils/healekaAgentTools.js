@@ -28,6 +28,7 @@ const ALL_STAFF_ROLES = [
   "MO",
   "Pharmacist",
   "LabTechnician",
+  "RadiologyTechnician",
   "Phlebotomist",
   "Receptionist",
   "Accountant",
@@ -73,6 +74,7 @@ const ROLE_TOOL_ACCESS = {
   search_pharmacy_inventory: ["Pharmacist", "SuperAdmin", "Admin"],
   search_lab_inventory: [
     "LabTechnician",
+    "RadiologyTechnician",
     "Phlebotomist",
     "Receptionist",
     "SuperAdmin",
@@ -80,6 +82,7 @@ const ROLE_TOOL_ACCESS = {
   ],
   get_lab_sales: [
     "LabTechnician",
+    "RadiologyTechnician",
     "Phlebotomist",
     "Receptionist",
     "SuperAdmin",
@@ -107,6 +110,7 @@ const ROLE_TOOL_ACCESS = {
   search_receipts: [
     "Pharmacist",
     "LabTechnician",
+    "RadiologyTechnician",
     "Phlebotomist",
     "Admin",
     "SuperAdmin",
@@ -1268,10 +1272,12 @@ function explain_hms_howto(ctx, args) {
     Nurse:
       "As a Nurse you use Home, Patients, Consultations, Patient Records, and IPD nurse tools when enabled.",
     Receptionist:
-      "As Receptionist focus on Dashboard, Patients, Appointments, OP billing, and lab/radiology billing (indents, sale, returns).",
+      "As Receptionist focus on Dashboard, Patients, Appointments, OP billing, and diagnostics billing. Reports are view only.",
     Pharmacist: "As Pharmacist focus on Pharmacy sale, purchase, inventory, and indents.",
     LabTechnician:
-      "As LabTechnician focus on Lab sale, purchase, inventory, and test completion.",
+      "As LabTechnician focus on diagnostics history and inventory. Lab rows only.",
+    RadiologyTechnician:
+      "As RadiologyTechnician focus on diagnostics history and inventory. Radiology rows only.",
     Phlebotomist: "As Phlebotomist focus on Lab sale and history / sample collection flows.",
     Accountant:
       "As Accountant focus on Expenses, Tax reports, Insurance, and Commission.",

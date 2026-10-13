@@ -224,12 +224,20 @@ router.post("/from-master/:masterId", async (req, res) => {
       return { parameterId: hospitalParam._id, order };
     };
 
-    let parameterLinks = Array.isArray(normalized.parameters)
-      ? normalized.parameters.filter((p) => p?.parameterId)
-      : [];
+    const radiologyStudy = /^radiology$/i.test(
+      String(req.body.deptname || masterDiagnostic.deptname || "").trim(),
+    );
+
+    let parameterLinks = radiologyStudy
+      ? []
+      : Array.isArray(normalized.parameters)
+        ? normalized.parameters.filter((p) => p?.parameterId)
+        : [];
 
     // If client sent no valid refs, build from master suggested_parameters
-    if (
+    if (radiologyStudy) {
+      parameterLinks = [];
+    } else if (
       parameterLinks.length === 0 &&
       Array.isArray(masterDiagnostic.suggested_parameters)
     ) {

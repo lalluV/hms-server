@@ -29,6 +29,10 @@ const diagnosticsReceiptSchema = new mongoose.Schema(
     totalTests: { type: Number },
     completedTests: { type: Number },
     type: { type: String },
+    cancelledAt: { type: Date },
+    returnReceiptId: { type: String },
+    originalReceiptId: { type: String },
+    refundAmount: { type: Number },
 
     // Patient snapshot (used by both HMS and mobile; mobile sends for display without fetch)
     patientGender: { type: String },

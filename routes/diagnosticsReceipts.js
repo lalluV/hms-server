@@ -68,11 +68,43 @@ function hasResultValue(value) {
   return true;
 }
 
+function isRadiologyItem(item) {
+  return /^radiology$/i.test(String(item?.deptname || "").trim());
+}
+
+function sanitizeReportHtml(raw) {
+  return String(raw || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+}
+
 function buildPublicReceipt(receipt) {
   if (!receipt) return null;
 
-  const items = (Array.isArray(receipt.items) ? receipt.items : [])
-    .filter((item) => item.deptname !== "Radiology")
+  const allItems = Array.isArray(receipt.items) ? receipt.items : [];
+  const radiologyReports = allItems
+    .filter(isRadiologyItem)
+    .map((item) => {
+      const reportHtml = sanitizeReportHtml(
+        item.textReport || item.reportContent || "",
+      );
+      const reportText = reportHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      const reportUrl = item.reportUrl || "";
+      if (!reportText && !reportUrl) return null;
+      return {
+        name: item.name,
+        code: item.code,
+        deptname: item.deptname,
+        reportHtml: reportText ? reportHtml : "",
+        reportUrl,
+        completedAt: item.reportGeneratedAt || item.completedAt || null,
+      };
+    })
+    .filter(Boolean);
+
+  const items = allItems
+    .filter((item) => !isRadiologyItem(item))
     .map((item) => ({
       name: item.name,
       code: item.code,
@@ -98,6 +130,7 @@ function buildPublicReceipt(receipt) {
     patientPhone: receipt.patientPhone,
     createdAt: receipt.createdAt,
     items,
+    radiologyReports,
   };
 }
 
@@ -152,10 +185,12 @@ router.get("/public/:token", async (req, res) => {
       [receipt],
     );
     const publicReceipt = buildPublicReceipt(hydrated);
-    if (!publicReceipt?.items?.length) {
+    const hasLabResults = publicReceipt?.items?.length > 0;
+    const hasRadiologyReports = publicReceipt?.radiologyReports?.length > 0;
+    if (!hasLabResults && !hasRadiologyReports) {
       return res
         .status(404)
-        .json({ message: "No lab results are available for this report yet." });
+        .json({ message: "No results are available for this report yet." });
     }
 
     const hospitalPromise = Hospital.findById(hospitalId)
@@ -167,7 +202,16 @@ router.get("/public/:token", async (req, res) => {
 
     const stampsPromise = Stamp.find({ isActive: true }).lean().catch(() => []);
 
+    const radiologyOnly = hasRadiologyReports && !hasLabResults;
+    const radiologySignerName = radiologyOnly
+      ? (hydrated?.items || [])
+          .filter(isRadiologyItem)
+          .map((item) => item.completedBy)
+          .find((name) => name && name !== "Radiologist") || ""
+      : "";
+
     const doctorSearch =
+      radiologySignerName ||
       receipt.verifiedBy ||
       receipt.completedBy ||
       receipt.doctorName ||
@@ -176,6 +220,29 @@ router.get("/public/:token", async (req, res) => {
 
     const staffPromise = (async () => {
       try {
+        if (radiologyOnly) {
+          if (radiologySignerName) {
+            const named = await Staff.findOne(
+              {
+                name: radiologySignerName,
+                active: { $ne: false },
+              },
+              { name: 1, signatureUrl: 1, qualification: 1, specialization: 1 },
+            ).lean();
+            if (named) return named;
+          }
+          const technician = await Staff.findOne(
+            {
+              type: { $in: ["RadiologyTechnician", "Radiology Technician"] },
+              active: { $ne: false },
+              signatureUrl: { $exists: true, $ne: null, $ne: "" },
+            },
+            { name: 1, signatureUrl: 1, qualification: 1, specialization: 1 },
+          ).lean();
+          if (technician) return technician;
+          return radiologySignerName ? { name: radiologySignerName } : null;
+        }
+
         if (doctorSearch) {
           const direct = await Staff.findOne(
             {
@@ -229,9 +296,12 @@ router.get("/public/:token", async (req, res) => {
       staffPromise,
     ]);
 
+    const stampDepartment = radiologyOnly ? "Radiology" : "Laboratory";
     const departmentStamp =
-      (stamps || []).find((s) => s.department === "Laboratory" && s.isDefault) ||
-      (stamps || []).find((s) => s.department === "Laboratory") ||
+      (stamps || []).find(
+        (s) => s.department === stampDepartment && s.isDefault,
+      ) ||
+      (stamps || []).find((s) => s.department === stampDepartment) ||
       null;
 
     const hospitalStamp =
@@ -249,8 +319,12 @@ router.get("/public/:token", async (req, res) => {
         ? { imageUrl: hospitalStamp.imageUrl, name: hospitalStamp.name }
         : null,
       signatureUrl: staffDoc?.signatureUrl || null,
-      signerName: staffDoc?.name || (typeof doctorSearch === "string" ? doctorSearch : ""),
-      signatureLabel: "Lab Incharge",
+      signerName:
+        staffDoc?.name ||
+        radiologySignerName ||
+        (typeof doctorSearch === "string" ? doctorSearch : ""),
+      signatureLabel: radiologyOnly ? "Radiology Technician" : "Lab Incharge",
+      departmentStampLabel: radiologyOnly ? "Radiology Stamp" : "Laboratory Stamp",
     });
   } catch (error) {
     console.error("Public lab report view error:", error);
@@ -525,12 +599,27 @@ router.post("/:id/send-whatsapp", async (req, res) => {
     }
 
     const items = Array.isArray(receipt.items) ? receipt.items : [];
+    const radiologyOnly = req.body?.scope === "radiology";
+    const summaryItems = radiologyOnly
+      ? items.filter(
+          (item) =>
+            isRadiologyItem(item) &&
+            (item.reportUrl ||
+              String(item.textReport || item.reportContent || "").trim()),
+        )
+      : items;
+    if (radiologyOnly && summaryItems.length === 0) {
+      return res.status(400).json({
+        message: "Save the radiology report before sending it on WhatsApp.",
+      });
+    }
     const testsSummary =
-      items
+      summaryItems
         .map((item) => item.testName || item.name || item.description)
         .filter(Boolean)
         .slice(0, 5)
-        .join(", ") || "your lab tests";
+        .join(", ") ||
+      (radiologyOnly ? "your radiology study" : "your lab tests");
 
     const hospital = await Hospital.findById(req.hospitalId).lean();
     const hospitalName = hospital?.name || "Your Clinic";

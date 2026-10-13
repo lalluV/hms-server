@@ -23,6 +23,7 @@ const ROLE_MODULE_REQUIREMENTS = {
   MO: "ipdNursePanel",
   Pharmacist: "pharmacy",
   LabTechnician: "lab",
+  RadiologyTechnician: "lab",
   Phlebotomist: "lab",
   Receptionist: "opd",
   Accountant: "expenses",

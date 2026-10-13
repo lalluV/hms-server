@@ -233,9 +233,15 @@ function calculateBillBreakdown(
   );
 
   const investigationCharges = patientDiagnostics.reduce(
-    (total, receipt) =>
-      total +
-      getItems(receipt).reduce((sum, item) => sum + toAmount(item.price), 0),
+    (total, receipt) => {
+      const lineTotal = getItems(receipt).reduce(
+        (sum, item) => sum + toAmount(item.price),
+        0,
+      );
+      return (
+        total + (receipt.type === "lab-sale-return" ? -lineTotal : lineTotal)
+      );
+    },
     0,
   );
 
