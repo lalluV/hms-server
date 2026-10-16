@@ -15,7 +15,6 @@ const patientSchema = new mongoose.Schema(
   {
     UMRNo: {
       type: String,
-      unique: true,
       required: false,
     },
     hospitalId: {
@@ -82,22 +81,39 @@ patientSchema.index(
   },
 );
 
-// Pre-save middleware for UMR number generation
+// Pre-save middleware for UMR number generation.
+// The sequence is per hospital so shared-database clinics do not collide.
 patientSchema.pre("save", async function (next) {
-  if (this.isNew && !this.UMRNo) {
-    try {
-      const Counter = this.db.model("Counter");
-      const counter = await Counter.findByIdAndUpdate(
-        { _id: "UMRNo" },
-        { $inc: { seq: 1 } },
-        { new: true, upsert: true },
+  if (!this.isNew || this.UMRNo) return next();
+  try {
+    const Counter = this.db.model("Counter");
+    const counterId = `UMRNo:${this.hospitalId}`;
+    const existing = await Counter.findById(counterId).lean();
+    if (!existing) {
+      const latest = await this.constructor
+        .findOne({ hospitalId: this.hospitalId, UMRNo: /^UMR\d+$/ })
+        .sort({ UMRNo: -1 })
+        .select("UMRNo")
+        .lean();
+      const floor = latest?.UMRNo
+        ? parseInt(String(latest.UMRNo).replace(/\D/g, ""), 10) || 0
+        : 0;
+      await Counter.updateOne(
+        { _id: counterId },
+        { $max: { seq: floor } },
+        { upsert: true },
       );
-      this.UMRNo = `UMR${String(counter.seq).padStart(8, "0")}`;
-    } catch (error) {
-      return next(error);
     }
+    const counter = await Counter.findByIdAndUpdate(
+      counterId,
+      { $inc: { seq: 1 } },
+      { new: true },
+    );
+    this.UMRNo = `UMR${String(counter.seq).padStart(8, "0")}`;
+    next();
+  } catch (error) {
+    next(error);
   }
-  next();
 });
 
 // Staff Schema
@@ -150,6 +166,41 @@ const staffSchema = new mongoose.Schema(
 );
 
 /**
+ * Drop indexes that break shared-database registration:
+ * - UMRNo unique by itself (collides across hospitals)
+ * - hospitalId + publicRegistrationKey unique without a partial filter
+ *   (every patient with a null key collides)
+ */
+async function dropLegacyGlobalUmrIndex(connection) {
+  const Patient = connection.models.Patient;
+  if (!Patient) return;
+  try {
+    const indexes = await Patient.collection.indexes();
+    const legacy = (indexes || []).filter((idx) => {
+      if (!idx.unique || !idx.key || idx.name === "_id_") return false;
+      const keys = Object.keys(idx.key);
+      if (keys.length === 1 && idx.key.UMRNo === 1) return true;
+      const isPublicKey =
+        idx.name === "hospitalId_publicRegistrationKey_unique" ||
+        (keys.length === 2 &&
+          idx.key.hospitalId === 1 &&
+          idx.key.publicRegistrationKey === 1 &&
+          !idx.partialFilterExpression);
+      return isPublicKey;
+    });
+    for (const idx of legacy) {
+      console.log(
+        `Dropping legacy patients index ${idx.name} on ${connection.name || "tenant"}`,
+      );
+      await Patient.collection.dropIndex(idx.name);
+    }
+  } catch (err) {
+    if (err?.code === 27 || err?.codeName === "IndexNotFound") return;
+    console.warn("Legacy patient index drop skipped:", err.message);
+  }
+}
+
+/**
  * Register all tenant models with a given connection
  * @param {mongoose.Connection} connection - Tenant database connection
  */
@@ -162,6 +213,7 @@ function registerTenantModels(connection) {
   // Register Patient model
   if (!connection.models.Patient) {
     connection.model("Patient", patientSchema);
+    dropLegacyGlobalUmrIndex(connection);
   } else {
     const patientModel = connection.models.Patient;
     if (!patientModel.schema.paths.publicRegistrationKey) {
@@ -172,8 +224,8 @@ function registerTenantModels(connection) {
         { hospitalId: 1, publicRegistrationKey: 1 },
         {
           unique: true,
-          sparse: true,
-          name: "hospitalId_publicRegistrationKey_unique",
+          partialFilterExpression: { publicRegistrationKey: { $type: "string" } },
+          name: "hospitalId_publicRegistrationKey_partial_unique",
         },
       );
     }
@@ -212,6 +264,7 @@ function registerTenantModels(connection) {
         dischargeSummaryMeta: mongoose.Schema.Types.Mixed,
       });
     }
+    dropLegacyGlobalUmrIndex(connection);
     // ERA personal history extensions (safe to re-add)
     const ph = patientModel.schema.path("personalHistory");
     if (ph?.schema && !ph.schema.paths.maritalStatus) {
@@ -369,6 +422,7 @@ function getTenantModel(connection, modelName) {
 
 module.exports = {
   registerTenantModels,
+  dropLegacyGlobalUmrIndex,
   getTenantModel,
   TENANT_MODELS,
   // Export schemas for reference

@@ -577,7 +577,7 @@ router.get("/hospital-profile", auth, async (req, res) => {
         .json({ message: "Hospital ID not found in token" });
     }
     const hospital = await Hospital.findById(hospitalId).select(
-      "name code address city state zipCode phone email website logoUrl settings",
+      "name code address city state zipCode phone email website logoUrl settings productMode",
     );
     if (!hospital) {
       return res.status(404).json({ message: "Hospital not found" });
@@ -624,6 +624,15 @@ router.put("/hospital-profile", auth, async (req, res) => {
       "website",
       "logoUrl",
     ];
+    if (req.body.productMode !== undefined) {
+      const mode = String(req.body.productMode || "").toLowerCase();
+      if (mode !== "full" && mode !== "clinical") {
+        return res
+          .status(400)
+          .json({ message: "productMode must be full or clinical." });
+      }
+      hospital.productMode = mode;
+    }
     for (const key of rootFields) {
       if (req.body[key] !== undefined) {
         hospital[key] = req.body[key];

@@ -274,9 +274,7 @@ router.get("/", async (req, res) => {
           )
           .toArray()
       : [];
-    const legacyMap = new Map(
-      legacyFlags.map((row) => [String(row._id), row]),
-    );
+    const legacyMap = new Map(legacyFlags.map((row) => [String(row._id), row]));
 
     const patientMap = new Map(patients.map((p) => [String(p._id), p]));
 
@@ -622,7 +620,9 @@ router.put("/:id", async (req, res) => {
       patch.ernote === undefined &&
       req.body?.chiefComplaintsPresentIllnessHistory !== undefined
     ) {
-      patch.ernote = String(req.body.chiefComplaintsPresentIllnessHistory || "");
+      patch.ernote = String(
+        req.body.chiefComplaintsPresentIllnessHistory || "",
+      );
     }
     const existingNote = await IPAdmission.collection.findOne(query, {
       projection: { ernote: 1, chiefComplaintsPresentIllnessHistory: 1 },
@@ -677,7 +677,9 @@ router.post("/:id/transfer-bed", async (req, res) => {
       : { ipNumber: id, hospitalId: req.hospitalId };
 
     if (!toWardId || !toBed) {
-      return res.status(400).json({ message: "toWardId and toBed are required" });
+      return res
+        .status(400)
+        .json({ message: "toWardId and toBed are required" });
     }
 
     const admission = await IPAdmission.findOne(query);
@@ -687,7 +689,9 @@ router.post("/:id/transfer-bed", async (req, res) => {
     if (admission.patient_status !== "Admitted") {
       return res
         .status(409)
-        .json({ message: `Cannot transfer a ${admission.patient_status} stay` });
+        .json({
+          message: `Cannot transfer a ${admission.patient_status} stay`,
+        });
     }
 
     const prevWardId = admission.wardId;
@@ -827,15 +831,22 @@ router.post("/:id/discharge", async (req, res) => {
     ]) {
       if (body[key] !== undefined) summarySet[key] = body[key];
     }
-    if (body.dischargeSummary !== undefined) summarySet.summary = body.dischargeSummary;
-    if (body.dischargeSummaryType !== undefined) summarySet.summaryType = body.dischargeSummaryType;
+    if (body.dischargeSummary !== undefined)
+      summarySet.summary = body.dischargeSummary;
+    if (body.dischargeSummaryType !== undefined)
+      summarySet.summaryType = body.dischargeSummaryType;
 
     let summary = null;
     try {
       summary = await DischargeSummary.findOneAndUpdate(
         { hospitalId: req.hospitalId, admissionId: admission._id },
         { $set: summarySet },
-        { upsert: true, new: true, setDefaultsOnInsert: true, sort: { updatedAt: -1 } },
+        {
+          upsert: true,
+          new: true,
+          setDefaultsOnInsert: true,
+          sort: { updatedAt: -1 },
+        },
       );
     } catch (error) {
       if (error?.code !== 11000) throw error;

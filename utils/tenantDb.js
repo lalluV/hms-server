@@ -1,6 +1,9 @@
 const mongoose = require("mongoose");
 require("dotenv").config();
-const { registerTenantModels } = require("./tenantModels");
+const {
+  registerTenantModels,
+  dropLegacyGlobalUmrIndex,
+} = require("./tenantModels");
 
 // Cache for tenant database connections
 const tenantConnections = new Map();
@@ -130,6 +133,7 @@ async function getTenantConnection(hospitalId) {
 
     // Register tenant models with this connection
     registerTenantModels(connection);
+    await dropLegacyGlobalUmrIndex(connection);
 
     // Cache the connection and update last accessed timestamp
     tenantConnections.set(hospitalId, connection);
@@ -268,6 +272,7 @@ async function getSharedConnection() {
 
   // Register tenant models on shared connection
   registerTenantModels(sharedConnection);
+  await dropLegacyGlobalUmrIndex(sharedConnection);
 
   return sharedConnection;
 }

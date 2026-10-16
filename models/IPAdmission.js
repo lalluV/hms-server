@@ -148,7 +148,7 @@ const ipAdmissionSchema = new mongoose.Schema(
     insurance: { type: Number, default: 0 },
     paymentStatus: { type: String, default: "pending" },
   },
-  { strict: true, timestamps: true }
+  { strict: true, timestamps: true },
 );
 
 ipAdmissionSchema.index({ hospitalId: 1, patientId: 1, admissionDate: -1 });

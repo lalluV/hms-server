@@ -406,7 +406,14 @@ router.get("/", async (req, res) => {
       : patientType || (status === "inactive" ? "discharged" : "");
 
     let ipIds = roster.openIds;
-    if (rosterMode === "IP" && (maxDaysAdmitted || minDaysAdmitted)) {
+    const dateStart = fromDate ? dayjs(fromDate).format("YYYY-MM-DD") : "";
+    const dateEnd = toDate ? dayjs(toDate).format("YYYY-MM-DD") : "";
+    const hasDate = Boolean(dateStart || dateEnd);
+    const dateRange = {};
+    if (dateStart) dateRange.$gte = dateStart;
+    if (dateEnd) dateRange.$lte = `${dateEnd}T23:59:59.999Z`;
+
+    if (rosterMode === "IP" && (maxDaysAdmitted || minDaysAdmitted || hasDate)) {
       const admissionDate = {};
       if (maxDaysAdmitted) {
         admissionDate.$gte = dayjs()
@@ -418,6 +425,7 @@ router.get("/", async (req, res) => {
           .subtract(parseInt(minDaysAdmitted, 10), "day")
           .format("YYYY-MM-DD");
       }
+      if (hasDate) Object.assign(admissionDate, dateRange);
       const dated = await IPAdmission.find({
         hospitalId: req.hospitalId,
         patient_status: "Admitted",
@@ -425,16 +433,55 @@ router.get("/", async (req, res) => {
       })
         .select("patientId")
         .lean();
-      ipIds = dated.map((row) => String(row.patientId || "")).filter(Boolean);
+      const datedIds = new Set(
+        dated.map((row) => String(row.patientId || "")).filter(Boolean),
+      );
+      ipIds = ipIds.filter((id) => datedIds.has(String(id)));
     }
 
     if (rosterMode === "OP") {
       const excluded = objectIds(roster.excludeFromOp);
       if (excluded.length) andConditions.push({ _id: { $nin: excluded } });
+      if (hasDate) {
+        const visits = await PrescriptionForRoster.find({
+          hospitalId: req.hospitalId,
+          date: dateRange,
+        })
+          .select("patientId UMRNo")
+          .lean();
+        const visitIds = objectIds(visits.map((row) => row.patientId));
+        const umrNos = [
+          ...new Set(visits.map((row) => row.UMRNo).filter(Boolean)),
+        ];
+        const visitMatch = [];
+        if (visitIds.length) visitMatch.push({ _id: { $in: visitIds } });
+        if (umrNos.length) visitMatch.push({ UMRNo: { $in: umrNos } });
+        andConditions.push(
+          visitMatch.length
+            ? { $or: visitMatch }
+            : { _id: { $exists: false } },
+        );
+      }
     } else if (rosterMode === "IP") {
       andConditions.push({ _id: { $in: objectIds(ipIds) } });
     } else if (rosterMode === "discharged") {
-      andConditions.push({ _id: { $in: objectIds(roster.dischargedIds) } });
+      let dischargedIds = roster.dischargedIds;
+      if (hasDate) {
+        const stays = await IPAdmission.find({
+          hospitalId: req.hospitalId,
+          patient_status: "Discharged",
+          $or: [{ dischargeDate: dateRange }, { dischargedAt: dateRange }],
+        })
+          .select("patientId")
+          .lean();
+        const datedIds = new Set(
+          stays.map((row) => String(row.patientId || "")).filter(Boolean),
+        );
+        dischargedIds = dischargedIds.filter((id) => datedIds.has(String(id)));
+      }
+      andConditions.push({ _id: { $in: objectIds(dischargedIds) } });
+    } else if (hasDate) {
+      andConditions.push({ registration_date: dateRange });
     }
 
     if (paymentMethod || insuranceProviderId || insuranceOnly === "true") {
@@ -462,17 +509,6 @@ router.get("/", async (req, res) => {
           ? { _id: { $in: insuredIds } }
           : { _id: { $exists: false } },
       );
-    }
-
-    if (fromDate || toDate) {
-      const start = fromDate ? dayjs(fromDate).format("YYYY-MM-DD") : null;
-      const end = toDate ? dayjs(toDate).format("YYYY-MM-DD") : null;
-      const dateRange = {};
-      if (start) dateRange.$gte = start;
-      if (end) dateRange.$lte = `${end}T23:59:59.999Z`;
-      if (Object.keys(dateRange).length > 0) {
-        andConditions.push({ registration_date: dateRange });
-      }
     }
 
     if (search && search.length >= 2) {
@@ -614,9 +650,9 @@ router.get("/", async (req, res) => {
 
       return {
         ...pObj,
-        registration_date: new Date(
-          patient.registration_date,
-        ).toLocaleDateString(),
+        registration_date: patient.registration_date || "",
+        consultantDoctor:
+          pObj.consultantDoctor || rxInfo.lastDoctorName || "",
         lastVisitDate: rxInfo.lastVisitDate || null,
         lastDoctorName: rxInfo.lastDoctorName || null,
         lastPrescriptionId: rxInfo.lastPrescriptionId || null,

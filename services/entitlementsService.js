@@ -8,7 +8,10 @@ const SUBSCRIPTION_STATUS = {
   EXPIRED: "expired",
 };
 
-const BLOCKED_STATUSES = new Set([SUBSCRIPTION_STATUS.EXPIRED, SUBSCRIPTION_STATUS.CANCELED]);
+const BLOCKED_STATUSES = new Set([
+  SUBSCRIPTION_STATUS.EXPIRED,
+  SUBSCRIPTION_STATUS.CANCELED,
+]);
 
 /**
  * @param {import("mongoose").Document|object|null} hospital
@@ -24,7 +27,11 @@ function isSubscriptionAccessAllowed(hospital) {
   }
   if (hospital.subscriptionExpiry) {
     const end = new Date(hospital.subscriptionExpiry);
-    if (!Number.isNaN(end.getTime()) && end.getTime() < Date.now() && status !== SUBSCRIPTION_STATUS.TRIALING) {
+    if (
+      !Number.isNaN(end.getTime()) &&
+      end.getTime() < Date.now() &&
+      status !== SUBSCRIPTION_STATUS.TRIALING
+    ) {
       return false;
     }
   }
@@ -54,7 +61,10 @@ function buildEntitlements(hospital) {
   const overrides = hospital && hospital.moduleOverrides;
   if (overrides && typeof overrides === "object") {
     Object.keys(overrides).forEach((key) => {
-      if (Object.prototype.hasOwnProperty.call(merged, key) && typeof overrides[key] === "boolean") {
+      if (
+        Object.prototype.hasOwnProperty.call(merged, key) &&
+        typeof overrides[key] === "boolean"
+      ) {
         merged[key] = overrides[key];
       }
     });
@@ -72,10 +82,12 @@ function buildEntitlements(hospital) {
     isAccessAllowed,
     subscription: {
       plan: (plan || DEFAULT_PLAN).toLowerCase(),
-      status: (hospital && hospital.subscriptionStatus) || SUBSCRIPTION_STATUS.ACTIVE,
-      expiry: hospital && hospital.subscriptionExpiry
-        ? new Date(hospital.subscriptionExpiry).toISOString()
-        : null,
+      status:
+        (hospital && hospital.subscriptionStatus) || SUBSCRIPTION_STATUS.ACTIVE,
+      expiry:
+        hospital && hospital.subscriptionExpiry
+          ? new Date(hospital.subscriptionExpiry).toISOString()
+          : null,
     },
   };
 }

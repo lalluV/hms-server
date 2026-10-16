@@ -14,7 +14,6 @@ const patientSchema = new mongoose.Schema(
     // Permanent Identifiers
     UMRNo: {
       type: String,
-      unique: true,
       required: false,
     },
     hospitalId: {
@@ -81,26 +80,43 @@ patientSchema.index(
   { hospitalId: 1, publicRegistrationKey: 1 },
   {
     unique: true,
-    sparse: true,
-    name: "hospitalId_publicRegistrationKey_unique",
+    partialFilterExpression: { publicRegistrationKey: { $type: "string" } },
+    name: "hospitalId_publicRegistrationKey_partial_unique",
   },
 );
 
-// Pre-save middleware to generate UMR number
+// Pre-save middleware to generate a per-hospital UMR number
 patientSchema.pre("save", async function (next) {
-  if (this.isNew && !this.UMRNo) {
-    try {
-      const counter = await Counter.findByIdAndUpdate(
-        { _id: "UMRNo" },
-        { $inc: { seq: 1 } },
-        { new: true, upsert: true },
+  if (!this.isNew || this.UMRNo) return next();
+  try {
+    const CounterModel = this.db.models.Counter || Counter;
+    const counterId = `UMRNo:${this.hospitalId}`;
+    const existing = await CounterModel.findById(counterId).lean();
+    if (!existing) {
+      const latest = await this.constructor
+        .findOne({ hospitalId: this.hospitalId, UMRNo: /^UMR\d+$/ })
+        .sort({ UMRNo: -1 })
+        .select("UMRNo")
+        .lean();
+      const floor = latest?.UMRNo
+        ? parseInt(String(latest.UMRNo).replace(/\D/g, ""), 10) || 0
+        : 0;
+      await CounterModel.updateOne(
+        { _id: counterId },
+        { $max: { seq: floor } },
+        { upsert: true },
       );
-      this.UMRNo = `UMR${String(counter.seq).padStart(8, "0")}`;
-    } catch (error) {
-      return next(error);
     }
+    const counter = await CounterModel.findByIdAndUpdate(
+      counterId,
+      { $inc: { seq: 1 } },
+      { new: true },
+    );
+    this.UMRNo = `UMR${String(counter.seq).padStart(8, "0")}`;
+    next();
+  } catch (error) {
+    next(error);
   }
-  next();
 });
 
 module.exports =
