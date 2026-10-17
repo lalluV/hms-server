@@ -82,8 +82,10 @@ function buildEntitlements(hospital) {
       ? "clinical"
       : "full";
 
+  // Clinical hospitals keep pharmacy/lab modules so Rx and reports still work.
+  // Billing writes are blocked by rejectClinicalBilling; billing UI is hidden
+  // via clinicalModeRedirect / product-mode nav filters.
   if (productMode === "clinical" && isAccessAllowed) {
-    merged.pharmacy = false;
     merged.expenses = false;
     merged.insurance = false;
     merged.commission = false;

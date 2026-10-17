@@ -145,6 +145,8 @@ function presentPatient(patient, { admission = null, roster = "" } = {}) {
     obj.patient_type = "IP";
     obj.active = true;
     obj.activeAdmissionId = open._id;
+    obj.admissionId = open._id;
+    obj.ipNumber = open.ipNumber || "";
     obj.patient_status = "Admitted";
     obj.admissionDate = open.admissionDate || "";
     obj.admissionTime = open.admissionTime || "";
@@ -257,6 +259,8 @@ function attachLatestDischargedStay(view, admission) {
   view.active = false;
   view.patient_status = "Discharged";
   view.activeAdmissionId = null;
+  view.admissionId = admission._id || view.admissionId || null;
+  view.ipNumber = admission.ipNumber || view.ipNumber || "";
   view.patient_type = view.patient_type || "IP";
   view.admissionDate = admission.admissionDate || view.admissionDate || "";
   view.admissionTime = admission.admissionTime || view.admissionTime || "";

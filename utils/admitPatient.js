@@ -84,6 +84,20 @@ async function nextIpNumber(tenantDb, IPAdmission, hospitalId) {
   return `IP-${year}-${Date.now()}`;
 }
 
+/** Prefer staff-entered hospital IP when provided and unique; else auto. */
+async function resolveIpNumber(tenantDb, IPAdmission, hospitalId, body) {
+  const manual = String(body?.ipNumber || body?.IPNo || body?.ipNo || "").trim();
+  if (!manual) return nextIpNumber(tenantDb, IPAdmission, hospitalId);
+  const exists = await IPAdmission.exists({ hospitalId, ipNumber: manual });
+  if (exists) {
+    const err = new Error(`IP number ${manual} is already used.`);
+    err.status = 409;
+    err.code = "IP_NUMBER_TAKEN";
+    throw err;
+  }
+  return manual;
+}
+
 function eraVitalFromBody(body) {
   const list = Array.isArray(body?.vitals) ? body.vitals : [];
   const entry = list.find((row) => row?.source === "era") || list[0];
@@ -228,7 +242,13 @@ async function findNamePhoneMatches(Patient, hospitalId, body) {
  * A second patient is never created for someone already on file.
  * An open stay is returned instead of inserting another admission.
  */
-async function admitPatient({ tenantDb, hospitalId, body }) {
+async function admitPatient({
+  tenantDb,
+  hospitalId,
+  body,
+  /** Clinical mode only: accept staff-entered hospital IP. */
+  allowManualHospitalIds = false,
+}) {
   const Patient = tenantDb.model("Patient");
   const IPAdmission = tenantDb.model("IPAdmission");
   const payload = body || {};
@@ -328,14 +348,60 @@ async function admitPatient({ tenantDb, hospitalId, body }) {
 
   try {
     let admission = null;
+    const preferredIp = allowManualHospitalIds
+      ? String(payload?.ipNumber || payload?.IPNo || payload?.ipNo || "").trim()
+      : "";
     for (let attempt = 0; attempt < 3 && !admission; attempt += 1) {
-      const ipNumber = await nextIpNumber(tenantDb, IPAdmission, hospitalId);
+      let ipNumber;
+      try {
+        ipNumber =
+          preferredIp && attempt === 0
+            ? await resolveIpNumber(tenantDb, IPAdmission, hospitalId, payload)
+            : await nextIpNumber(tenantDb, IPAdmission, hospitalId);
+      } catch (ipErr) {
+        if (ipErr?.code === "IP_NUMBER_TAKEN") {
+          if (bedClaimed) {
+            await releaseBed(tenantDb, hospitalId, {
+              wardId: payload.wardId,
+              bed: payload.selectedBed,
+              umr: patient.UMRNo,
+            });
+          }
+          if (createdPatient) {
+            await Patient.deleteOne({ _id: patient._id, hospitalId });
+          }
+          return {
+            httpStatus: 409,
+            payload: { code: "IP_NUMBER_TAKEN", message: ipErr.message },
+          };
+        }
+        throw ipErr;
+      }
       try {
         admission = await IPAdmission.create(
           stayPayload(payload, patient, hospitalId, ipNumber),
         );
       } catch (error) {
         if (!isDuplicateKey(error)) throw error;
+        if (preferredIp) {
+          if (bedClaimed) {
+            await releaseBed(tenantDb, hospitalId, {
+              wardId: payload.wardId,
+              bed: payload.selectedBed,
+              umr: patient.UMRNo,
+            });
+          }
+          if (createdPatient) {
+            await Patient.deleteOne({ _id: patient._id, hospitalId });
+          }
+          return {
+            httpStatus: 409,
+            payload: {
+              code: "IP_NUMBER_TAKEN",
+              message: `IP number ${preferredIp} is already used.`,
+            },
+          };
+        }
         // A concurrent request opened a stay for this patient first.
         const raced = await findOpen();
         if (raced) {

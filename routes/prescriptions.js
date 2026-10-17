@@ -13,6 +13,11 @@ const {
   sendPrescriptionWhatsApp,
   mapWhatsAppHttpError,
 } = require("../utils/whatsappCloud");
+const { isClinicalMode } = require("../utils/clinicalMode");
+const {
+  normalizeId,
+  assertPrescriptionIdAvailable,
+} = require("../utils/syncHospitalIds");
 
 function slimDosage(dose = {}) {
   return {
@@ -652,6 +657,9 @@ router.post("/check-in", async (req, res) => {
       reuseToday = true,
       duplicatePastRx = false,
       forceNew = false,
+      prescriptionId: requestedPrescriptionId,
+      opNumber,
+      opNo,
     } = req.body || {};
 
     let patient = null;
@@ -820,7 +828,27 @@ router.post("/check-in", async (req, res) => {
       }
     }
 
-    const prescriptionId = `RX-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`;
+    const clinical = isClinicalMode(req.entitlements);
+    let prescriptionId = clinical
+      ? normalizeId(requestedPrescriptionId || opNumber || opNo)
+      : "";
+    if (clinical && !prescriptionId) {
+      return res.status(400).json({
+        message: "OP number is required for clinical mode.",
+      });
+    }
+    if (!prescriptionId) {
+      prescriptionId = `RX-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`;
+    } else {
+      const opError = await assertPrescriptionIdAvailable(
+        req.tenantDb,
+        req.hospitalId,
+        prescriptionId,
+      );
+      if (opError) {
+        return res.status(409).json({ message: opError });
+      }
+    }
     const prescriptionDoc = new Prescription({
       prescriptionId,
       hospitalId: req.hospitalId,
@@ -1018,7 +1046,9 @@ router.post("/", async (req, res) => {
     const {
       patientId,
       UMRNo,
-      prescriptionId = `RX-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`,
+      prescriptionId: rawPrescriptionId,
+      opNumber,
+      opNo,
       doctorId,
       doctorName,
       consultantDoctor,
@@ -1068,6 +1098,28 @@ router.post("/", async (req, res) => {
       return res
         .status(404)
         .json({ message: "Patient not found for prescription" });
+    }
+
+    const clinical = isClinicalMode(req.entitlements);
+    let prescriptionId = clinical
+      ? normalizeId(rawPrescriptionId || opNumber || opNo)
+      : "";
+    if (clinical && !prescriptionId) {
+      return res.status(400).json({
+        message: "OP number is required for clinical mode.",
+      });
+    }
+    if (!prescriptionId) {
+      prescriptionId = `RX-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`;
+    } else {
+      const opError = await assertPrescriptionIdAvailable(
+        req.tenantDb,
+        req.hospitalId,
+        prescriptionId,
+      );
+      if (opError) {
+        return res.status(409).json({ message: opError });
+      }
     }
 
     const resolvedConsultant = consultantDoctor || doctorName || "";

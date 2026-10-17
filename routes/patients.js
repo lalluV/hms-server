@@ -46,6 +46,13 @@ const {
   loadRosterSets,
   loadOpenAdmissionMap,
 } = require("../utils/patientFields");
+const {
+  normalizeId,
+  assertUmrAvailable,
+  assertPrescriptionIdAvailable,
+  syncPatientUmr,
+} = require("../utils/syncHospitalIds");
+const { isClinicalMode } = require("../utils/clinicalMode");
 const mongoose = require("mongoose");
 
 async function findPatientByIdOrUMR(Patient, idOrUmr, hospitalId) {
@@ -916,32 +923,76 @@ router.post("/", async (req, res) => {
         tenantDb: req.tenantDb,
         hospitalId: req.hospitalId,
         body: req.body,
+        allowManualHospitalIds: isClinicalMode(req.entitlements),
       });
       return res.status(result.httpStatus).json(result.payload);
     }
 
+    const clinical = isClinicalMode(req.entitlements);
+    // Manual hospital UMR / OP No are clinical-mode only.
+    const requestedUmr = clinical
+      ? normalizeId(req.body?.UMRNo || req.body?.umrNo)
+      : "";
+    if (requestedUmr) {
+      const umrError = await assertUmrAvailable(
+        req.tenantDb,
+        req.hospitalId,
+        requestedUmr,
+      );
+      if (umrError) {
+        return res.status(409).json({ message: umrError });
+      }
+    }
+
+    const doctorId =
+      req.body.doctorId ||
+      (req.user?.type === "Doctor" ? req.user.id : "") ||
+      "";
+    const consultantDoctor =
+      req.body.consultantDoctor ||
+      req.body.doctorName ||
+      (req.user?.type === "Doctor" ? req.user.name : "") ||
+      "";
+    let prescriptionId = clinical
+      ? normalizeId(
+          req.body.prescriptionId || req.body.opNumber || req.body.opNo,
+        )
+      : "";
+    if (doctorId) {
+      if (clinical && !prescriptionId) {
+        return res.status(400).json({
+          message: "OP number is required for clinical mode.",
+        });
+      }
+      if (!prescriptionId) {
+        prescriptionId = `RX-${Date.now()}-${Math.floor(
+          Math.random() * 9000 + 1000,
+        )}`;
+      } else {
+        const opError = await assertPrescriptionIdAvailable(
+          req.tenantDb,
+          req.hospitalId,
+          prescriptionId,
+        );
+        if (opError) {
+          return res.status(409).json({ message: opError });
+        }
+      }
+    }
+
     const patient = new Patient(
-      pickPerson(req.body, { hospitalId: req.hospitalId }),
+      pickPerson(req.body, {
+        hospitalId: req.hospitalId,
+        ...(requestedUmr ? { UMRNo: requestedUmr } : {}),
+      }),
     );
     const newPatient = await patient.save();
 
     let initialVisit = null;
     try {
       const Prescription = req.tenantDb.model("Prescription");
-      const doctorId =
-        req.body.doctorId ||
-        (req.user?.type === "Doctor" ? req.user.id : "") ||
-        "";
-      const consultantDoctor =
-        req.body.consultantDoctor ||
-        req.body.doctorName ||
-        (req.user?.type === "Doctor" ? req.user.name : "") ||
-        "";
 
-      if (doctorId) {
-        const prescriptionId = `RX-${Date.now()}-${Math.floor(
-          Math.random() * 9000 + 1000,
-        )}`;
+      if (doctorId && prescriptionId) {
         const doc = await Prescription.create({
           prescriptionId,
           hospitalId: req.hospitalId,
@@ -1050,6 +1101,37 @@ router.put("/:id", async (req, res) => {
 
     const body = pickPerson(req.body || {});
     const patientFields = body;
+    const clinical = isClinicalMode(req.entitlements);
+    const umrProvided =
+      clinical &&
+      (req.body?.UMRNo !== undefined || req.body?.umrNo !== undefined);
+    const requestedUmr = umrProvided
+      ? normalizeId(
+          req.body?.UMRNo !== undefined ? req.body.UMRNo : req.body?.umrNo,
+        )
+      : "";
+    const oldUmr = normalizeId(existingPatient.UMRNo);
+    let umrSync = null;
+
+    if (!clinical && (req.body?.UMRNo !== undefined || req.body?.umrNo !== undefined)) {
+      // Full mode keeps auto UMR; ignore client overrides.
+      delete patientFields.UMRNo;
+    }
+
+    if (umrProvided && requestedUmr && requestedUmr !== oldUmr) {
+      const umrError = await assertUmrAvailable(
+        req.tenantDb,
+        req.hospitalId,
+        requestedUmr,
+        existingPatient._id,
+      );
+      if (umrError) {
+        return res.status(409).json({ message: umrError });
+      }
+      patientFields.UMRNo = requestedUmr;
+    } else if (umrProvided && !requestedUmr) {
+      return res.status(400).json({ message: "UMR number cannot be empty." });
+    }
 
     let patient = existingPatient;
     if (Object.keys(patientFields).length > 0) {
@@ -1069,6 +1151,35 @@ router.put("/:id", async (req, res) => {
       );
     }
 
+    if (
+      umrProvided &&
+      requestedUmr &&
+      requestedUmr !== oldUmr &&
+      patient
+    ) {
+      try {
+        umrSync = await syncPatientUmr(req.tenantDb, req.hospitalId, {
+          patientId: patient._id,
+          oldUmr,
+          newUmr: requestedUmr,
+        });
+      } catch (syncErr) {
+        // Roll patient UMR back so we never leave a split-brain state.
+        await Patient.updateOne(
+          { _id: existingPatient._id, hospitalId: req.hospitalId },
+          { $set: { UMRNo: oldUmr } },
+        );
+        console.error(
+          "UMR cascade failed, rolled back patient UMR:",
+          syncErr?.message || syncErr,
+        );
+        return res.status(500).json({
+          message:
+            "Could not update linked documents with the new UMR. Change was not saved.",
+        });
+      }
+    }
+
     const IPAdmission = req.tenantDb.model("IPAdmission");
     const open = await IPAdmission.findOne({
       hospitalId: req.hospitalId,
@@ -1083,9 +1194,19 @@ router.put("/:id", async (req, res) => {
       },
     );
 
-    res.json(hydrated);
+    res.json({
+      ...hydrated,
+      ...(umrSync && !umrSync.skipped
+        ? { umrSync: umrSync.updated }
+        : {}),
+    });
   } catch (error) {
     console.error("PUT /api/patients failed:", error?.message || error);
+    if (error?.code === 11000) {
+      return res
+        .status(409)
+        .json({ message: "UMR number is already used by another patient." });
+    }
     res.status(400).json({ message: error.message });
   }
 });

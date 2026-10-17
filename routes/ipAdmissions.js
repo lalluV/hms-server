@@ -6,6 +6,11 @@ const { admitPatient, updateEraChart } = require("../utils/admitPatient");
 const { claimBed, releaseBed } = require("../utils/bedAllocation");
 const { localYmd, localHm } = require("../utils/localDate");
 const { isClinicalMode } = require("../utils/clinicalMode");
+const {
+  normalizeId,
+  assertIpAvailable,
+  syncIpNumber,
+} = require("../utils/syncHospitalIds");
 
 applyTenantEntitlements(router, { moduleKey: "core" });
 
@@ -152,6 +157,7 @@ router.post("/", async (req, res) => {
       tenantDb: req.tenantDb,
       hospitalId: req.hospitalId,
       body: req.body,
+      allowManualHospitalIds: isClinicalMode(req.entitlements),
     });
     return res.status(result.httpStatus).json(result.payload);
   } catch (error) {
@@ -677,19 +683,67 @@ router.put("/:id", async (req, res) => {
         req.body.chiefComplaintsPresentIllnessHistory || "",
       );
     }
-    const existingNote = await IPAdmission.collection.findOne(query, {
-      projection: { ernote: 1, chiefComplaintsPresentIllnessHistory: 1 },
-    });
+    const existing = await IPAdmission.findOne(query);
+    if (!existing) {
+      return res.status(404).json({ message: "Admission record not found" });
+    }
     if (
       patch.ernote === undefined &&
-      !String(existingNote?.ernote || "").trim() &&
-      String(existingNote?.chiefComplaintsPresentIllnessHistory || "").trim()
+      !String(existing?.ernote || "").trim() &&
+      String(existing?.chiefComplaintsPresentIllnessHistory || "").trim()
     ) {
-      patch.ernote = String(existingNote.chiefComplaintsPresentIllnessHistory);
+      patch.ernote = String(existing.chiefComplaintsPresentIllnessHistory);
+    }
+
+    const clinical = isClinicalMode(req.entitlements);
+    const ipProvided =
+      clinical &&
+      (req.body?.ipNumber !== undefined ||
+        req.body?.IPNo !== undefined ||
+        req.body?.ipNo !== undefined);
+    const requestedIp = ipProvided
+      ? normalizeId(
+          req.body?.ipNumber !== undefined
+            ? req.body.ipNumber
+            : req.body?.IPNo !== undefined
+              ? req.body.IPNo
+              : req.body?.ipNo,
+        )
+      : "";
+    let ipSync = null;
+
+    if (ipProvided) {
+      if (!requestedIp) {
+        return res.status(400).json({ message: "IP number cannot be empty." });
+      }
+      if (requestedIp !== normalizeId(existing.ipNumber)) {
+        const ipError = await assertIpAvailable(
+          req.tenantDb,
+          req.hospitalId,
+          requestedIp,
+          existing._id,
+        );
+        if (ipError) {
+          return res.status(409).json({ message: ipError });
+        }
+        try {
+          ipSync = await syncIpNumber(req.tenantDb, req.hospitalId, {
+            admissionId: existing._id,
+            oldIp: existing.ipNumber,
+            newIp: requestedIp,
+          });
+        } catch (syncErr) {
+          console.error("IP cascade failed:", syncErr?.message || syncErr);
+          return res.status(500).json({
+            message:
+              "Could not update linked documents with the new IP number.",
+          });
+        }
+      }
     }
 
     const updated = await IPAdmission.findOneAndUpdate(
-      query,
+      { _id: existing._id, hospitalId: req.hospitalId },
       {
         $set: patch,
         $unset: {
@@ -708,9 +762,17 @@ router.put("/:id", async (req, res) => {
       return res.status(404).json({ message: "Admission record not found" });
     }
 
-    res.json(updated);
+    res.json({
+      ...(updated.toObject ? updated.toObject() : updated),
+      ...(ipSync && !ipSync.skipped ? { ipSync: ipSync.updated } : {}),
+    });
   } catch (error) {
     console.error("Error updating admission:", error);
+    if (error?.code === 11000) {
+      return res
+        .status(409)
+        .json({ message: "IP number is already used by another admission." });
+    }
     res.status(500).json({ message: error.message });
   }
 });
