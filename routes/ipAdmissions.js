@@ -13,6 +13,16 @@ function escapeRegex(str) {
   return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** Aggregate $match does not cast; always use ObjectId for hospitalId filters. */
+function asObjectId(id) {
+  if (!id) return id;
+  if (id instanceof mongoose.Types.ObjectId) return id;
+  if (mongoose.Types.ObjectId.isValid(String(id))) {
+    return new mongoose.Types.ObjectId(String(id));
+  }
+  return id;
+}
+
 /** Match admissions by wardId and/or ward name. */
 function buildWardAdmissionFilter(wardId, wardName) {
   const or = [];
@@ -174,11 +184,12 @@ router.get("/", async (req, res) => {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
     const skip = (pageNum - 1) * limitNum;
 
-    const andConditions = [{ hospitalId: req.hospitalId }];
+    const hospitalObjectId = asObjectId(req.hospitalId);
+    const andConditions = [{ hospitalId: hospitalObjectId }];
 
     const statusCondition = await buildStatusAdmissionCondition(
       status,
-      req.hospitalId,
+      hospitalObjectId,
       Patient,
     );
     if (statusCondition) {
@@ -297,7 +308,7 @@ router.get("/", async (req, res) => {
 
     const patients = patientIds.length
       ? await Patient.find({
-          hospitalId: req.hospitalId,
+          hospitalId: hospitalObjectId,
           _id: { $in: patientIds },
         })
           .select(
@@ -390,11 +401,12 @@ router.get("/ward-patient-counts", async (req, res) => {
     const Patient = req.tenantDb.model("Patient");
     const Ward = req.tenantDb.model("Ward");
     const status = req.query.status || "Admitted";
+    const hospitalObjectId = asObjectId(req.hospitalId);
 
-    const andConditions = [{ hospitalId: req.hospitalId }];
+    const andConditions = [{ hospitalId: hospitalObjectId }];
     const statusCondition = await buildStatusAdmissionCondition(
       status,
-      req.hospitalId,
+      hospitalObjectId,
       Patient,
     );
     if (statusCondition) {
@@ -422,7 +434,7 @@ router.get("/ward-patient-counts", async (req, res) => {
       ];
       const patients = patientIds.length
         ? await Patient.find({
-            hospitalId: req.hospitalId,
+            hospitalId: hospitalObjectId,
             _id: { $in: patientIds },
           })
             .select("_id active patient_status")
@@ -446,7 +458,7 @@ router.get("/ward-patient-counts", async (req, res) => {
     }
 
     const wards = await Ward.find({
-      hospitalId: req.hospitalId,
+      hospitalId: hospitalObjectId,
       status: { $ne: "inactive" },
     })
       .select("wardId wardName")
