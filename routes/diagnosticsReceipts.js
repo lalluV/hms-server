@@ -16,9 +16,7 @@ const {
   hydrateReceipts,
   normalizeReceiptItemsForStorage,
 } = require("../utils/hydrateDiagnosticParameters");
-const {
-  prepareClinicalDiagnosticsBody,
-} = require("../utils/clinicalMode");
+const { prepareClinicalDiagnosticsBody } = require("../utils/clinicalMode");
 
 async function resolveReceiptPatientPhone(req, receipt) {
   if (!receipt) return null;

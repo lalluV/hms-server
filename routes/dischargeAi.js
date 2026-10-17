@@ -71,17 +71,26 @@ DISCHARGE SUMMARY FOLLOW-UP MODE — PATCH ONLY
 
 3. DISCHARGE FIELDS:
 - "finalDiagnosis": Confirmed medical diagnosis at discharge (e.g. "Acute Gastroenteritis with moderate dehydration resolved").
-- "dischargeCondition": Patient condition at discharge: "Stable" | "Improved" | "Recovering" | "Critical" | "Palliative" | "LAMA"
+- "dischargeCondition": Patient condition at discharge: "Stable" | "Improved" | "Recovering" | "Critical" | "Palliative" | "LAMA" | "Death"
 - "dischargeDestination": Destination: "Home" | "Outpatient Care" | "Another Hospital" | "Rehabilitation Center"
 - "dischargeInstructions": Patient counselling, diet advice, precautions, activity, wound care, red-flag warning signs.
 - "followUpPlan": Review timeline (e.g. "Review in OPD after 7 days with repeat CBC") and appointments.
+- "counselling": Remarks when condition is LAMA or Death (reason, counselling to relatives, against-advice notes). Omit unless LAMA/Death.
 - "summarySections": Dynamic array of { "id": "string", "title": "string", "content": "string" }.
   If the doctor dictates or requests to add, update, or remove a clinical section (e.g. "Add a section for Biopsy", "Update hospital course", "Remove operative notes"), update summarySections accordingly. Preserve existing sections unless modified.
 
-4. ASSISTANT REPLY:
+4. READABLE CONTENT FORMAT (required for all narrative strings):
+- Prefer short lines and bullet points over long paragraphs.
+- Put each distinct clinical point on its own line.
+- Start bullet lines with "- " (dash + space).
+- Keep each line concise (ideally under ~20 words).
+- Use \\n between lines. Do NOT write walls of continuous prose.
+- Applies to: summarySections[].content, dischargeInstructions, followUpPlan, counselling, finalDiagnosis when multi-point.
+
+5. ASSISTANT REPLY:
 - assistantReply is required: ONE short, natural spoken sentence confirming the discharge updates.
 
-5. PATCH RULES:
+6. PATCH RULES:
 - If the instruction only changes take-home medicines or repeat labs, OMIT dischargeFields entirely (do not send empty strings or empty summarySections).
 - Only include dischargeFields keys you are actually updating with non-empty values.
 
@@ -96,8 +105,9 @@ Return exactly this JSON shape:
     "dischargeDestination": "",
     "dischargeInstructions": "",
     "followUpPlan": "",
+    "counselling": "",
     "summarySections": [
-      { "id": "unique_id", "title": "Section Title", "content": "Narrative content" }
+      { "id": "unique_id", "title": "Section Title", "content": "- Point one\\n- Point two" }
     ]
   },
   "medicineOps": [
@@ -127,7 +137,8 @@ function buildDischargeReviewFollowUpUserPrompt(instruction, currentChart) {
   return `SETTING: DISCHARGE SUMMARY (Take-home discharge plan).
 DURATION: Required for medicines (e.g. "5 days", "10 days").
 LABS: Repeat or recommended investigations.
-DISCHARGE FIELDS: finalDiagnosis, dischargeCondition, dischargeDestination, dischargeInstructions, followUpPlan, summarySections.
+DISCHARGE FIELDS: finalDiagnosis, dischargeCondition, dischargeDestination, dischargeInstructions, followUpPlan, counselling, summarySections.
+FORMAT: Use short bullet lines ("- …") with newlines for readable clinical text — not long paragraphs.
 
 CURRENT CHART:
 ${JSON.stringify(chart)}
@@ -156,6 +167,7 @@ function mergeDischargeFieldsPatch(existing = {}, incoming = {}) {
     finalDiagnosis: pickText("finalDiagnosis"),
     dischargeInstructions: pickText("dischargeInstructions"),
     followUpPlan: pickText("followUpPlan"),
+    counselling: pickText("counselling"),
     dischargeCondition: pickText("dischargeCondition", "Stable") || "Stable",
     dischargeDestination: pickText("dischargeDestination", "Home") || "Home",
   };
@@ -671,6 +683,13 @@ Required titles, in order:
 - OT findings
 Do not repeat diagnosis, allergies, discharge medicines, diet, follow-up, or urgent-care warning signs inside summarySections; those are stored in the other JSON fields.
 
+READABLE CONTENT FORMAT (required):
+- Prefer short lines and bullet points over long paragraphs.
+- Put each distinct clinical point on its own line starting with "- ".
+- Keep each line concise. Separate lines with \\n.
+- Do NOT write walls of continuous prose in summarySections.content, dischargeInstructions, or followUpPlan.
+- If condition is LAMA or Death, set dischargeCondition accordingly and include "counselling" remarks as short bullets.
+
 Return strictly valid JSON:
 {
   "finalDiagnosis": "Confirmed clinical diagnosis at discharge",
@@ -680,21 +699,22 @@ Return strictly valid JSON:
     {
       "id": "history",
       "title": "History of presenting complaints",
-      "content": "Onset, duration, progression, and reason for admission."
+      "content": "- Onset and duration\\n- Progression\\n- Reason for admission"
     },
     {
       "id": "course",
       "title": "Course in hospital",
-      "content": "Chronological narrative of treatment response and recovery."
+      "content": "- Day 1: …\\n- Treatment response\\n- Recovery milestones"
     },
     {
       "id": "ot",
       "title": "OT findings",
-      "content": "Operative findings, only when a procedure was done."
+      "content": "- Operative findings (only when a procedure was done)"
     }
   ],
-  "dischargeInstructions": "Diet, activity, wound care, and medication advice",
-  "followUpPlan": "When and where to review in OPD"
+  "dischargeInstructions": "- Diet\\n- Activity\\n- Wound care\\n- Medication advice",
+  "followUpPlan": "- Review in OPD after X days\\n- Bring reports",
+  "counselling": ""
 }`;
 
     const completion = await aiCompletionWithFallback(

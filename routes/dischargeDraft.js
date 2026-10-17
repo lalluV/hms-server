@@ -80,7 +80,10 @@ function clinicalDischargePayload(body = {}, { umrNo, hospitalId }) {
   for (const field of DISCHARGE_FIELDS) {
     if (body[field] !== undefined) payload[field] = body[field];
   }
-  if (payload.patientId && !mongoose.Types.ObjectId.isValid(payload.patientId)) {
+  if (
+    payload.patientId &&
+    !mongoose.Types.ObjectId.isValid(payload.patientId)
+  ) {
     delete payload.patientId;
   }
   if (
@@ -101,9 +104,7 @@ const DISCHARGE_STATUS_RANK = {
 
 function dischargeStatusOf(record) {
   return (
-    record?.dischargeSummaryMeta?.status ||
-    record?.dischargeSummaryStatus ||
-    ""
+    record?.dischargeSummaryMeta?.status || record?.dischargeSummaryStatus || ""
   );
 }
 
@@ -124,13 +125,19 @@ const ALLOWED_TRANSITIONS = {
  * to this patient, otherwise the open stay, otherwise the most recent stay.
  * Returns null only when the patient has no admission at all.
  */
-async function resolveAdmissionId(IPAdmission, { umrNo, hospitalId, admissionId }) {
+async function resolveAdmissionId(
+  IPAdmission,
+  { umrNo, hospitalId, admissionId },
+) {
   const base = { UMRNo: umrNo, ...(hospitalId ? { hospitalId } : {}) };
   if (mongoose.Types.ObjectId.isValid(admissionId)) {
     const own = await IPAdmission.exists({ ...base, _id: admissionId });
     return own ? String(own._id) : undefined;
   }
-  const open = await IPAdmission.findOne({ ...base, patient_status: "Admitted" })
+  const open = await IPAdmission.findOne({
+    ...base,
+    patient_status: "Admitted",
+  })
     .sort({ createdAt: -1 })
     .select("_id")
     .lean();
@@ -277,7 +284,12 @@ router.get("/:umrNo", async (req, res) => {
       admissionId: String(req.query.admissionId || "").trim(),
     });
     if (resolved === undefined) {
-      return res.status(404).json({ success: false, error: "Admission not found for this patient" });
+      return res
+        .status(404)
+        .json({
+          success: false,
+          error: "Admission not found for this patient",
+        });
     }
     const admissionId = resolved || "";
     const admissionScope = resolved ? { admissionId: resolved } : {};
@@ -317,8 +329,7 @@ router.get("/:umrNo", async (req, res) => {
         const signedSummary = best.summary || best.dischargeSummary || "";
         if (signedSummary) draftData.summary = signedSummary;
         if (best.summaryType || best.dischargeSummaryType) {
-          draftData.summaryType =
-            best.summaryType || best.dischargeSummaryType;
+          draftData.summaryType = best.summaryType || best.dischargeSummaryType;
         }
       }
       return draftData;
@@ -341,25 +352,31 @@ router.get("/:umrNo", async (req, res) => {
         }).lean();
         return res.json({
           success: true,
-          draft: applySignedStatus({
-            UMRNo: umrNo,
-            admissionId: admission._id,
-            ipNumber: admission.ipNumber,
-            admissionDate: admission.admissionDate,
-            dischargeDate: admission.dischargeDate || null,
-            dischargeTime: admission.dischargeTime || null,
-            dischargeCondition: admission.dischargeCondition || "Stable",
-            dischargeDestination: admission.dischargeDestination || "Home",
-            finalDiagnosis: admission.finalDiagnosis || admission.provisionalDiagnosis || "",
-            hospitalCourse: admission.hospitalCourse || "",
-            dischargeInstructions: admission.dischargeInstructions || "",
-            followUpPlan: admission.followUpPlan || "",
-            summary: admission.dischargeSummary || null,
-            dischargeSummaryStatus:
-              admission.dischargeSummaryStatus || "draft",
-            dischargeSummaryMeta: admission.dischargeSummaryMeta || null,
-            isFromAdmission: true,
-          }, patientForStatus),
+          draft: applySignedStatus(
+            {
+              UMRNo: umrNo,
+              admissionId: admission._id,
+              ipNumber: admission.ipNumber,
+              admissionDate: admission.admissionDate,
+              dischargeDate: admission.dischargeDate || null,
+              dischargeTime: admission.dischargeTime || null,
+              dischargeCondition: admission.dischargeCondition || "Stable",
+              dischargeDestination: admission.dischargeDestination || "Home",
+              finalDiagnosis:
+                admission.finalDiagnosis ||
+                admission.provisionalDiagnosis ||
+                "",
+              hospitalCourse: admission.hospitalCourse || "",
+              dischargeInstructions: admission.dischargeInstructions || "",
+              followUpPlan: admission.followUpPlan || "",
+              summary: admission.dischargeSummary || null,
+              dischargeSummaryStatus:
+                admission.dischargeSummaryStatus || "draft",
+              dischargeSummaryMeta: admission.dischargeSummaryMeta || null,
+              isFromAdmission: true,
+            },
+            patientForStatus,
+          ),
         });
       }
 
@@ -377,7 +394,8 @@ router.get("/:umrNo", async (req, res) => {
           draft: applySignedStatus(
             {
               UMRNo: umrNo,
-              finalDiagnosis: patient.finalDiagnosis || patient.provisionalDiagnosis || "",
+              finalDiagnosis:
+                patient.finalDiagnosis || patient.provisionalDiagnosis || "",
               dischargeDate: patient.dischargeDate || null,
               dischargeCondition: patient.dischargeCondition || "Stable",
               dischargeDestination: patient.dischargeDestination || "Home",
@@ -447,7 +465,12 @@ router.post("/:umrNo", async (req, res) => {
       admissionId: String(req.body.admissionId || "").trim(),
     });
     if (resolved === undefined) {
-      return res.status(404).json({ success: false, error: "Admission not found for this patient" });
+      return res
+        .status(404)
+        .json({
+          success: false,
+          error: "Admission not found for this patient",
+        });
     }
     const admissionScope = resolved ? { admissionId: resolved } : {};
 
@@ -463,7 +486,8 @@ router.post("/:umrNo", async (req, res) => {
       .lean();
     const fromStatus = dischargeStatusOf(existing);
     const requested = payload.dischargeSummaryStatus || fromStatus || "draft";
-    const isTransition = Boolean(req.body.statusTransition) && requested !== fromStatus;
+    const isTransition =
+      Boolean(req.body.statusTransition) && requested !== fromStatus;
 
     if (isTransition) {
       if (!(ALLOWED_TRANSITIONS[fromStatus] || []).includes(requested)) {
@@ -486,12 +510,14 @@ router.post("/:umrNo", async (req, res) => {
       return res.status(409).json({
         success: false,
         code: "SUMMARY_SIGNED",
-        error: "This discharge summary is signed. Revise (unlock) it before editing.",
+        error:
+          "This discharge summary is signed. Revise (unlock) it before editing.",
       });
     } else if (existing) {
       // Plain saves never change approval state.
       payload.dischargeSummaryStatus = fromStatus || "draft";
-      payload.dischargeSummaryMeta = existing.dischargeSummaryMeta ?? payload.dischargeSummaryMeta;
+      payload.dischargeSummaryMeta =
+        existing.dischargeSummaryMeta ?? payload.dischargeSummaryMeta;
     } else {
       payload.dischargeSummaryStatus = "draft";
     }
@@ -547,7 +573,12 @@ router.delete("/:umrNo", async (req, res) => {
       admissionId: String(req.query.admissionId || "").trim(),
     });
     if (!resolved) {
-      return res.status(404).json({ success: false, error: "Admission not found for this patient" });
+      return res
+        .status(404)
+        .json({
+          success: false,
+          error: "Admission not found for this patient",
+        });
     }
 
     const query = { UMRNo: umrNo, admissionId: resolved };
@@ -565,7 +596,8 @@ router.delete("/:umrNo", async (req, res) => {
       return res.status(409).json({
         success: false,
         code: "SUMMARY_SIGNED",
-        error: "A signed discharge summary cannot be reset. Revise (unlock) it first.",
+        error:
+          "A signed discharge summary cannot be reset. Revise (unlock) it first.",
       });
     }
 

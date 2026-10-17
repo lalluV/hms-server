@@ -98,7 +98,10 @@ function cleanAndDeduplicateServerNote(text) {
         continue;
       }
 
-      const bullet = line.trim().replace(/^[-*•]\s*/, "").trim();
+      const bullet = line
+        .trim()
+        .replace(/^[-*•]\s*/, "")
+        .trim();
       if (bullet) sections.get(currentKey).push(bullet);
     }
 
@@ -297,7 +300,8 @@ router.get("/public/:token", async (req, res) => {
       return res.status(400).json({ message: "Invalid or expired link." });
     }
 
-    const { hospitalId, patientId, prescriptionId, kind, admissionId } = decoded;
+    const { hospitalId, patientId, prescriptionId, kind, admissionId } =
+      decoded;
 
     if (!mongoose.Types.ObjectId.isValid(hospitalId)) {
       return res.status(400).json({ message: "Invalid or expired link." });
@@ -318,7 +322,9 @@ router.get("/public/:token", async (req, res) => {
         admissionId: admissionId || prescriptionId,
       });
       if (!payload) {
-        return res.status(404).json({ message: "Discharge summary not found." });
+        return res
+          .status(404)
+          .json({ message: "Discharge summary not found." });
       }
       return res.json(payload);
     }
@@ -398,7 +404,13 @@ router.get("/public/:token", async (req, res) => {
     const doctorPromise = prescription.doctorId
       ? Staff.findOne(
           { id: prescription.doctorId },
-          { name: 1, qualification: 1, specialization: 1, id: 1, signatureUrl: 1 },
+          {
+            name: 1,
+            qualification: 1,
+            specialization: 1,
+            id: 1,
+            signatureUrl: 1,
+          },
         )
           .lean()
           .catch(() => null)
@@ -409,7 +421,9 @@ router.get("/public/:token", async (req, res) => {
       .lean();
 
     const Stamp = connection.model("Stamp");
-    const stampsPromise = Stamp.find({ isActive: true }).lean().catch(() => []);
+    const stampsPromise = Stamp.find({ isActive: true })
+      .lean()
+      .catch(() => []);
 
     const [doctorDoc, hospital, stamps] = await Promise.all([
       doctorPromise,
@@ -617,9 +631,7 @@ router.get("/queue", async (req, res) => {
       if (p.UMRNo) patientMap.set(String(p.UMRNo), p);
     }
 
-    const rows = prescriptions.map((rx) =>
-      enrichQueueRow(rx, patientMap),
-    );
+    const rows = prescriptions.map((rx) => enrichQueueRow(rx, patientMap));
 
     res.json({
       visits: rows,
@@ -690,8 +702,7 @@ router.post("/check-in", async (req, res) => {
 
     if (!resolvedDoctorId) {
       resolvedDoctorId = patient.doctorId || "";
-      resolvedDoctorName =
-        resolvedDoctorName || patient.consultantDoctor || "";
+      resolvedDoctorName = resolvedDoctorName || patient.consultantDoctor || "";
     }
 
     if (!resolvedDoctorId) {
@@ -710,185 +721,192 @@ router.post("/check-in", async (req, res) => {
           )
         : () => {};
     try {
-    if (reuseToday && !forceNew) {
-      const existing = await Prescription.findOne({
-        hospitalId: req.hospitalId,
-        $or: [{ patientId: patient._id }, { UMRNo: patient.UMRNo }],
-        doctorId: String(resolvedDoctorId),
-        date: dateRange,
-      })
-        .sort({ createdAt: -1 })
-        .lean();
+      if (reuseToday && !forceNew) {
+        const existing = await Prescription.findOne({
+          hospitalId: req.hospitalId,
+          $or: [{ patientId: patient._id }, { UMRNo: patient.UMRNo }],
+          doctorId: String(resolvedDoctorId),
+          date: dateRange,
+        })
+          .sort({ createdAt: -1 })
+          .lean();
 
-      if (existing) {
-        return res.json({
-          message: "Today's visit already exists",
-          created: false,
-          prescription: existing,
-          patient,
+        if (existing) {
+          return res.json({
+            message: "Today's visit already exists",
+            created: false,
+            prescription: existing,
+            patient,
+          });
+        }
+      }
+
+      // Duplicate past visit Rx (entire prescription: medicines, tests, diagnosis, complaints, vitals)
+      let pastMedicineData = [];
+      let pastDiagnosticData = [];
+      let pastDoctorNotes = [];
+      let pastSymptoms = "";
+      let pastProvisionalDiagnosis = "";
+      let pastWeight = "";
+      let pastHeight = "";
+
+      const allowDuplicateRx = req.user?.type === "Doctor";
+      if (
+        allowDuplicateRx &&
+        (duplicatePastRx === true || duplicatePastRx === "true")
+      ) {
+        const pastPrescription = await Prescription.findOne({
+          hospitalId: req.hospitalId,
+          $or: [{ patientId: patient._id }, { UMRNo: patient.UMRNo }],
+        })
+          .sort({ createdAt: -1 })
+          .lean();
+
+        if (pastPrescription) {
+          if (
+            Array.isArray(pastPrescription.medicineData) &&
+            pastPrescription.medicineData.length > 0
+          ) {
+            pastMedicineData = pastPrescription.medicineData.map((m, idx) => ({
+              ...m,
+              lineId: `med_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 7)}`,
+              pharmacyBilled: false,
+              indentSent: false,
+              billedQuantity: 0,
+              dispensed: false,
+              status: "active",
+            }));
+          }
+
+          if (
+            Array.isArray(pastPrescription.diagnosticData) &&
+            pastPrescription.diagnosticData.length > 0
+          ) {
+            pastDiagnosticData = pastPrescription.diagnosticData.map(
+              (t, idx) => ({
+                ...t,
+                lineId: `test_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 7)}`,
+                labBilled: false,
+                indentSent: false,
+                billedQuantity: 0,
+                status: "active",
+              }),
+            );
+          }
+
+          if (
+            Array.isArray(pastPrescription.doctorNotes) &&
+            pastPrescription.doctorNotes.length > 0
+          ) {
+            const rawJoined = pastPrescription.doctorNotes
+              .map((n) => (n?.content || "").trim())
+              .filter(Boolean)
+              .join("\n\n");
+            const cleanText = cleanAndDeduplicateServerNote(rawJoined);
+            if (cleanText) {
+              pastDoctorNotes = [
+                {
+                  content: cleanText,
+                  doctorId: String(resolvedDoctorId || ""),
+                  doctorName: resolvedDoctorName || "",
+                  time: new Date().toISOString(),
+                },
+              ];
+            }
+          } else if (pastSymptoms || pastProvisionalDiagnosis) {
+            const noteParts = [];
+            if (pastSymptoms) noteParts.push(`Complaints:\n${pastSymptoms}`);
+            if (pastPrescription.pastMedicalHistory) {
+              noteParts.push(
+                `Past Medical History:\n${pastPrescription.pastMedicalHistory}`,
+              );
+            }
+            if (pastProvisionalDiagnosis) {
+              noteParts.push(
+                `Provisional Diagnosis:\n${pastProvisionalDiagnosis}`,
+              );
+            }
+            if (noteParts.length > 0) {
+              pastDoctorNotes = [
+                {
+                  content: noteParts.join("\n\n"),
+                  time: new Date().toISOString(),
+                  doctorId: String(resolvedDoctorId || ""),
+                  doctorName: resolvedDoctorName || "",
+                },
+              ];
+            }
+          }
+
+          pastSymptoms = pastPrescription.symptoms || "";
+          pastProvisionalDiagnosis =
+            pastPrescription.provisionalDiagnosis || "";
+          pastWeight = pastPrescription.weight || "";
+          pastHeight = pastPrescription.height || "";
+        }
+      }
+
+      const clinical = isClinicalMode(req.entitlements);
+      let prescriptionId = clinical
+        ? normalizeId(requestedPrescriptionId || opNumber || opNo)
+        : "";
+      if (clinical && !prescriptionId) {
+        return res.status(400).json({
+          message: "OP number is required for clinical mode.",
         });
       }
-    }
-
-    // Duplicate past visit Rx (entire prescription: medicines, tests, diagnosis, complaints, vitals)
-    let pastMedicineData = [];
-    let pastDiagnosticData = [];
-    let pastDoctorNotes = [];
-    let pastSymptoms = "";
-    let pastProvisionalDiagnosis = "";
-    let pastWeight = "";
-    let pastHeight = "";
-
-    const allowDuplicateRx = req.user?.type === "Doctor";
-    if (
-      allowDuplicateRx &&
-      (duplicatePastRx === true || duplicatePastRx === "true")
-    ) {
-      const pastPrescription = await Prescription.findOne({
-        hospitalId: req.hospitalId,
-        $or: [{ patientId: patient._id }, { UMRNo: patient.UMRNo }],
-      })
-        .sort({ createdAt: -1 })
-        .lean();
-
-      if (pastPrescription) {
-        if (
-          Array.isArray(pastPrescription.medicineData) &&
-          pastPrescription.medicineData.length > 0
-        ) {
-          pastMedicineData = pastPrescription.medicineData.map((m, idx) => ({
-            ...m,
-            lineId: `med_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 7)}`,
-            pharmacyBilled: false,
-            indentSent: false,
-            billedQuantity: 0,
-            dispensed: false,
-            status: "active",
-          }));
+      if (!prescriptionId) {
+        prescriptionId = `RX-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`;
+      } else {
+        const opError = await assertPrescriptionIdAvailable(
+          req.tenantDb,
+          req.hospitalId,
+          prescriptionId,
+        );
+        if (opError) {
+          return res.status(409).json({ message: opError });
         }
-
-        if (
-          Array.isArray(pastPrescription.diagnosticData) &&
-          pastPrescription.diagnosticData.length > 0
-        ) {
-          pastDiagnosticData = pastPrescription.diagnosticData.map((t, idx) => ({
-            ...t,
-            lineId: `test_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 7)}`,
-            labBilled: false,
-            indentSent: false,
-            billedQuantity: 0,
-            status: "active",
-          }));
-        }
-
-        if (
-          Array.isArray(pastPrescription.doctorNotes) &&
-          pastPrescription.doctorNotes.length > 0
-        ) {
-          const rawJoined = pastPrescription.doctorNotes
-            .map((n) => (n?.content || "").trim())
-            .filter(Boolean)
-            .join("\n\n");
-          const cleanText = cleanAndDeduplicateServerNote(rawJoined);
-          if (cleanText) {
-            pastDoctorNotes = [
-              {
-                content: cleanText,
-                doctorId: String(resolvedDoctorId || ""),
-                doctorName: resolvedDoctorName || "",
-                time: new Date().toISOString(),
-              },
-            ];
-          }
-        } else if (pastSymptoms || pastProvisionalDiagnosis) {
-          const noteParts = [];
-          if (pastSymptoms) noteParts.push(`Complaints:\n${pastSymptoms}`);
-          if (pastPrescription.pastMedicalHistory) {
-            noteParts.push(`Past Medical History:\n${pastPrescription.pastMedicalHistory}`);
-          }
-          if (pastProvisionalDiagnosis) {
-            noteParts.push(`Provisional Diagnosis:\n${pastProvisionalDiagnosis}`);
-          }
-          if (noteParts.length > 0) {
-            pastDoctorNotes = [
-              {
-                content: noteParts.join("\n\n"),
-                time: new Date().toISOString(),
-                doctorId: String(resolvedDoctorId || ""),
-                doctorName: resolvedDoctorName || "",
-              },
-            ];
-          }
-        }
-
-        pastSymptoms = pastPrescription.symptoms || "";
-        pastProvisionalDiagnosis = pastPrescription.provisionalDiagnosis || "";
-        pastWeight = pastPrescription.weight || "";
-        pastHeight = pastPrescription.height || "";
       }
-    }
-
-    const clinical = isClinicalMode(req.entitlements);
-    let prescriptionId = clinical
-      ? normalizeId(requestedPrescriptionId || opNumber || opNo)
-      : "";
-    if (clinical && !prescriptionId) {
-      return res.status(400).json({
-        message: "OP number is required for clinical mode.",
-      });
-    }
-    if (!prescriptionId) {
-      prescriptionId = `RX-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`;
-    } else {
-      const opError = await assertPrescriptionIdAvailable(
-        req.tenantDb,
-        req.hospitalId,
+      const prescriptionDoc = new Prescription({
         prescriptionId,
-      );
-      if (opError) {
-        return res.status(409).json({ message: opError });
-      }
-    }
-    const prescriptionDoc = new Prescription({
-      prescriptionId,
-      hospitalId: req.hospitalId,
-      patientId: patient._id,
-      UMRNo: patient.UMRNo,
-      doctorId: String(resolvedDoctorId),
-      doctorName: resolvedDoctorName,
-      consultantDoctor: resolvedDoctorName,
-      date: localYmd(),
-      symptoms: pastSymptoms || "",
-      provisionalDiagnosis: pastProvisionalDiagnosis || "",
-      weight: pastWeight || "",
-      height: pastHeight || "",
-      vitals: [],
-      doctorNotes: pastDoctorNotes,
-      nurseNotes: [],
-      diagnosticData: pastDiagnosticData,
-      medicineData: pastMedicineData,
-      paymentMethod: "Personal",
-      insurance_provider: "",
-      insurance_providerId: "",
-      policy_number: "",
-      pharmacyStatus: "pending",
-    });
-    await prescriptionDoc.save();
+        hospitalId: req.hospitalId,
+        patientId: patient._id,
+        UMRNo: patient.UMRNo,
+        doctorId: String(resolvedDoctorId),
+        doctorName: resolvedDoctorName,
+        consultantDoctor: resolvedDoctorName,
+        date: localYmd(),
+        symptoms: pastSymptoms || "",
+        provisionalDiagnosis: pastProvisionalDiagnosis || "",
+        weight: pastWeight || "",
+        height: pastHeight || "",
+        vitals: [],
+        doctorNotes: pastDoctorNotes,
+        nurseNotes: [],
+        diagnosticData: pastDiagnosticData,
+        medicineData: pastMedicineData,
+        paymentMethod: "Personal",
+        insurance_provider: "",
+        insurance_providerId: "",
+        policy_number: "",
+        pharmacyStatus: "pending",
+      });
+      await prescriptionDoc.save();
 
-    const IPAdmission = req.tenantDb.model("IPAdmission");
-    const { presentPatient } = require("../utils/patientFields");
-    const open = await IPAdmission.findOne({
-      hospitalId: req.hospitalId,
-      patientId: patient._id,
-      patient_status: "Admitted",
-    }).lean();
+      const IPAdmission = req.tenantDb.model("IPAdmission");
+      const { presentPatient } = require("../utils/patientFields");
+      const open = await IPAdmission.findOne({
+        hospitalId: req.hospitalId,
+        patientId: patient._id,
+        patient_status: "Admitted",
+      }).lean();
 
-    res.status(201).json({
-      message: "Patient checked in for today's OP visit",
-      created: true,
-      prescription: prescriptionDoc.toObject(),
-      patient: presentPatient(patient, { admission: open }),
-    });
+      res.status(201).json({
+        message: "Patient checked in for today's OP visit",
+        created: true,
+        prescription: prescriptionDoc.toObject(),
+        patient: presentPatient(patient, { admission: open }),
+      });
     } finally {
       releaseCheckin();
     }
@@ -969,7 +987,11 @@ router.get("/patient/:patientId", async (req, res) => {
       .lean();
 
     // 2. Include any legacy embedded prescriptions from Patient document if not already in standalone
-    if (patient && Array.isArray(patient.prescriptions) && patient.prescriptions.length > 0) {
+    if (
+      patient &&
+      Array.isArray(patient.prescriptions) &&
+      patient.prescriptions.length > 0
+    ) {
       const existingIds = new Set(
         prescriptions.map((p) => String(p.prescriptionId || p._id || "")),
       );
@@ -1186,7 +1208,10 @@ async function acquireKeyLock(key) {
 }
 
 const normLineName = (value) =>
-  String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
 const medicineLineKey = (line) =>
   normLineName(line?.name || line?.description || line?.generic_name);
 const testLineKey = (line) =>
@@ -1241,7 +1266,10 @@ router.put("/:id", async (req, res) => {
     delete body.UMRNo;
 
     // Billing flags are one-way: a stale client copy must never un-bill a line.
-    if (Array.isArray(body.medicineData) || Array.isArray(body.diagnosticData)) {
+    if (
+      Array.isArray(body.medicineData) ||
+      Array.isArray(body.diagnosticData)
+    ) {
       const current = await Prescription.findOne(query)
         .select("medicineData diagnosticData")
         .lean();

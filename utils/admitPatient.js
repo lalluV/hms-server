@@ -454,6 +454,8 @@ async function admitPatient({
 
 const ERA_UPDATE_KEYS = [
   "mlcNo",
+  "admissionDate",
+  "admissionTime",
   "consultantDoctor",
   "doctorId",
   "medicalOfficerName",

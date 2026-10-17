@@ -930,9 +930,15 @@ router.post("/", async (req, res) => {
 
     const clinical = isClinicalMode(req.entitlements);
     // Manual hospital UMR / OP No are clinical-mode only.
+    // Clinical OP registration requires UMR; OP number stays optional.
     const requestedUmr = clinical
       ? normalizeId(req.body?.UMRNo || req.body?.umrNo)
       : "";
+    if (clinical && !requestedUmr) {
+      return res.status(400).json({
+        message: "UMR number is required for clinical mode.",
+      });
+    }
     if (requestedUmr) {
       const umrError = await assertUmrAvailable(
         req.tenantDb,
@@ -959,11 +965,6 @@ router.post("/", async (req, res) => {
         )
       : "";
     if (doctorId) {
-      if (clinical && !prescriptionId) {
-        return res.status(400).json({
-          message: "OP number is required for clinical mode.",
-        });
-      }
       if (!prescriptionId) {
         prescriptionId = `RX-${Date.now()}-${Math.floor(
           Math.random() * 9000 + 1000,

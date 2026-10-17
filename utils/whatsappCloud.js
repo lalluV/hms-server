@@ -372,7 +372,7 @@ async function sendWhatsAppTextMessage({ phone, message, previewUrl = false }) {
 
   if (!accessToken || !phoneNumberId) {
     const error = new Error(
-      "WhatsApp Cloud API is not configured. Set WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID."
+      "WhatsApp Cloud API is not configured. Set WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID.",
     );
     error.code = "WHATSAPP_NOT_CONFIGURED";
     throw error;
@@ -475,7 +475,8 @@ async function sendDailyDigestWhatsApp({
 }) {
   const richMessage = fullFormattedMessage || summaryText;
   // Multi-line body for template {{3}} — one metric per line via U+2028
-  const templateBody = fullFormattedMessage || summaryText || "Daily digest ready.";
+  const templateBody =
+    fullFormattedMessage || summaryText || "Daily digest ready.";
 
   if (process.env.WHATSAPP_TEMPLATE_DAILY_DIGEST) {
     try {
@@ -501,7 +502,7 @@ async function sendDailyDigestWhatsApp({
         } catch (followUpErr) {
           console.warn(
             "Multi-line digest follow-up failed (template already sent):",
-            followUpErr.message
+            followUpErr.message,
           );
         }
       }
@@ -510,7 +511,7 @@ async function sendDailyDigestWhatsApp({
     } catch (templateErr) {
       console.warn(
         "Template send failed for daily digest, falling back to direct text:",
-        templateErr.message
+        templateErr.message,
       );
     }
   }
