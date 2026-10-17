@@ -26,6 +26,9 @@ const {
   checkPublicOpRateLimit,
   assertHospitalAllowsPublicOp,
   validatePublicOpPayload,
+  listPublicConsultantDoctors,
+  findActiveConsultantDoctor,
+  createPublicOpVisit,
   buildTrustedPublicPatientDoc,
   toPublicRegistrationResponse,
   normalizeName,
@@ -156,6 +159,11 @@ router.get(
         return res.status(access.status).json({ message: access.message });
       }
 
+      const connection = await getTenantConnection(req.hospitalId);
+      const doctors = connection
+        ? await listPublicConsultantDoctors(connection, req.hospitalId)
+        : [];
+
       return res.json({
         hospital: {
           name: hospital.name,
@@ -167,6 +175,7 @@ router.get(
           phone: hospital.phone,
           logoUrl: hospital.logoUrl,
         },
+        doctors,
       });
     } catch (error) {
       console.error("Public OP registration info error:", error);
@@ -219,6 +228,20 @@ router.post(
 
       const Patient = connection.model("Patient");
       const data = validated.data;
+      const doctor = await findActiveConsultantDoctor(
+        connection,
+        hospitalId,
+        data.doctorId,
+      );
+      if (!doctor) {
+        return res.status(400).json({
+          message: "Please correct the highlighted fields.",
+          errors: {
+            consultantDoctor: "Select a valid consultant doctor",
+          },
+        });
+      }
+
       const publicRegistrationKey = buildPublicRegistrationKey({
         hospitalId,
         phone: data.phone,
@@ -270,9 +293,26 @@ router.post(
       try {
         const patient = new Patient(patientDoc);
         const created = await patient.save();
-        return res
-          .status(201)
-          .json(toPublicRegistrationResponse(created, { created: true }));
+        let consultantDoctor = "";
+        try {
+          await createPublicOpVisit(connection, {
+            hospitalId,
+            patient: created,
+            doctor,
+          });
+          consultantDoctor = doctor.name;
+        } catch (visitErr) {
+          console.warn(
+            "Public OP patient created but initial visit failed:",
+            visitErr?.message || visitErr,
+          );
+        }
+        return res.status(201).json(
+          toPublicRegistrationResponse(created, {
+            created: true,
+            consultantDoctor,
+          }),
+        );
       } catch (error) {
         if (error?.code === 11000) {
           const raced = await Patient.findOne({
@@ -369,9 +409,13 @@ router.get("/", async (req, res) => {
       minDaysAdmitted = "",
       fromDate = "",
       toDate = "",
+      wardId = "",
     } = req.query;
 
     const dayjs = require("dayjs");
+    const searchText = typeof search === "string" ? search.trim() : "";
+    const isGlobalSearch = searchText.length >= 2;
+    const wardFilter = String(wardId || "").trim();
 
     const andConditions = [{ hospitalId: req.hospitalId }];
 
@@ -388,7 +432,7 @@ router.get("/", async (req, res) => {
       isIpdClinicalPanelWithoutEntitlement(req) ||
       (req.entitlements?.modules?.ipd !== true && patientType !== "OP");
 
-    if (forceOp && patientType && patientType !== "OP") {
+    if (forceOp && patientType && patientType !== "OP" && !isGlobalSearch) {
       const moduleKey = isDoctorWithoutIpdDoctorRecord(req)
         ? "ipdDoctorRecord"
         : isIpdClinicalPanelWithoutEntitlement(req)
@@ -401,19 +445,30 @@ router.get("/", async (req, res) => {
       );
     }
 
-    const rosterMode = forceOp
-      ? "OP"
-      : patientType || (status === "inactive" ? "discharged" : "");
+    const rosterMode = isGlobalSearch
+      ? ""
+      : forceOp
+        ? "OP"
+        : patientType || (status === "inactive" ? "discharged" : "");
 
     let ipIds = roster.openIds;
-    const dateStart = fromDate ? dayjs(fromDate).format("YYYY-MM-DD") : "";
-    const dateEnd = toDate ? dayjs(toDate).format("YYYY-MM-DD") : "";
+    const dateStart =
+      !isGlobalSearch && fromDate ? dayjs(fromDate).format("YYYY-MM-DD") : "";
+    const dateEnd =
+      !isGlobalSearch && toDate ? dayjs(toDate).format("YYYY-MM-DD") : "";
     const hasDate = Boolean(dateStart || dateEnd);
     const dateRange = {};
     if (dateStart) dateRange.$gte = dateStart;
     if (dateEnd) dateRange.$lte = `${dateEnd}T23:59:59.999Z`;
 
-    if (rosterMode === "IP" && (maxDaysAdmitted || minDaysAdmitted || hasDate)) {
+    if (
+      rosterMode === "IP" &&
+      (maxDaysAdmitted || minDaysAdmitted || hasDate || wardFilter)
+    ) {
+      const admissionQuery = {
+        hospitalId: req.hospitalId,
+        patient_status: "Admitted",
+      };
       const admissionDate = {};
       if (maxDaysAdmitted) {
         admissionDate.$gte = dayjs()
@@ -426,11 +481,11 @@ router.get("/", async (req, res) => {
           .format("YYYY-MM-DD");
       }
       if (hasDate) Object.assign(admissionDate, dateRange);
-      const dated = await IPAdmission.find({
-        hospitalId: req.hospitalId,
-        patient_status: "Admitted",
-        admissionDate,
-      })
+      if (Object.keys(admissionDate).length) {
+        admissionQuery.admissionDate = admissionDate;
+      }
+      if (wardFilter) admissionQuery.wardId = wardFilter;
+      const dated = await IPAdmission.find(admissionQuery)
         .select("patientId")
         .lean();
       const datedIds = new Set(
@@ -466,12 +521,19 @@ router.get("/", async (req, res) => {
       andConditions.push({ _id: { $in: objectIds(ipIds) } });
     } else if (rosterMode === "discharged") {
       let dischargedIds = roster.dischargedIds;
-      if (hasDate) {
-        const stays = await IPAdmission.find({
+      if (hasDate || wardFilter) {
+        const stayQuery = {
           hospitalId: req.hospitalId,
           patient_status: "Discharged",
-          $or: [{ dischargeDate: dateRange }, { dischargedAt: dateRange }],
-        })
+        };
+        if (hasDate) {
+          stayQuery.$or = [
+            { dischargeDate: dateRange },
+            { dischargedAt: dateRange },
+          ];
+        }
+        if (wardFilter) stayQuery.wardId = wardFilter;
+        const stays = await IPAdmission.find(stayQuery)
           .select("patientId")
           .lean();
         const datedIds = new Set(
@@ -511,12 +573,12 @@ router.get("/", async (req, res) => {
       );
     }
 
-    if (search && search.length >= 2) {
+    if (isGlobalSearch) {
       andConditions.push({
         $or: [
-          { UMRNo: { $regex: search, $options: "i" } },
-          { name: { $regex: search, $options: "i" } },
-          { phone: { $regex: search, $options: "i" } },
+          { UMRNo: { $regex: searchText, $options: "i" } },
+          { name: { $regex: searchText, $options: "i" } },
+          { phone: { $regex: searchText, $options: "i" } },
         ],
       });
     }

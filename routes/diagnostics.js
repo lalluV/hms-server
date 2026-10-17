@@ -17,6 +17,50 @@ const {
 
 applyTenantEntitlements(router, { moduleKey: "lab" });
 
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function findHospitalDiagnosticsByText(
+  Diagnostic,
+  hospitalId,
+  searchText,
+  { limit, skip, deptScope },
+) {
+  const pattern = new RegExp(escapeRegex(searchText), "i");
+  const clauses = [
+    { hospitalId },
+    {
+      $or: [
+        { name: pattern },
+        { code: pattern },
+        { description: pattern },
+        { deptname: pattern },
+        { subdeptname: pattern },
+      ],
+    },
+  ];
+  if (deptScope === "radiology") {
+    clauses.push({ deptname: { $regex: /^radiology$/i } });
+  } else if (deptScope === "lab") {
+    clauses.push({
+      $or: [
+        { deptname: { $exists: false } },
+        { deptname: null },
+        { deptname: "" },
+        { deptname: { $not: /^radiology$/i } },
+      ],
+    });
+  }
+  const searchQuery = { $and: clauses };
+  const totalDiagnostics = await Diagnostic.countDocuments(searchQuery);
+  const diagnostics = await Diagnostic.find(searchQuery)
+    .sort({ name: 1 })
+    .skip(skip)
+    .limit(limit);
+  return { totalDiagnostics, diagnostics };
+}
+
 function indexHospitalDiagnosticSafely(diagnostic) {
   indexHospitalDiagnostic(diagnostic).catch((error) => {
     console.warn(
@@ -57,11 +101,18 @@ router.get("/", async (req, res) => {
         });
       } catch (searchError) {
         console.error("Hospital diagnostic search failed:", searchError.message);
-        return res.status(503).json({
-          message: "Lab search is unavailable",
-        });
+        const fallback = await findHospitalDiagnosticsByText(
+          Diagnostic,
+          req.hospitalId,
+          searchText,
+          { limit: actualLimit, skip, deptScope },
+        );
+        totalDiagnostics = fallback.totalDiagnostics;
+        diagnostics = fallback.diagnostics;
+        searchResults = null;
       }
 
+      if (searchResults) {
       const orderedIds = (searchResults.hits || [])
         .map((hit) => hit.id)
         .filter((id) => mongoose.Types.ObjectId.isValid(String(id)));
@@ -87,6 +138,7 @@ router.get("/", async (req, res) => {
             `Lab search ranked ${orderedIds.length} tests but none matched hospital ${hospitalKey}`,
           );
         }
+      }
       }
     } else {
       const searchQuery = { hospitalId: req.hospitalId };

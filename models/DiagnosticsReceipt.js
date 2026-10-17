@@ -23,6 +23,8 @@ const diagnosticsReceiptSchema = new mongoose.Schema(
     baseTotalAmount: { type: Number },
     discount: { type: Number },
     paymentStatus: { type: String },
+    /** Clinical mode: report row with no charge. Stays valid after upgrade to full. */
+    billingSkipped: { type: Boolean, default: false },
     paymentType: { type: String },
     paymentSplit: { type: Object },
     overallStatus: { type: String },

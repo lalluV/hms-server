@@ -17,24 +17,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Get stamp by ID
-router.get("/:id", async (req, res) => {
-  try {
-    const Stamp = req.tenantDb.model("Stamp");
-    const stamp = await Stamp.findOne({
-      id: req.params.id,
-      hospitalId: req.hospitalId,
-    });
-    if (!stamp) {
-      return res.status(404).json({ message: "Stamp not found" });
-    }
-    res.json(stamp);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Get stamps by department
+// Static path segments must be registered before /:id
 router.get("/department/:department", async (req, res) => {
   try {
     const Stamp = req.tenantDb.model("Stamp");
@@ -49,7 +32,6 @@ router.get("/department/:department", async (req, res) => {
   }
 });
 
-// Get stamps by category
 router.get("/category/:category", async (req, res) => {
   try {
     const Stamp = req.tenantDb.model("Stamp");
@@ -59,6 +41,23 @@ router.get("/category/:category", async (req, res) => {
       hospitalId: req.hospitalId,
     }).sort({ createdAt: -1 });
     res.json(stamps);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get stamp by ID
+router.get("/:id", async (req, res) => {
+  try {
+    const Stamp = req.tenantDb.model("Stamp");
+    const stamp = await Stamp.findOne({
+      id: req.params.id,
+      hospitalId: req.hospitalId,
+    });
+    if (!stamp) {
+      return res.status(404).json({ message: "Stamp not found" });
+    }
+    res.json(stamp);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

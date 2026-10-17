@@ -213,11 +213,59 @@ async function computeDashboardStatistics(tenantDb, hospitalId, timeframeQuery, 
     const todayStr = asOfDate || calendarToday();
     const range = resolveRange(timeframe, todayStr);
     const monthStart = dayjs(todayStr).startOf("month").format("YYYY-MM-DD");
+    // For monthlyRevenue we always need month-to-date; widen the scan window accordingly.
+    const scanStart = range
+      ? range.start < monthStart
+        ? range.start
+        : monthStart
+      : null;
 
-    const dayGroupStages = (primary, fallback) => [
+    const dayGroupStages = (primary, fallback, { bound = true } = {}) => [
       { $addFields: { eventDate: eventDateExpr(primary, fallback) } },
       { $addFields: { dayKey: dayKeyExpr("$eventDate") } },
+      ...(bound && scanStart
+        ? [
+            {
+              $match: {
+                $or: [
+                  { dayKey: { $gte: scanStart, $lte: todayStr } },
+                  { dayKey: "unknown" },
+                ],
+              },
+            },
+          ]
+        : []),
     ];
+
+    // Ward revenue needs stays that overlap the scan window, not full history.
+    const admissionFilter = scanStart
+      ? {
+          ...matchFilter,
+          $or: [
+            { patient_status: "Admitted" },
+            { patient_status: { $nin: [...CLOSED_ADMISSION_STATUSES] } },
+            { dischargeDate: { $gte: scanStart } },
+            { dischargedAt: { $gte: scanStart } },
+            { admissionDate: { $gte: scanStart } },
+          ],
+        }
+      : matchFilter;
+
+    const legacyWardFilter = scanStart
+      ? {
+          ...matchFilter,
+          "transfers.0": { $exists: true },
+          $or: [
+            { active: true },
+            { patient_status: "Admitted" },
+            { dischargeDate: { $gte: scanStart } },
+            { dischargedAt: { $gte: scanStart } },
+          ],
+        }
+      : {
+          ...matchFilter,
+          "transfers.0": { $exists: true },
+        };
 
     const [
       totalPatients,
@@ -340,13 +388,17 @@ async function computeDashboardStatistics(tenantDb, hospitalId, timeframeQuery, 
 
       Patient.aggregate([
         { $match: matchFilter },
-        ...dayGroupStages("$createdAt", "$registration_date"),
+        // Keep full history so charts still work when switching to "all"
+        ...dayGroupStages("$createdAt", "$registration_date", {
+          bound: Boolean(scanStart && timeframe !== "all"),
+        }),
         { $group: { _id: "$dayKey", total: { $sum: 1 } } },
       ]),
 
       Appointment.aggregate([
         { $match: matchFilter },
-        ...dayGroupStages("$appointmentDate", "$createdAt"),
+        // Unbounded — totalAppointments is all-time; period uses range filter in JS
+        ...dayGroupStages("$appointmentDate", "$createdAt", { bound: false }),
         { $group: { _id: "$dayKey", total: { $sum: 1 } } },
       ]),
 
@@ -376,7 +428,7 @@ async function computeDashboardStatistics(tenantDb, hospitalId, timeframeQuery, 
         .select("items createdAt date")
         .lean(),
 
-      IPAdmission.find(matchFilter)
+      IPAdmission.find(admissionFilter)
         .select(
           "patientId transfers patient_status dischargeDate dischargedAt admissionDate wardId updatedAt",
         )
@@ -385,12 +437,7 @@ async function computeDashboardStatistics(tenantDb, hospitalId, timeframeQuery, 
       Ward.find(matchFilter).select("wardId price").lean(),
 
       Patient.aggregate([
-        {
-          $match: {
-            ...matchFilter,
-            "transfers.0": { $exists: true },
-          },
-        },
+        { $match: legacyWardFilter },
         {
           $project: {
             transfers: 1,

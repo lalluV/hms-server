@@ -3,6 +3,7 @@ const {
   buildEntitlements,
   isSubscriptionAccessAllowed,
 } = require("../services/entitlementsService");
+const { localYmd } = require("./localDate");
 
 const RATE_LIMIT = 20;
 const RATE_WINDOW_MS = 15 * 60 * 1000;
@@ -125,6 +126,7 @@ function validatePublicOpPayload(body = {}) {
   const state = String(body.state || "Telangana").trim() || "Telangana";
   const postal_code =
     String(body.postal_code || "506002").trim() || "506002";
+  const doctorId = String(body.doctorId || "").trim();
 
   if (!name) errors.name = "Full name is required";
   else if (name.length > 120) errors.name = "Name is too long";
@@ -148,6 +150,12 @@ function validatePublicOpPayload(body = {}) {
     errors.email = "Enter a valid email address";
   }
 
+  if (!doctorId) {
+    errors.consultantDoctor = "Consultant doctor is required";
+  } else if (doctorId.length > 80) {
+    errors.consultantDoctor = "Select a valid consultant doctor";
+  }
+
   if (Object.keys(errors).length > 0) {
     return { ok: false, errors };
   }
@@ -165,8 +173,81 @@ function validatePublicOpPayload(body = {}) {
       state,
       postal_code,
       country: "India",
+      doctorId,
     },
   };
+}
+
+function publicDoctorQuery(hospitalId) {
+  return {
+    hospitalId,
+    active: true,
+    type: "Doctor",
+  };
+}
+
+async function listPublicConsultantDoctors(connection, hospitalId) {
+  const Staff = connection.model("Staff");
+  const doctors = await Staff.find(publicDoctorQuery(hospitalId))
+    .select("id name specialization")
+    .sort({ name: 1 })
+    .lean();
+
+  return doctors
+    .filter((doctor) => String(doctor?.id || "").trim() && String(doctor?.name || "").trim())
+    .map((doctor) => ({
+      id: String(doctor.id),
+      name: String(doctor.name).trim(),
+      specialization: String(doctor.specialization || "").trim(),
+    }));
+}
+
+async function findActiveConsultantDoctor(connection, hospitalId, doctorId) {
+  const id = String(doctorId || "").trim();
+  if (!id) return null;
+  const Staff = connection.model("Staff");
+  const doctor = await Staff.findOne({
+    ...publicDoctorQuery(hospitalId),
+    id,
+  })
+    .select("id name specialization")
+    .lean();
+  if (!doctor || !String(doctor.name || "").trim()) return null;
+  return {
+    id: String(doctor.id),
+    name: String(doctor.name).trim(),
+    specialization: String(doctor.specialization || "").trim(),
+  };
+}
+
+async function createPublicOpVisit(connection, { hospitalId, patient, doctor }) {
+  const Prescription = connection.model("Prescription");
+  const consultantDoctor = doctor.name;
+  const prescriptionId = `RX-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`;
+  return Prescription.create({
+    prescriptionId,
+    hospitalId,
+    patientId: patient._id,
+    UMRNo: patient.UMRNo,
+    doctorId: String(doctor.id),
+    doctorName: consultantDoctor,
+    consultantDoctor,
+    date: localYmd(),
+    symptoms: "",
+    vitals: [],
+    doctorNotes: [],
+    nurseNotes: [],
+    diagnosticData: [],
+    medicineData: [],
+    paymentMethod: "Personal",
+    insurance_provider: "",
+    insurance_providerId: "",
+    policy_number: "",
+    coPayPercentage: 0,
+    coPayLimit: 0,
+    coPayType: "percentage",
+    pharmacyStatus: "pending",
+  });
 }
 
 function buildTrustedPublicPatientDoc({ hospitalId, data, publicRegistrationKey }) {
@@ -196,13 +277,17 @@ function buildTrustedPublicPatientDoc({ hospitalId, data, publicRegistrationKey 
   };
 }
 
-function toPublicRegistrationResponse(patient, { created }) {
-  return {
+function toPublicRegistrationResponse(patient, { created, consultantDoctor }) {
+  const body = {
     status: created ? "created" : "existing",
     UMRNo: patient.UMRNo,
     name: patient.name,
     registration_date: patient.registration_date,
   };
+  if (created && consultantDoctor) {
+    body.consultantDoctor = consultantDoctor;
+  }
+  return body;
 }
 
 module.exports = {
@@ -215,6 +300,9 @@ module.exports = {
   resetPublicOpRateLimit,
   assertHospitalAllowsPublicOp,
   validatePublicOpPayload,
+  listPublicConsultantDoctors,
+  findActiveConsultantDoctor,
+  createPublicOpVisit,
   buildTrustedPublicPatientDoc,
   toPublicRegistrationResponse,
   RATE_LIMIT,

@@ -36,6 +36,12 @@ const hospitalSchema = new mongoose.Schema(
     },
     /** Merges with plan; support can toggle booleans to unlock modules */
     moduleOverrides: { type: mongoose.Schema.Types.Mixed, default: {} },
+    /** full = billing in this HMS. clinical = care and reports only. */
+    productMode: {
+      type: String,
+      enum: ["full", "clinical"],
+      default: "full",
+    },
     settings: {
       currency: { type: String, default: "INR" },
       timezone: { type: String, default: "Asia/Kolkata" },

@@ -33,7 +33,8 @@ const ROLE_MODULE_REQUIREMENTS = {
 
 function stripPassword(staff) {
   if (!staff) return staff;
-  const obj = typeof staff.toObject === "function" ? staff.toObject() : { ...staff };
+  const obj =
+    typeof staff.toObject === "function" ? staff.toObject() : { ...staff };
   delete obj.password;
   delete obj.loginPassword;
   return obj;
@@ -96,7 +97,9 @@ function requireRoleEnabledByPlan(roleFromRequest = (req) => req.body?.type) {
 router.get("/", requirePermission("staff.read"), async (req, res) => {
   try {
     const Staff = req.tenantDb.model("Staff");
-    const staff = await Staff.find({ hospitalId: req.hospitalId }).select("-password");
+    const staff = await Staff.find({ hospitalId: req.hospitalId }).select(
+      "-password",
+    );
     res.json(staff);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -121,22 +124,28 @@ router.get("/:id", requirePermission("staff.read"), async (req, res) => {
 });
 
 // Get staff member by employee ID
-router.get("/employee/:employeeId", requirePermission("staff.read"), async (req, res) => {
-  try {
-    const Staff = req.tenantDb.model("Staff");
-    const staff = await Staff.findOne({
-      id: req.params.employeeId,
-      hospitalId: req.hospitalId,
-    }).select("-password -loginPassword");
-    if (!staff) {
-      return res.status(404).json({ message: "Staff member not found" });
-    }
+router.get(
+  "/employee/:employeeId",
+  requirePermission("staff.read"),
+  async (req, res) => {
+    try {
+      const Staff = req.tenantDb.model("Staff");
+      const staff = await Staff.findOne({
+        id: req.params.employeeId,
+        hospitalId: req.hospitalId,
+      }).select("-password -loginPassword");
+      if (!staff) {
+        return res.status(404).json({ message: "Staff member not found" });
+      }
 
-    res.json(typeof staff.toObject === "function" ? staff.toObject() : { ...staff });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
+      res.json(
+        typeof staff.toObject === "function" ? staff.toObject() : { ...staff },
+      );
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  },
+);
 
 // Create new staff member
 router.post(
@@ -166,7 +175,9 @@ router.post(
 
       const staff = new Staff({ ...staffData, hospitalId: req.hospitalId });
       const newStaff = await staff.save();
-      await writeAuditLog(req, "staff.create", newStaff, { role: newStaff.type });
+      await writeAuditLog(req, "staff.create", newStaff, {
+        role: newStaff.type,
+      });
       res.status(201).json(stripPassword(newStaff));
     } catch (error) {
       res.status(400).json({ message: error.message });
@@ -242,7 +253,9 @@ router.put(
         req,
         previousType !== staff.type ? "staff.role.change" : "staff.update",
         staff,
-        previousType !== staff.type ? { from: previousType, to: staff.type } : {},
+        previousType !== staff.type
+          ? { from: previousType, to: staff.type }
+          : {},
       );
       res.json(staff);
     } catch (error) {
@@ -316,7 +329,9 @@ router.put(
         req,
         previousType !== staff.type ? "staff.role.change" : "staff.update",
         staff,
-        previousType !== staff.type ? { from: previousType, to: staff.type } : {},
+        previousType !== staff.type
+          ? { from: previousType, to: staff.type }
+          : {},
       );
       res.json(staff);
     } catch (error) {
@@ -349,18 +364,22 @@ router.delete(
 );
 
 // Get staff by department
-router.get("/department/:department", requirePermission("staff.read"), async (req, res) => {
-  try {
-    const Staff = req.tenantDb.model("Staff");
-    const staff = await Staff.find({
-      department: req.params.department,
-      hospitalId: req.hospitalId,
-    }).select("-password");
-    res.json(staff);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
+router.get(
+  "/department/:department",
+  requirePermission("staff.read"),
+  async (req, res) => {
+    try {
+      const Staff = req.tenantDb.model("Staff");
+      const staff = await Staff.find({
+        department: req.params.department,
+        hospitalId: req.hospitalId,
+      }).select("-password");
+      res.json(staff);
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  },
+);
 
 // Get staff by type
 router.get("/type/:type", requirePermission("staff.read"), async (req, res) => {
@@ -377,17 +396,21 @@ router.get("/type/:type", requirePermission("staff.read"), async (req, res) => {
 });
 
 // Get staff by status
-router.get("/status/:status", requirePermission("staff.read"), async (req, res) => {
-  try {
-    const Staff = req.tenantDb.model("Staff");
-    const staff = await Staff.find({
-      status: req.params.status,
-      hospitalId: req.hospitalId,
-    }).select("-password");
-    res.json(staff);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
+router.get(
+  "/status/:status",
+  requirePermission("staff.read"),
+  async (req, res) => {
+    try {
+      const Staff = req.tenantDb.model("Staff");
+      const staff = await Staff.find({
+        status: req.params.status,
+        hospitalId: req.hospitalId,
+      }).select("-password");
+      res.json(staff);
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  },
+);
 
 module.exports = router;

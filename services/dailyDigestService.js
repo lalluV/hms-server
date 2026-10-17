@@ -170,17 +170,18 @@ async function computeHospitalDailyDigest(tenantDb, hospitalId, targetDate = new
 }
 
 function moneyLine(label, amount) {
-  return `${label} — *${formatCurrency(amount)}*`;
+  return `${label}: *${formatCurrency(amount)}*`;
 }
 
 function countLine(label, count) {
-  return `${label} — *${Number(count) || 0}*`;
+  return `${label}: *${Number(count) || 0}*`;
 }
 
 function formatDailyDigestWhatsAppMessage(hospitalName, digest) {
   const name = hospitalName || "Hospital";
   const { formattedDate, dayOfWeek, streams, activity, financials } = digest;
 
+  // One metric per line — WhatsApp text preserves these newlines
   const lines = [
     `*${name}*`,
     `Daily digest · ${dayOfWeek}, ${formattedDate}`,
@@ -208,12 +209,18 @@ function formatDailyDigestWhatsAppMessage(hospitalName, digest) {
   return lines.join("\n");
 }
 
-function formatDailyDigestCompactSummary(hospitalName, digest) {
-  const { formattedDate, streams, financials } = digest;
-  const parts = streams.map(
-    (stream) => `${stream.name} ${formatCurrency(stream.amount)}`,
-  );
-  return `${hospitalName || "Hospital"} ${formattedDate}: ${parts.join(", ")}. Gross ${formatCurrency(financials.grossCollections)}, Expenses ${formatCurrency(financials.expenses)}, Net ${formatCurrency(financials.netCollections)}.`;
+function formatDailyDigestCompactSummary(_hospitalName, digest) {
+  const { streams, financials } = digest;
+  // Fallback multi-line summary (session text only — not for template vars)
+  const lines = [
+    `Gross: ${formatCurrency(financials.grossCollections)}`,
+    ...streams.map(
+      (stream) => `${stream.name}: ${formatCurrency(stream.amount)}`,
+    ),
+    `Expenses: ${formatCurrency(financials.expenses)}`,
+    `Net: ${formatCurrency(financials.netCollections)}`,
+  ];
+  return lines.join("\n");
 }
 
 module.exports = {

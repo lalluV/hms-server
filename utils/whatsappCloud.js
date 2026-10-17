@@ -441,8 +441,30 @@ function toWhatsAppTemplateParam(value) {
 }
 
 /**
+ * Template vars cannot contain real newlines (Meta rejects the send).
+ * Turn each original line into a bullet segment so the body stays readable.
+ */
+function toWhatsAppDigestTemplateParam(value) {
+  const text = String(value ?? "")
+    .replace(/\*/g, "")
+    .replace(/[\u2013\u2014]/g, "-")
+    .replace(/\r\n/g, "\n")
+    .replace(/[\t]+/g, " ")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(" • ")
+    .replace(/ {2,}/g, " ")
+    .trim();
+  return (text || "-").slice(0, 1024);
+}
+
+/**
  * Send Daily Financial and Operations Digest to Hospital Owner / Director.
- * Tries template if configured, otherwise sends rich direct text message.
+ *
+ * Template first (works outside the 24h window — this is what actually
+ * delivers). Then best-effort multi-line session text so formatting matches
+ * the in-app preview. Follow-up failures must not fail the whole send.
  */
 async function sendDailyDigestWhatsApp({
   phone,
@@ -451,20 +473,40 @@ async function sendDailyDigestWhatsApp({
   summaryText,
   fullFormattedMessage,
 }) {
-  // If specific template override is configured, attempt template first
+  const richMessage = fullFormattedMessage || summaryText;
+  // Multi-line body for template {{3}} — one metric per line via U+2028
+  const templateBody = fullFormattedMessage || summaryText || "Daily digest ready.";
+
   if (process.env.WHATSAPP_TEMPLATE_DAILY_DIGEST) {
     try {
-      return await sendWhatsAppTemplate({
+      const templateResult = await sendWhatsAppTemplate({
         phone,
         templateKey: "daily_financial_digest",
         bodyParams: [
           toWhatsAppTemplateParam(hospitalName || "Hospital"),
           toWhatsAppTemplateParam(dateStr || "Today"),
-          toWhatsAppTemplateParam(
-            fullFormattedMessage || summaryText || "Summary report ready.",
-          ),
+          toWhatsAppDigestTemplateParam(templateBody),
         ],
       });
+
+      // Session window is open after template — send proper multi-line text.
+      // Never let this fail the digest send (template already delivered).
+      if (fullFormattedMessage) {
+        try {
+          await new Promise((r) => setTimeout(r, 800));
+          await sendWhatsAppTextMessage({
+            phone,
+            message: fullFormattedMessage,
+          });
+        } catch (followUpErr) {
+          console.warn(
+            "Multi-line digest follow-up failed (template already sent):",
+            followUpErr.message
+          );
+        }
+      }
+
+      return templateResult;
     } catch (templateErr) {
       console.warn(
         "Template send failed for daily digest, falling back to direct text:",
@@ -473,10 +515,9 @@ async function sendDailyDigestWhatsApp({
     }
   }
 
-  // Fallback to direct rich text message
   return sendWhatsAppTextMessage({
     phone,
-    message: fullFormattedMessage || summaryText,
+    message: richMessage,
   });
 }
 

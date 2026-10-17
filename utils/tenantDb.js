@@ -8,9 +8,11 @@ const {
 // Cache for tenant database connections
 const tenantConnections = new Map();
 const tenantLastAccessed = new Map();
+/** In-flight connect promises — prevents parallel cold starts from opening duplicate pools. */
+const tenantConnecting = new Map();
 
-// Evict isolated tenant connections idle for more than 5 minutes
-const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+// Evict isolated tenant connections idle for more than 30 minutes
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 const evictionInterval = setInterval(async () => {
   const now = Date.now();
   for (const [hospitalId, lastAccess] of tenantLastAccessed.entries()) {
@@ -19,7 +21,7 @@ const evictionInterval = setInterval(async () => {
       await closeTenantConnection(hospitalId);
     }
   }
-}, 2 * 60 * 1000);
+}, 5 * 60 * 1000);
 
 if (evictionInterval.unref) {
   evictionInterval.unref();
@@ -63,6 +65,53 @@ function getTenantDatabaseName(hospitalId) {
 }
 
 /**
+ * Open a new isolated tenant connection (caller must manage cache / in-flight map).
+ */
+async function createTenantConnection(hospitalId) {
+  const dbName = getTenantDatabaseName(hospitalId);
+  const baseUri =
+    process.env.MONGO_URI_TENANT_BASE || "mongodb://localhost:27017";
+  const cleanBaseUri = baseUri.replace(/\/$/, "");
+  const tenantUri = `${cleanBaseUri}/${dbName}?authSource=admin`;
+
+  console.log(
+    `📡 Creating connection for hospital ${hospitalId} to database ${dbName}`,
+  );
+
+  const connection = await mongoose.createConnection(tenantUri, {
+    maxPoolSize: 10,
+    minPoolSize: 1, // Keep one socket warm so first requests after idle don't pay reconnect
+    maxIdleTimeMS: 10 * 60 * 1000,
+    socketTimeoutMS: 45000,
+    serverSelectionTimeoutMS: 5000,
+  });
+
+  connection.on("connected", () => {
+    console.log(`✅ Tenant database connected: ${dbName}`);
+  });
+
+  connection.on("error", (err) => {
+    console.error(`❌ Tenant database error for ${dbName}:`, err);
+  });
+
+  connection.on("disconnected", () => {
+    console.warn(`⚠️  Tenant database disconnected: ${dbName}`);
+    // Only drop cache if this is still the cached instance (avoid racing a reconnect)
+    if (tenantConnections.get(hospitalId) === connection) {
+      tenantConnections.delete(hospitalId);
+      tenantLastAccessed.delete(hospitalId);
+    }
+  });
+
+  registerTenantModels(connection);
+  await dropLegacyGlobalUmrIndex(connection);
+
+  tenantConnections.set(hospitalId, connection);
+  tenantLastAccessed.set(hospitalId, Date.now());
+  return connection;
+}
+
+/**
  * Get or create a tenant database connection
  * @param {string} hospitalId - The hospital ObjectId
  * @returns {Promise<mongoose.Connection>} Tenant database connection
@@ -73,73 +122,28 @@ async function getTenantConnection(hospitalId) {
       throw new Error("Hospital ID is required for tenant connection");
     }
 
-    // Check if connection already exists in cache
     if (tenantConnections.has(hospitalId)) {
       const connection = tenantConnections.get(hospitalId);
-
-      // Verify connection is still alive
       if (connection.readyState === 1) {
         tenantLastAccessed.set(hospitalId, Date.now());
         return connection;
-      } else {
-        // Connection is dead, remove from cache and recreate
-        console.warn(
-          `⚠️  Connection for hospital ${hospitalId} is dead, reconnecting...`,
-        );
-        tenantConnections.delete(hospitalId);
-        tenantLastAccessed.delete(hospitalId);
       }
-    }
-
-    // Create new connection
-    const dbName = getTenantDatabaseName(hospitalId);
-    const baseUri =
-      process.env.MONGO_URI_TENANT_BASE || "mongodb://localhost:27017";
-
-    // Properly construct the connection URI with database name
-    // Remove any trailing slash from baseUri
-    const cleanBaseUri = baseUri.replace(/\/$/, "");
-    const tenantUri = `${cleanBaseUri}/${dbName}?authSource=admin`;
-
-    console.log(
-      `📡 Creating connection for hospital ${hospitalId} to database ${dbName}`,
-    );
-
-    const connection = await mongoose.createConnection(tenantUri, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      maxPoolSize: 3, // Small pool per isolated tenant to prevent connection blowup
-      minPoolSize: 0, // Allow scaling down to 0 when idle
-      maxIdleTimeMS: 60000, // Close idle pool connections after 1 min
-      socketTimeoutMS: 45000,
-      serverSelectionTimeoutMS: 5000,
-    });
-
-    // Handle connection events
-    connection.on("connected", () => {
-      console.log(`✅ Tenant database connected: ${dbName}`);
-    });
-
-    connection.on("error", (err) => {
-      console.error(`❌ Tenant database error for ${dbName}:`, err);
-    });
-
-    connection.on("disconnected", () => {
-      console.warn(`⚠️  Tenant database disconnected: ${dbName}`);
-      // Remove from cache on disconnect
+      console.warn(
+        `⚠️  Connection for hospital ${hospitalId} is dead, reconnecting...`,
+      );
       tenantConnections.delete(hospitalId);
       tenantLastAccessed.delete(hospitalId);
+    }
+
+    if (tenantConnecting.has(hospitalId)) {
+      return tenantConnecting.get(hospitalId);
+    }
+
+    const connecting = createTenantConnection(hospitalId).finally(() => {
+      tenantConnecting.delete(hospitalId);
     });
-
-    // Register tenant models with this connection
-    registerTenantModels(connection);
-    await dropLegacyGlobalUmrIndex(connection);
-
-    // Cache the connection and update last accessed timestamp
-    tenantConnections.set(hospitalId, connection);
-    tenantLastAccessed.set(hospitalId, Date.now());
-
-    return connection;
+    tenantConnecting.set(hospitalId, connecting);
+    return connecting;
   } catch (error) {
     console.error(
       `❌ Error creating tenant connection for hospital ${hospitalId}:`,
@@ -155,11 +159,12 @@ async function getTenantConnection(hospitalId) {
  */
 async function closeTenantConnection(hospitalId) {
   try {
+    tenantConnecting.delete(hospitalId);
     if (tenantConnections.has(hospitalId)) {
       const connection = tenantConnections.get(hospitalId);
-      await connection.close();
       tenantConnections.delete(hospitalId);
       tenantLastAccessed.delete(hospitalId);
+      await connection.close();
       console.log(`✅ Closed tenant connection for hospital ${hospitalId}`);
     }
   } catch (error) {

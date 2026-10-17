@@ -76,7 +76,23 @@ function buildEntitlements(hospital) {
     });
   }
 
+  const productMode =
+    String((hospital && hospital.productMode) || "full").toLowerCase() ===
+    "clinical"
+      ? "clinical"
+      : "full";
+
+  if (productMode === "clinical" && isAccessAllowed) {
+    merged.pharmacy = false;
+    merged.expenses = false;
+    merged.insurance = false;
+    merged.commission = false;
+    merged.vendors = false;
+    merged.indent = false;
+  }
+
   return {
+    productMode,
     modules: merged,
     limits: { ...limits },
     isAccessAllowed,

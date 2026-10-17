@@ -2,13 +2,16 @@ const express = require("express");
 const router = express.Router();
 const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
 
+const { rejectClinicalBilling } = require("../utils/clinicalMode");
+
 applyTenantEntitlements(router, { moduleKey: "pharmacy" });
+router.use(rejectClinicalBilling);
 
 // Get all pharmacy receipts with pagination support
 router.get("/", async (req, res) => {
   try {
     const PharmacyReceipt = req.tenantDb.model("PharmacyReceipt");
-    
+
     const {
       page = 1,
       limit = 20,
@@ -140,7 +143,7 @@ router.put("/:id", async (req, res) => {
     const receipt = await PharmacyReceipt.findByIdAndUpdate(
       { receiptId: req.params.id, hospitalId: req.hospitalId },
       req.body,
-      { new: true }
+      { new: true },
     );
     if (!receipt) {
       return res.status(404).json({ message: "Pharmacy receipt not found" });
@@ -235,7 +238,7 @@ router.patch("/:id/status", async (req, res) => {
     const receipt = await PharmacyReceipt.findByIdAndUpdate(
       { _id: req.params.id, hospitalId: req.hospitalId },
       { status: req.body.status },
-      { new: true }
+      { new: true },
     );
     if (!receipt) {
       return res.status(404).json({ message: "Pharmacy receipt not found" });

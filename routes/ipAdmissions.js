@@ -5,6 +5,7 @@ const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
 const { admitPatient, updateEraChart } = require("../utils/admitPatient");
 const { claimBed, releaseBed } = require("../utils/bedAllocation");
 const { localYmd, localHm } = require("../utils/localDate");
+const { isClinicalMode } = require("../utils/clinicalMode");
 
 applyTenantEntitlements(router, { moduleKey: "core" });
 
@@ -229,11 +230,49 @@ router.get("/", async (req, res) => {
           }
         : { admissionDate: -1, createdAt: -1 };
 
-    const admissionsPromise = IPAdmission.find(filter)
-      .sort(sort)
-      .skip(skip)
-      .limit(limitNum)
-      .lean();
+    // Roster list: summary fields + med/test counts — never ship full clinical charts.
+    const listProjection = {
+      ipNumber: 1,
+      UMRNo: 1,
+      patientName: 1,
+      patientId: 1,
+      admissionDate: 1,
+      admissionTime: 1,
+      patient_status: 1,
+      consultantDoctor: 1,
+      doctorId: 1,
+      wardName: 1,
+      wardId: 1,
+      selectedBed: 1,
+      dischargeDate: 1,
+      dischargedAt: 1,
+      paymentMethod: 1,
+      insurance_provider: 1,
+      createdAt: 1,
+      updatedAt: 1,
+      medicineCount: {
+        $size: {
+          $filter: {
+            input: { $ifNull: ["$treatment", []] },
+            as: "med",
+            cond: { $ne: ["$$med.isActive", false] },
+          },
+        },
+      },
+      testCount: { $size: { $ifNull: ["$investigations", []] } },
+    };
+
+    const sortStage = Object.fromEntries(
+      Object.entries(sort).map(([key, dir]) => [key, dir]),
+    );
+
+    const admissionsPromise = IPAdmission.aggregate([
+      { $match: filter },
+      { $sort: sortStage },
+      { $skip: skip },
+      { $limit: limitNum },
+      { $project: listProjection },
+    ]);
 
     const totalPromise =
       status === "Admitted"
@@ -293,6 +332,8 @@ router.get("/", async (req, res) => {
 
         return {
           ...admission,
+          medicineCount: admission.medicineCount || 0,
+          testCount: admission.testCount || 0,
           name: patient?.name || admission.patientName || "",
           age: patient?.age,
           gender: patient?.gender,
@@ -749,7 +790,13 @@ router.post("/:id/discharge", async (req, res) => {
     const Patient = req.tenantDb.model("Patient");
     const { id } = req.params;
 
-    const body = req.body || {};
+    const body = { ...(req.body || {}) };
+    if (isClinicalMode(req.entitlements)) {
+      body.paymentStatus = "not_applicable";
+      body.finalBillAmount = 0;
+      body.discount = 0;
+      body.insurance = 0;
+    }
     const dischargeDate = body.dischargeDate || localYmd();
     const dischargeTime = body.dischargeTime || localHm();
     const dischargeCondition = body.dischargeCondition || "Stable";

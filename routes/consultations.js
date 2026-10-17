@@ -31,10 +31,18 @@ router.get("/", async (req, res) => {
 
     // Build query
     const query = { hospitalId: req.hospitalId };
+    const andConditions = [];
 
-    // Filter by doctor ID
+    // Filter by doctor ID (legacy top-level doctorId + doctorData nested ids)
     if (doctorId) {
-      query.doctorId = doctorId;
+      const id = String(doctorId);
+      andConditions.push({
+        $or: [
+          { doctorId: id },
+          { "doctorData.id": id },
+          { "doctorData._id": id },
+        ],
+      });
     }
 
     // Filter by patient ID
@@ -48,8 +56,14 @@ router.get("/", async (req, res) => {
     }
 
     // createdAt is stored as an ISO string; compare as ISO strings.
+    // For date-only endDate, include the full local calendar day (end of day UTC+buffer).
     const fromIso = startDate ? toIso(startDate) : null;
-    const toIsoValue = endDate ? toIso(endDate) : null;
+    let toIsoValue = endDate ? toIso(endDate) : null;
+    if (toIsoValue && /^\d{4}-\d{2}-\d{2}$/.test(String(endDate).trim())) {
+      const endOfDay = new Date(toIsoValue);
+      endOfDay.setUTCHours(23, 59, 59, 999);
+      toIsoValue = endOfDay.toISOString();
+    }
     if (fromIso || toIsoValue) {
       query.createdAt = {};
       if (fromIso) query.createdAt.$gte = fromIso;
@@ -59,12 +73,20 @@ router.get("/", async (req, res) => {
     // Search filter
     if (search && search.length >= 2) {
       const pattern = escapeRegex(search);
-      query.$or = [
-        { receiptId: { $regex: pattern, $options: "i" } },
-        { patientId: { $regex: pattern, $options: "i" } },
-        { patientName: { $regex: pattern, $options: "i" } },
-        { doctorName: { $regex: pattern, $options: "i" } },
-      ];
+      andConditions.push({
+        $or: [
+          { receiptId: { $regex: pattern, $options: "i" } },
+          { patientId: { $regex: pattern, $options: "i" } },
+          { patientName: { $regex: pattern, $options: "i" } },
+          { doctorName: { $regex: pattern, $options: "i" } },
+        ],
+      });
+    }
+
+    if (andConditions.length === 1) {
+      Object.assign(query, andConditions[0]);
+    } else if (andConditions.length > 1) {
+      query.$and = andConditions;
     }
 
     // Calculate pagination
@@ -200,9 +222,14 @@ router.get("/patient/:patientId", async (req, res) => {
 router.get("/doctor/:doctorId", async (req, res) => {
   try {
     const Consultation = req.tenantDb.model("Consultation");
+    const id = String(req.params.doctorId);
     const consultations = await Consultation.find({
-      doctorId: req.params.doctorId,
       hospitalId: req.hospitalId,
+      $or: [
+        { doctorId: id },
+        { "doctorData.id": id },
+        { "doctorData._id": id },
+      ],
     });
     res.json(consultations);
   } catch (error) {

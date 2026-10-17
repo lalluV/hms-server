@@ -2,13 +2,16 @@ const express = require("express");
 const router = express.Router();
 const { applyTenantEntitlements } = require("../utils/applyTenantEntitlements");
 
+const { rejectClinicalBilling } = require("../utils/clinicalMode");
+
 applyTenantEntitlements(router, { moduleKey: "ipd" });
+router.use(rejectClinicalBilling);
 
 // Get all advance receipts with pagination support
 router.get("/", async (req, res) => {
   try {
     const AdvanceReceipt = req.tenantDb.model("AdvanceReceipt");
-    
+
     const {
       page = 1,
       limit = 20,
@@ -122,7 +125,7 @@ router.put("/:id", async (req, res) => {
     const receipt = await AdvanceReceipt.findOneAndUpdate(
       { id: req.params.id, hospitalId: req.hospitalId },
       req.body,
-      { new: true }
+      { new: true },
     );
     if (!receipt) {
       return res.status(404).json({ message: "Advance receipt not found" });

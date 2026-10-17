@@ -16,6 +16,9 @@ const {
   hydrateReceipts,
   normalizeReceiptItemsForStorage,
 } = require("../utils/hydrateDiagnosticParameters");
+const {
+  prepareClinicalDiagnosticsBody,
+} = require("../utils/clinicalMode");
 
 async function resolveReceiptPatientPhone(req, receipt) {
   if (!receipt) return null;
@@ -89,7 +92,10 @@ function buildPublicReceipt(receipt) {
       const reportHtml = sanitizeReportHtml(
         item.textReport || item.reportContent || "",
       );
-      const reportText = reportHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      const reportText = reportHtml
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
       const reportUrl = item.reportUrl || "";
       if (!reportText && !reportUrl) return null;
       return {
@@ -179,11 +185,9 @@ router.get("/public/:token", async (req, res) => {
       return res.status(404).json({ message: "Lab report not found." });
     }
 
-    const [hydrated] = await hydrateReceipts(
-      Parameter,
-      hospitalObjectId,
-      [receipt],
-    );
+    const [hydrated] = await hydrateReceipts(Parameter, hospitalObjectId, [
+      receipt,
+    ]);
     const publicReceipt = buildPublicReceipt(hydrated);
     const hasLabResults = publicReceipt?.items?.length > 0;
     const hasRadiologyReports = publicReceipt?.radiologyReports?.length > 0;
@@ -200,7 +204,9 @@ router.get("/public/:token", async (req, res) => {
     const Stamp = connection.model("Stamp");
     const Staff = connection.model("Staff");
 
-    const stampsPromise = Stamp.find({ isActive: true }).lean().catch(() => []);
+    const stampsPromise = Stamp.find({ isActive: true })
+      .lean()
+      .catch(() => []);
 
     const radiologyOnly = hasRadiologyReports && !hasLabResults;
     const radiologySignerName = radiologyOnly
@@ -253,7 +259,7 @@ router.get("/public/:token", async (req, res) => {
               ],
               active: { $ne: false },
             },
-            { name: 1, signatureUrl: 1, qualification: 1, specialization: 1 }
+            { name: 1, signatureUrl: 1, qualification: 1, specialization: 1 },
           ).lean();
           if (direct?.signatureUrl) return direct;
         }
@@ -262,14 +268,24 @@ router.get("/public/:token", async (req, res) => {
         let labIncharge = await Staff.findOne(
           {
             $or: [
-              { type: { $in: ["LabTechnician", "Lab Incharge", "LabIncharge", "Pathologist", "Laboratory"] } },
+              {
+                type: {
+                  $in: [
+                    "LabTechnician",
+                    "Lab Incharge",
+                    "LabIncharge",
+                    "Pathologist",
+                    "Laboratory",
+                  ],
+                },
+              },
               { department: "Laboratory" },
               { position: /lab|patholog/i },
             ],
             active: { $ne: false },
             signatureUrl: { $exists: true, $ne: null, $ne: "" },
           },
-          { name: 1, signatureUrl: 1, qualification: 1, specialization: 1 }
+          { name: 1, signatureUrl: 1, qualification: 1, specialization: 1 },
         ).lean();
 
         // Fallback: any active staff with signature
@@ -279,7 +295,7 @@ router.get("/public/:token", async (req, res) => {
               active: { $ne: false },
               signatureUrl: { $exists: true, $ne: null, $ne: "" },
             },
-            { name: 1, signatureUrl: 1, qualification: 1, specialization: 1 }
+            { name: 1, signatureUrl: 1, qualification: 1, specialization: 1 },
           ).lean();
         }
 
@@ -297,17 +313,18 @@ router.get("/public/:token", async (req, res) => {
     ]);
 
     const stampDepartment = radiologyOnly ? "Radiology" : "Laboratory";
+    const activeStamps = (stamps || []).filter((s) => s.isActive !== false);
     const departmentStamp =
-      (stamps || []).find(
-        (s) => s.department === stampDepartment && s.isDefault,
+      activeStamps.find(
+        (s) =>
+          s.department === stampDepartment &&
+          (s.category === "department" || !s.category),
       ) ||
-      (stamps || []).find((s) => s.department === stampDepartment) ||
+      activeStamps.find((s) => s.department === stampDepartment) ||
       null;
 
     const hospitalStamp =
-      (stamps || []).find((s) => s.category === "hospital" && s.isDefault) ||
-      (stamps || []).find((s) => s.category === "hospital") ||
-      null;
+      activeStamps.find((s) => s.category === "hospital") || null;
 
     return res.json({
       hospital: buildPublicHospital(hospital),
@@ -324,7 +341,9 @@ router.get("/public/:token", async (req, res) => {
         radiologySignerName ||
         (typeof doctorSearch === "string" ? doctorSearch : ""),
       signatureLabel: radiologyOnly ? "Radiology Technician" : "Lab Incharge",
-      departmentStampLabel: radiologyOnly ? "Radiology Stamp" : "Laboratory Stamp",
+      departmentStampLabel: radiologyOnly
+        ? "Radiology Stamp"
+        : "Laboratory Stamp",
     });
   } catch (error) {
     console.error("Public lab report view error:", error);
@@ -528,7 +547,11 @@ router.get("/:id", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
-    const body = { ...req.body };
+    const body = prepareClinicalDiagnosticsBody(
+      req.entitlements,
+      { ...req.body },
+      { creating: true },
+    );
     if (Array.isArray(body.items)) {
       body.items = normalizeReceiptItemsForStorage(body.items);
     }
@@ -540,7 +563,10 @@ router.post("/", async (req, res) => {
     const hydrated = await withLiveParameters(req, newReceipt);
     res.status(201).json(hydrated);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    res.status(error.status || 400).json({
+      message: error.message,
+      code: error.code,
+    });
   }
 });
 
@@ -548,7 +574,9 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
-    const body = { ...req.body };
+    const body = prepareClinicalDiagnosticsBody(req.entitlements, {
+      ...req.body,
+    });
     if (Array.isArray(body.items)) {
       body.items = normalizeReceiptItemsForStorage(body.items);
     }
@@ -563,7 +591,10 @@ router.put("/:id", async (req, res) => {
     const hydrated = await withLiveParameters(req, receipt);
     res.json(hydrated);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    res.status(error.status || 400).json({
+      message: error.message,
+      code: error.code,
+    });
   }
 });
 

@@ -421,15 +421,21 @@ router.get("/public/:token", async (req, res) => {
         }
       : null;
 
+    const activeStamps = (stamps || []).filter((s) => s.isActive !== false);
+    // StampManagement has no OPD/Consultation dept — use General when present
     const departmentStamp =
-      (stamps || []).find((s) => (s.department === "OPD" || s.department === "Consultation") && s.isDefault) ||
-      (stamps || []).find((s) => s.department === "OPD" || s.department === "Consultation") ||
+      activeStamps.find(
+        (s) =>
+          ["General", "OPD", "Consultation"].includes(s.department) &&
+          s.category === "department",
+      ) ||
+      activeStamps.find((s) =>
+        ["General", "OPD", "Consultation"].includes(s.department),
+      ) ||
       null;
 
     const hospitalStamp =
-      (stamps || []).find((s) => s.category === "hospital" && s.isDefault) ||
-      (stamps || []).find((s) => s.category === "hospital") ||
-      null;
+      activeStamps.find((s) => s.category === "hospital") || null;
 
     return res.json({
       hospital: buildPublicHospital(hospital),
@@ -725,7 +731,11 @@ router.post("/check-in", async (req, res) => {
     let pastWeight = "";
     let pastHeight = "";
 
-    if (duplicatePastRx === true || duplicatePastRx === "true") {
+    const allowDuplicateRx = req.user?.type === "Doctor";
+    if (
+      allowDuplicateRx &&
+      (duplicatePastRx === true || duplicatePastRx === "true")
+    ) {
       const pastPrescription = await Prescription.findOne({
         hospitalId: req.hospitalId,
         $or: [{ patientId: patient._id }, { UMRNo: patient.UMRNo }],
