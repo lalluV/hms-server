@@ -4,6 +4,7 @@
  *
  * Rules:
  * - Discharge care: Take-home medications WITH explicit duration (e.g. 5 days, like OPD).
+ * - SOS / PRN medicines: duration "as needed" (no day count), same as OPD.
  * - Extracts discharge fields: finalDiagnosis, dischargeInstructions, followUpPlan.
  * - Manages take-home dischargeMedications list directly.
  */
@@ -61,7 +62,9 @@ const DISCHARGE_REVIEW_FOLLOWUP_SYSTEM_ADDENDUM = `
 DISCHARGE SUMMARY FOLLOW-UP MODE — PATCH ONLY
 1. DISCHARGE TAKE-HOME PRESCRIPTIONS (WITH DURATION):
 - Medicines are take-home discharge prescriptions dispensed by pharmacy for outpatient consumption.
-- DURATION IS REQUIRED (e.g. "5 days", "7 days", "10 days", "1 month"). Default to "5 days" if unspecified.
+- DURATION IS REQUIRED for scheduled courses (e.g. "5 days", "7 days", "10 days", "1 month"). Default to "5 days" if unspecified.
+- SOS / PRN / as-needed medicines (same as OPD): set duration to exactly "as needed" — do NOT invent a day count (never "5 days" for SOS). Put SOS in directions; quantity may still be set (e.g. 10) when useful.
+- If the doctor states both SOS and an explicit course (e.g. "pcm sos 5 days"), keep that day count as duration.
 - Include accurate dosage, frequency, route, and plain English instructions.
 - Only "add" actions apply for take-home medicines (or "remove" to drop a drug).
 
@@ -117,7 +120,7 @@ Return exactly this JSON shape:
       "medicine": {
         "name": "Exact Brand or Generic Name (strip Tab/Inj/Cap)",
         "type": "Tablet" | "Capsules" | "Syrup" | "Ointment" | "Drops" | "Inhaler" | "Sachet",
-        "duration": "5 days",
+        "duration": "5 days | as needed",
         "directions": "Directions in plain English",
         "dosages": [ { "time": "Morning" | "Afternoon" | "Evening" | "Night", "amount": 1, "beforeFood": false } ]
       }
@@ -131,11 +134,71 @@ Return exactly this JSON shape:
   ]
 }`;
 
+function isSosOrPrnMedicine(med = {}) {
+  const blob = [
+    med?.duration,
+    med?.durationText,
+    med?.directions,
+    med?.instructions,
+    med?.patientDirections,
+    med?.frequencyCode,
+    med?.frequency?.code,
+  ]
+    .map((v) =>
+      v && typeof v === "object" ? JSON.stringify(v) : String(v || ""),
+    )
+    .join(" ");
+  return /\b(sos|prn|as\s+needed)\b/i.test(blob);
+}
+
+function hasExplicitCourseDuration(duration) {
+  if (duration && typeof duration === "object" && Number(duration.value) > 0) {
+    const unit = String(duration.unit || "").toLowerCase();
+    if (unit.startsWith("once") || unit === "stat") return true;
+    return true;
+  }
+  const text = String(duration || "").trim();
+  if (!text) return false;
+  if (/^as\s+needed\b|^sos\b|^prn\b/i.test(text)) return false;
+  return /\d/.test(text);
+}
+
+/** OPD-aligned: SOS/PRN → "as needed"; else default scheduled course to 5 days. */
+function resolveDischargeMedicineDuration(med = {}, fallback = "") {
+  const raw = med?.duration ?? med?.durationText ?? "";
+  if (isSosOrPrnMedicine(med)) {
+    // Keep a day/week course only when the doctor also spoke one (e.g. "sos 5d").
+    // Ignore a bare default "5 days" stamped onto SOS-only orders.
+    const spoken = [
+      med?.directions,
+      med?.instructions,
+      med?.patientDirections,
+    ].join(" ");
+    if (
+      /\b\d+\s*(?:d|days?|weeks?|months?)\b/i.test(spoken) &&
+      hasExplicitCourseDuration(raw)
+    ) {
+      return typeof raw === "object"
+        ? `${raw.value} ${raw.unit || "days"}`.trim()
+        : String(raw).trim();
+    }
+    return "as needed";
+  }
+  if (hasExplicitCourseDuration(raw)) {
+    return typeof raw === "object"
+      ? `${raw.value} ${raw.unit || "days"}`.trim()
+      : String(raw).trim();
+  }
+  const fallbackText = String(fallback || "").trim();
+  if (fallbackText) return fallbackText;
+  return "5 days";
+}
+
 function buildDischargeReviewFollowUpUserPrompt(instruction, currentChart) {
   const chart =
     currentChart && typeof currentChart === "object" ? currentChart : {};
   return `SETTING: DISCHARGE SUMMARY (Take-home discharge plan).
-DURATION: Required for medicines (e.g. "5 days", "10 days").
+DURATION: Required for scheduled medicines (e.g. "5 days", "10 days"). SOS/PRN → duration "as needed" (no day count).
 LABS: Repeat or recommended investigations.
 DISCHARGE FIELDS: finalDiagnosis, dischargeCondition, dischargeDestination, dischargeInstructions, followUpPlan, counselling, summarySections.
 FORMAT: Use short bullet lines ("- …") with newlines for readable clinical text — not long paragraphs.
@@ -363,7 +426,7 @@ router.post("/review-followup", async (req, res) => {
       if (kind === "add" && op.medicine) {
         medicines.push({
           ...op.medicine,
-          duration: op.medicine.duration || "5 days",
+          duration: resolveDischargeMedicineDuration(op.medicine),
           action: "add",
         });
       } else if (kind === "remove" && matchName) {
@@ -381,16 +444,18 @@ router.post("/review-followup", async (req, res) => {
               .toLowerCase() === matchName,
         );
         if (idx >= 0) {
+          const merged = { ...medicines[idx], ...op.medicine };
           medicines[idx] = {
-            ...medicines[idx],
-            ...op.medicine,
-            duration:
-              op.medicine.duration || medicines[idx].duration || "5 days",
+            ...merged,
+            duration: resolveDischargeMedicineDuration(
+              merged,
+              medicines[idx].duration,
+            ),
           };
         } else {
           medicines.push({
             ...op.medicine,
-            duration: op.medicine.duration || "5 days",
+            duration: resolveDischargeMedicineDuration(op.medicine),
             action: "add",
           });
         }

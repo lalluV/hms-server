@@ -44,6 +44,7 @@ const dischargeSummarySchema = new mongoose.Schema(
     dischargeMedications: [mongoose.Schema.Types.Mixed],
     repeatLabs: [mongoose.Schema.Types.Mixed],
     procedures: [mongoose.Schema.Types.Mixed],
+    dischargeVitals: mongoose.Schema.Types.Mixed,
 
     // Generated summary document state
     summary: { type: String },

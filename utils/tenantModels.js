@@ -257,6 +257,7 @@ function registerTenantModels(connection) {
         dischargeMedications: [mongoose.Schema.Types.Mixed],
         repeatLabs: [mongoose.Schema.Types.Mixed],
         procedures: [mongoose.Schema.Types.Mixed],
+        dischargeVitals: mongoose.Schema.Types.Mixed,
         dischargeSummary: { type: String },
         dischargeSummaryType: { type: String, default: "standard" },
         dischargeSummaryTimestamp: { type: Date },
