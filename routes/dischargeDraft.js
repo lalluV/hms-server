@@ -35,6 +35,7 @@ const DISCHARGE_FIELDS = [
   "repeatLabs",
   "procedures",
   "dischargeVitals",
+  "dischargeConsultants",
   "summary",
   "summaryType",
   "dischargeSummaryStatus",
