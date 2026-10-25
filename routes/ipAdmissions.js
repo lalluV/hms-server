@@ -623,6 +623,7 @@ const STAY_PATCH_KEYS = [
   "treatment",
   "otNotes",
   "surgeryNotes",
+  "outsideReports",
   "paymentMethod",
   "insurance_provider",
   "insurance_providerId",

@@ -930,11 +930,12 @@ router.post("/", async (req, res) => {
 
     const clinical = isClinicalMode(req.entitlements);
     // Manual hospital UMR / OP No are clinical-mode only.
-    // Clinical OP registration requires UMR; OP number stays optional.
+    // Reception/clinical staff must enter UMR; doctors may omit (auto-generate).
     const requestedUmr = clinical
       ? normalizeId(req.body?.UMRNo || req.body?.umrNo)
       : "";
-    if (clinical && !requestedUmr) {
+    const doctorMayOmitUmr = isDoctorRole(req);
+    if (clinical && !requestedUmr && !doctorMayOmitUmr) {
       return res.status(400).json({
         message: "UMR number is required for clinical mode.",
       });
@@ -1212,9 +1213,16 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// Delete patient
+// Delete patient (Admin / Receptionist only — blocked when any bills exist)
 router.delete("/:id", async (req, res) => {
   try {
+    const role = normalizeRole(req.user?.type);
+    if (role !== "Admin" && role !== "Receptionist") {
+      return res.status(403).json({
+        message: "Only Admin or Receptionist can delete patients.",
+      });
+    }
+
     const Patient = req.tenantDb.model("Patient");
     const existingPatient = await findPatientByIdOrUMR(
       Patient,
@@ -1225,6 +1233,48 @@ router.delete("/:id", async (req, res) => {
       return res.status(404).json({ message: "Patient not found" });
     }
     if (blockInpatientRecordAccess(req, res, existingPatient)) return;
+
+    const umr = existingPatient.UMRNo;
+    const patientOid = existingPatient._id;
+    const patientOidStr = String(patientOid);
+    const billMatch = {
+      hospitalId: req.hospitalId,
+      $or: [
+        { patientId: patientOid },
+        { patientId: patientOidStr },
+        ...(umr
+          ? [
+              { patientId: umr },
+              { UMRNo: umr },
+              { umrNo: umr },
+              { patientUmr: umr },
+            ]
+          : []),
+      ],
+    };
+
+    const DiagnosticsReceipt = req.tenantDb.model("DiagnosticsReceipt");
+    const PharmacyReceipt = req.tenantDb.model("PharmacyReceipt");
+    const AdvanceReceipt = req.tenantDb.model("AdvanceReceipt");
+
+    const [diagnosticsCount, pharmacyCount, advanceCount] = await Promise.all([
+      DiagnosticsReceipt.countDocuments(billMatch),
+      PharmacyReceipt.countDocuments(billMatch),
+      AdvanceReceipt.countDocuments(billMatch),
+    ]);
+
+    if (diagnosticsCount + pharmacyCount + advanceCount > 0) {
+      return res.status(409).json({
+        message:
+          "Cannot delete patient while lab, pharmacy, or advance bills exist. Clear bills first.",
+        bills: {
+          diagnostics: diagnosticsCount,
+          pharmacy: pharmacyCount,
+          advances: advanceCount,
+        },
+      });
+    }
+
     const patient = await Patient.findOneAndDelete({
       _id: existingPatient._id,
       hospitalId: req.hospitalId,

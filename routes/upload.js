@@ -410,6 +410,63 @@ router.post(
   }
 });
 
+/** Unbilled outside / old report for IPD chart (not a diagnostics receipt). */
+router.post("/outside-report", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+    const hospitalKey =
+      req.hospitalId ||
+      req.headers["x-hospital-code"] ||
+      req.headers["x-hospital-id"] ||
+      "reports";
+    const admissionId = String(req.body?.admissionId || "unassigned");
+    const ext =
+      req.file.mimetype === "application/pdf" ||
+      String(req.file.originalname || "").toLowerCase().endsWith(".pdf")
+        ? "pdf"
+        : "bin";
+    const fileName = `${hospitalKey}/outside-reports/${admissionId}/${uuidv4()}.${ext}`;
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: process.env.R2_BUCKET_NAME,
+        Key: fileName,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype || "application/pdf",
+      }),
+    );
+    const fileUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
+    let textReport = "";
+    let impression = "";
+    try {
+      const extracted = await extractClinicalReportWithAi({
+        buffer: req.file.buffer,
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+      });
+      textReport = extracted.textReport || "";
+      impression = extracted.impression || "";
+    } catch (ocrErr) {
+      console.warn("Outside-report AI extract failed (file saved):", ocrErr.message);
+    }
+    res.json({
+      success: true,
+      fileUrl,
+      textReport,
+      reportContent: textReport,
+      impression,
+      fileName: req.file.originalname,
+    });
+  } catch (error) {
+    console.error("Error uploading outside report:", error);
+    res.status(500).json({
+      error: "Failed to upload outside report",
+      details: error.message,
+    });
+  }
+});
+
 /**
  * Clinical report text extraction engine.
  * Primary: OpenAI GPT-6 Luna
@@ -421,13 +478,22 @@ async function extractClinicalReportWithAi({ buffer, originalname, mimetype }) {
   }
 
   const prompt = `You are a clinical OCR and diagnostic data extraction specialist for an Indian hospital EMR.
-Carefully read the attached diagnostic/radiology/laboratory report document.
-Extract the FULL, comprehensive report text, preserving clinical structure, anatomical findings, measurements, technique, and impression.
+Carefully read the attached diagnostic/radiology/laboratory / outside department report document (PDF or image).
+
+Extract:
+1) The FULL report text with clear section structure when present.
+2) A SEPARATE, accurate clinical IMPRESSION — this is critical for the discharge summary.
+
+IMPRESSION rules (field "impression"):
+- Use ONLY the document's IMPRESSION / CONCLUSION / OPINION / DIAGNOSIS summary.
+- 1–4 short clinical sentences (or the source numbered list).
+- Do NOT copy TECHNIQUE, FINDINGS, measurements, protocols, or reformats into "impression".
+- If the document has no impression section, write a concise impression from the findings — still do not paste the full findings.
 
 Return valid JSON with this exact shape:
 {
   "fullReportText": "Complete formatted report text with clear sections (e.g. CLINICAL INDICATION, TECHNIQUE, OBSERVATIONS/FINDINGS, IMPRESSION/CONCLUSION)",
-  "impression": "The concluding clinical impression or diagnosis summary (1-3 sentences)",
+  "impression": "Concluding clinical impression only (1-4 sentences) — never technique or full findings",
   "modality": "Modality or investigation name (e.g., Ultrasound Abdomen, Chest X-Ray, CT Brain, MRI Lumbar Spine, etc.)"
 }`;
 
@@ -569,6 +635,161 @@ Return valid JSON with this exact shape:
 
   return { textReport: "", impression: "", modality: "" };
 }
+
+/**
+ * Derive a short IMPRESSION from existing report text (no file upload).
+ * Used when typed / OCR reports have no clear IMPRESSION section — result
+ * is saved on the receipt item and shown in the discharge summary.
+ */
+async function extractImpressionFromTextWithAi(textReport) {
+  const text = String(textReport || "").trim();
+  if (!text) return { impression: "" };
+
+  const prompt = `You are a clinical documentation assistant for an Indian hospital EMR.
+Read the diagnostic / radiology / laboratory report text below.
+Return ONLY the concluding clinical IMPRESSION (or CONCLUSION / diagnosis summary).
+
+Rules:
+- 1 to 4 short clinical sentences (or a numbered list if the source uses one).
+- Do NOT include TECHNIQUE, FINDINGS, measurements tables, or recommendations unless they are the impression itself.
+- If the source already has an IMPRESSION / CONCLUSION section, quote that section faithfully (cleaned).
+- If there is no impression section, write a concise impression from the findings.
+- Return valid JSON: { "impression": "..." }
+
+REPORT TEXT:
+${text.slice(0, 12000)}`;
+
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      const axios = require("axios");
+      const chatRes = await axios.post(
+        "https://api.openai.com/v1/chat/completions",
+        {
+          model: REPORT_EXTRACT_OPENAI_MODEL,
+          reasoning_effort: "none",
+          response_format: { type: "json_object" },
+          messages: [{ role: "user", content: prompt }],
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          timeout: 60000,
+        },
+      );
+      const rawJson = chatRes.data?.choices?.[0]?.message?.content || "";
+      if (rawJson) {
+        const parsed = JSON.parse(rawJson);
+        return {
+          impression: String(parsed.impression || "").trim(),
+          modelUsed: REPORT_EXTRACT_OPENAI_MODEL,
+        };
+      }
+    } catch (err) {
+      console.warn(
+        "[AI Impression] OpenAI error:",
+        err.response?.data || err.message,
+      );
+    }
+  }
+
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const { GoogleGenAI } = require("@google/genai");
+      const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const aiResponse = await client.models.generateContent({
+        model: REPORT_EXTRACT_GEMINI_MODEL,
+        config: {
+          responseMimeType: "application/json",
+          temperature: 0.1,
+        },
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+      });
+      const rawAiText = aiResponse?.text || "";
+      if (rawAiText) {
+        const parsedAi = JSON.parse(rawAiText);
+        return {
+          impression: String(parsedAi.impression || "").trim(),
+          modelUsed: REPORT_EXTRACT_GEMINI_MODEL,
+        };
+      }
+    } catch (err) {
+      console.warn("[AI Impression] Gemini error:", err.message);
+    }
+  }
+
+  return { impression: "" };
+}
+
+function isAllowedReportFileUrl(raw) {
+  try {
+    const parsed = new URL(String(raw || ""));
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+    const allowed = String(process.env.R2_PUBLIC_URL || "").trim();
+    if (!allowed) return false;
+    const base = new URL(allowed);
+    return parsed.host === base.host;
+  } catch {
+    return false;
+  }
+}
+
+router.post("/extract-impression-from-file", async (req, res) => {
+  try {
+    const fileUrl = String(req.body?.fileUrl || req.body?.url || "").trim();
+    if (!fileUrl || !isAllowedReportFileUrl(fileUrl)) {
+      return res.status(400).json({ error: "A stored report file URL is required" });
+    }
+    const fileRes = await fetch(fileUrl);
+    if (!fileRes.ok) {
+      return res.status(502).json({ error: "Could not read the report file" });
+    }
+    const buffer = Buffer.from(await fileRes.arrayBuffer());
+    if (!buffer.length || buffer.length > 25 * 1024 * 1024) {
+      return res.status(400).json({ error: "Report file is empty or too large" });
+    }
+    const contentType = fileRes.headers.get("content-type") || "application/pdf";
+    const extracted = await extractClinicalReportWithAi({
+      buffer,
+      originalname: fileUrl.split("/").pop() || "report.pdf",
+      mimetype: contentType.split(";")[0],
+    });
+    res.json({
+      success: true,
+      impression: extracted.impression || "",
+      textReport: extracted.textReport || "",
+      modelUsed: extracted.modelUsed || "unknown",
+    });
+  } catch (error) {
+    console.error("Error extracting impression from file:", error);
+    res.status(500).json({
+      error: "Failed to read the report file",
+      details: error.message,
+    });
+  }
+});
+
+router.post("/extract-impression", async (req, res) => {
+  try {
+    const text = String(req.body?.textReport || req.body?.text || "").trim();
+    if (!text) {
+      return res.status(400).json({ error: "textReport is required" });
+    }
+    const extracted = await extractImpressionFromTextWithAi(text);
+    res.json({
+      success: true,
+      impression: extracted.impression || "",
+      modelUsed: extracted.modelUsed || "unknown",
+    });
+  } catch (error) {
+    console.error("Error extracting impression from text:", error);
+    res.status(500).json({
+      error: "Failed to extract impression",
+      details: error.message,
+    });
+  }
+});
 
 // Extract text from uploaded single PDF (without saving to cloud)
 router.post(

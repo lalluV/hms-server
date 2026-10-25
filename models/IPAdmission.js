@@ -117,6 +117,19 @@ const ipAdmissionSchema = new mongoose.Schema(
     dischargeOrders: { type: String },
     counselling: { type: String },
 
+    /** Old / outside reports (not billed). Used on discharge summary. */
+    outsideReports: [
+      {
+        id: { type: String },
+        name: { type: String },
+        url: { type: String },
+        impression: { type: String },
+        textReport: { type: String },
+        uploadedBy: { type: String },
+        uploadedAt: { type: String },
+      },
+    ],
+
     // Insurance for THIS Hospital Stay
     paymentMethod: { type: String, default: "Personal" },
     insurance_provider: { type: String },

@@ -36,6 +36,7 @@ const DISCHARGE_FIELDS = [
   "procedures",
   "dischargeVitals",
   "dischargeConsultants",
+  "reportImpressions",
   "summary",
   "summaryType",
   "dischargeSummaryStatus",

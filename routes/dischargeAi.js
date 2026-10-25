@@ -694,9 +694,13 @@ router.post("/synthesize-case", async (req, res) => {
     patientReceipts.forEach((r) => {
       (r.items || []).forEach((item) => {
         if (isRadiologyItem(item)) {
-          radiologyHighlights.push(
-            `${item.name || "Imaging"}: ${item.textReport || item.impression || "Report completed"}`,
-          );
+          // Discharge AI gets IMPRESSION only — never full technique/findings dump.
+          const impression = String(item.impression || "").trim();
+          if (impression) {
+            radiologyHighlights.push(
+              `${item.name || "Imaging"}: ${impression}`,
+            );
+          }
         } else {
           const params = Array.isArray(item.parameters) ? item.parameters : [];
           if (params.length > 0) {
@@ -707,9 +711,9 @@ router.post("/synthesize-case", async (req, res) => {
                 );
               }
             });
-          } else if (item.textReport || item.impression) {
+          } else if (item.impression || item.textReport) {
             labHighlights.push(
-              `${item.name || "Lab Investigation"}: ${item.textReport || item.impression}`,
+              `${item.name || "Lab Investigation"}: ${item.impression || item.textReport}`,
             );
           }
         }

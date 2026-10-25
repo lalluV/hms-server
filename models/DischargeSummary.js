@@ -47,6 +47,9 @@ const dischargeSummarySchema = new mongoose.Schema(
     dischargeVitals: mongoose.Schema.Types.Mixed,
     dischargeConsultants: [mongoose.Schema.Types.Mixed],
 
+    // AI impressions read from radiology / outside report files at prepare time.
+    reportImpressions: [mongoose.Schema.Types.Mixed],
+
     // Generated summary document state
     summary: { type: String },
     summaryType: { type: String, default: "standard" },

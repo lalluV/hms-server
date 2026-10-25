@@ -258,12 +258,12 @@ router.post("/course-chat", async (req, res) => {
       .join(", ");
 
     const radiologySummary = (patientData.radiologyReports || [])
-      .map(
-        (r) =>
-          `${r.testName || "Imaging"} (${r.date || ""}): ${
-            r.textReport || r.impression || "Report completed"
-          }`,
-      )
+      .map((r) => {
+        const impression = String(r.impression || "").trim();
+        if (!impression) return null;
+        return `${r.testName || "Imaging"} (${r.date || ""}): ${impression}`;
+      })
+      .filter(Boolean)
       .join("; ");
 
     const systemPrompt = `You are an expert clinical documentation assistant for hospital discharge summaries.
