@@ -462,12 +462,83 @@ router.post("/outside-report", upload.single("file"), async (req, res) => {
  * Primary: OpenAI GPT-6 Luna
  * Fallback: Google Gemini 3.1 Flash-Lite
  */
-async function extractClinicalReportWithAi({ buffer, originalname, mimetype }) {
-  if (!buffer || buffer.length === 0) {
-    return { textReport: "", impression: "", modality: "" };
-  }
+const OUTSIDE_REPORTS_PROMPT = `You are a clinical OCR specialist for an Indian hospital discharge summary.
+Read the attached outside document. It may contain several laboratory panels and imaging studies.
 
-  const prompt = `You are a clinical OCR and diagnostic data extraction specialist for an Indian hospital EMR.
+Do NOT extract patient identity. Omit name, age, sex, UMR, IP number, address, phone, attendant, referring doctor, and hospital header. Those details are already on the discharge summary.
+
+Split every distinct test or study into its own item. Do not use the file name.
+- Laboratory panel (CBC, LFT, RFT, urine, culture, or any value table): kind "lab". "name" is the panel name printed on the report. "date" is the collection or report date printed on that panel, as DD MMM YYYY. "parameters" lists each result: name, value, unit, referenceRange. Leave impression empty.
+- Imaging or narrative study: kind "imaging". "name" is the study name printed on the report. "date" is the study date printed on that report, as DD MMM YYYY. "impression" is only the IMPRESSION / CONCLUSION / OPINION. Do not copy technique or full findings. Leave parameters empty.
+
+Return valid JSON:
+{
+  "reports": [
+    {
+      "kind": "lab",
+      "name": "Complete Blood Count",
+      "date": "12 Mar 2026",
+      "parameters": [
+        { "name": "Haemoglobin", "value": "11.2", "unit": "g/dL", "referenceRange": "12-15" }
+      ],
+      "impression": ""
+    },
+    {
+      "kind": "imaging",
+      "name": "Chest X-Ray",
+      "date": "12 Mar 2026",
+      "parameters": [],
+      "impression": "No acute cardiopulmonary abnormality."
+    }
+  ]
+}`;
+
+function normalizeOutsideReports(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      const parameters = (Array.isArray(item?.parameters) ? item.parameters : [])
+        .map((param) => ({
+          name: String(param?.name || "").trim(),
+          value: String(param?.value ?? param?.result ?? "").trim(),
+          unit: String(param?.unit || "").trim(),
+          referenceRange: String(
+            param?.referenceRange || param?.range || "",
+          ).trim(),
+        }))
+        .filter((param) => param.name && param.value);
+      const wantsLab =
+        String(item?.kind || "").toLowerCase() === "lab" || parameters.length > 0;
+      const kind = wantsLab && parameters.length ? "lab" : "imaging";
+      return {
+        kind,
+        name: String(item?.name || "").trim(),
+        date: String(item?.date || "").trim(),
+        parameters: kind === "lab" ? parameters : [],
+        impression:
+          kind === "imaging" ? String(item?.impression || "").trim() : "",
+      };
+    })
+    .filter(
+      (report) =>
+        report.name &&
+        (report.kind === "lab"
+          ? report.parameters.length > 0
+          : report.impression),
+    );
+}
+
+async function extractClinicalReportWithAi({ buffer, originalname, mimetype, mode }) {
+  if (!buffer || buffer.length === 0) {
+    return mode === "outside"
+      ? { reports: [] }
+      : { textReport: "", impression: "", modality: "" };
+  }
+  const outside = mode === "outside";
+
+  const prompt = outside
+    ? OUTSIDE_REPORTS_PROMPT
+    : `You are a clinical OCR and diagnostic data extraction specialist for an Indian hospital EMR.
 Carefully read the attached diagnostic/radiology/laboratory / outside department report document (PDF or image).
 
 Extract:
@@ -546,6 +617,12 @@ Return valid JSON with this exact shape:
         console.log(
           `[AI Extract] ${REPORT_EXTRACT_OPENAI_MODEL} extraction successful (${parsed.fullReportText?.length || 0} chars)`
         );
+        if (outside) {
+          return {
+            reports: normalizeOutsideReports(parsed.reports),
+            modelUsed: REPORT_EXTRACT_OPENAI_MODEL,
+          };
+        }
         return {
           textReport: parsed.fullReportText || "",
           impression: parsed.impression || "",
@@ -611,6 +688,12 @@ Return valid JSON with this exact shape:
         console.log(
           `[AI Extract] Gemini extraction successful (${parsedAi.fullReportText?.length || 0} chars)`
         );
+        if (outside) {
+          return {
+            reports: normalizeOutsideReports(parsedAi.reports),
+            modelUsed: REPORT_EXTRACT_GEMINI_MODEL,
+          };
+        }
         return {
           textReport: parsedAi.fullReportText || "",
           impression: parsedAi.impression || "",
@@ -623,7 +706,9 @@ Return valid JSON with this exact shape:
     }
   }
 
-  return { textReport: "", impression: "", modality: "" };
+  return outside
+    ? { reports: [], modelUsed: "" }
+    : { textReport: "", impression: "", modality: "" };
 }
 
 /**
@@ -755,6 +840,41 @@ router.post("/extract-impression-from-file", async (req, res) => {
     console.error("Error extracting impression from file:", error);
     res.status(500).json({
       error: "Failed to read the report file",
+      details: error.message,
+    });
+  }
+});
+
+router.post("/extract-outside-reports-from-file", async (req, res) => {
+  try {
+    const fileUrl = String(req.body?.fileUrl || req.body?.url || "").trim();
+    if (!fileUrl || !isAllowedReportFileUrl(fileUrl)) {
+      return res.status(400).json({ error: "A stored report file URL is required" });
+    }
+    const fileRes = await fetch(fileUrl);
+    if (!fileRes.ok) {
+      return res.status(502).json({ error: "Could not read the report file" });
+    }
+    const buffer = Buffer.from(await fileRes.arrayBuffer());
+    if (!buffer.length || buffer.length > 25 * 1024 * 1024) {
+      return res.status(400).json({ error: "Report file is empty or too large" });
+    }
+    const contentType = fileRes.headers.get("content-type") || "application/pdf";
+    const extracted = await extractClinicalReportWithAi({
+      buffer,
+      originalname: fileUrl.split("/").pop() || "report.pdf",
+      mimetype: contentType.split(";")[0],
+      mode: "outside",
+    });
+    res.json({
+      success: true,
+      reports: extracted.reports || [],
+      modelUsed: extracted.modelUsed || "unknown",
+    });
+  } catch (error) {
+    console.error("Error extracting outside reports from file:", error);
+    res.status(500).json({
+      error: "Failed to read the outside report",
       details: error.message,
     });
   }
