@@ -16,18 +16,7 @@ const { startDigestScheduler } = require("./services/digestScheduler");
 
 const app = express();
 
-// Apply security headers
-app.use(securityHeaders);
-
-// General API Rate Limiter: 300 requests per minute per IP
-const generalLimiter = createRateLimiter({
-  windowMs: 60 * 1000,
-  max: 300,
-  message: { message: "Too many requests to API. Please slow down." },
-});
-app.use("/api/", generalLimiter);
-
-// Enable CORS for all routes
+// CORS first so rate-limit and error responses still include the header.
 // Note: Subdomain-based tenant authentication is implemented
 // Login routes require subdomain identification (via Host header, query param, or header)
 // For production, configure wildcard subdomain support: *.yourdomain.com
@@ -70,6 +59,17 @@ app.use(
     credentials: true,
   }),
 );
+
+// Apply security headers
+app.use(securityHeaders);
+
+// General API Rate Limiter: 300 requests per minute per IP
+const generalLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 300,
+  message: { message: "Too many requests to API. Please slow down." },
+});
+app.use("/api/", generalLimiter);
 
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));

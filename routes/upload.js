@@ -437,25 +437,15 @@ router.post("/outside-report", upload.single("file"), async (req, res) => {
       }),
     );
     const fileUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
-    let textReport = "";
-    let impression = "";
-    try {
-      const extracted = await extractClinicalReportWithAi({
-        buffer: req.file.buffer,
-        originalname: req.file.originalname,
-        mimetype: req.file.mimetype,
-      });
-      textReport = extracted.textReport || "";
-      impression = extracted.impression || "";
-    } catch (ocrErr) {
-      console.warn("Outside-report AI extract failed (file saved):", ocrErr.message);
-    }
+    // Return as soon as the file is stored. Reading the PDF with AI here
+    // holds the request open until the proxy drops it, which the browser
+    // reports as a CORS failure. Discharge summary preparation reads the file.
     res.json({
       success: true,
       fileUrl,
-      textReport,
-      reportContent: textReport,
-      impression,
+      textReport: "",
+      reportContent: "",
+      impression: "",
       fileName: req.file.originalname,
     });
   } catch (error) {
