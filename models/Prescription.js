@@ -33,6 +33,18 @@ const prescriptionSchema = new mongoose.Schema(
     doctorNotes: [mongoose.Schema.Types.Mixed],
     nurseNotes: [mongoose.Schema.Types.Mixed],
     diagnosticData: [mongoose.Schema.Types.Mixed],
+    /** Outside / old PDFs for this OP visit. Not billed. */
+    outsideReports: [
+      {
+        id: { type: String },
+        name: { type: String },
+        url: { type: String },
+        impression: { type: String },
+        textReport: { type: String },
+        uploadedBy: { type: String },
+        uploadedAt: { type: String },
+      },
+    ],
 
     // Prescribed Medicines (includes pharmacyBilled / indentSent flags)
     medicineData: [mongoose.Schema.Types.Mixed],

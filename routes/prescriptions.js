@@ -850,11 +850,6 @@ router.post("/check-in", async (req, res) => {
       let prescriptionId = clinical
         ? normalizeId(requestedPrescriptionId || opNumber || opNo)
         : "";
-      if (clinical && !prescriptionId) {
-        return res.status(400).json({
-          message: "OP number is required for clinical mode.",
-        });
-      }
       if (!prescriptionId) {
         prescriptionId = `RX-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`;
       } else {
